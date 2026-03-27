@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.env.local
+*.log
+.DS_Store
+Thumbs.db
+app/_zip_extract/
+app/_zip_extract_1.4.1/
+.vercel
