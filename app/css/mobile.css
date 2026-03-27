@@ -1,0 +1,497 @@
+/* ====================================================================
+   mobile.css — styles for mobile and tablet viewports
+   Breakpoints: ≤ 1023px (general mobile/tablet), ≤ 767px, ≤ 639px, ≤ 420px
+                640px–1023px (tablet only)
+   ==================================================================== */
+
+/* ── Sticky comment footer inside design info panel ───────────────── */
+.design-comment-footer {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+.design-comment-input {
+  flex: 1;
+  resize: none;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #f9fafb;
+  min-height: 38px;
+  max-height: 80px;
+  font-family: inherit;
+}
+.design-comment-send {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: #111827;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  align-self: flex-end;
+}
+/* Hide comment footer when image is full-screen */
+.dv-wrap.mode-image .design-comment-footer { display: none; }
+
+/* ── Design viewer: mode-image on mobile/tablet (< 1024px) ── */
+@media (max-width: 1023px) {
+  .dv-wrap.mode-image .design-info { max-height: 52px !important; overflow: hidden; }
+  .dv-wrap.mode-image .design-info .info-scroll { display: none; }
+  .dv-wrap.mode-image .dv-media { flex: 1 1 auto; }
+}
+
+/* ── Design viewer: mode-content on mobile/tablet (< 1024px) ── */
+@media (max-width: 1023px) {
+  .dv-wrap.mode-content .dv-media { flex: 0 0 auto !important; }
+  .dv-wrap.mode-content .design-img { height: 26vh !important; min-height: 90px; }
+  .dv-wrap.mode-content .design-info { flex: 1 1 auto !important; max-height: none !important; overflow: hidden; }
+  .dv-wrap.mode-content .design-info .info-scroll { flex: 1; overflow-y: auto; max-height: none !important; display: block; }
+}
+
+/* ── Detail layout: stack columns on mobile (< 768px) ── */
+@media (max-width: 767px) {
+  .detail-two-col { flex-direction: column; }
+  .detail-comments-col { width: 100%; }
+}
+
+/* ── Detail layout: 15px edge padding on mobile (< 768px) ── */
+@media (max-width: 767px) {
+  .detail-two-col { padding-left: 15px !important; padding-right: 15px !important; gap: 12px; }
+  .detail-two-col > .detail-main { padding-left: 0; padding-right: 0; }
+  .mobile-tabs-sticky { padding-left: 15px; padding-right: 15px; }
+}
+
+/* ── MOBILE (< 640px) — design viewer ── */
+@media (max-width: 639px) {
+  .dv-wrap { flex-direction: column; }
+  .dv-media { flex: 0 0 auto; }
+  .design-img { height: 48vmin; min-height: 180px; max-height: 52vh; }
+  .dv-handle { display: block; }
+  .design-info {
+    flex: 1;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    max-height: 48vh;
+    transition: max-height 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .design-info.collapsed { max-height: 46px; overflow: hidden; }
+  .design-info .info-scroll { flex: 1; overflow-y: auto; max-height: none; }
+}
+
+/* ── TABLET (640px – 1023px) — design viewer ── */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .dv-wrap { flex-direction: column; }
+  .dv-media { flex: 0 0 auto; }
+  .design-img { height: 44vh; }
+  .dv-handle { display: block; }
+  .design-info {
+    flex: 1;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.12);
+    max-height: 44vh;
+    transition: max-height 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .design-info.collapsed { max-height: 46px; overflow: hidden; }
+  .design-info .info-scroll { flex: 1; overflow-y: auto; max-height: none; }
+  .design-info .meta-value { font-size: 14px; }
+}
+
+/* ── Small mobile (< 420px) — tab button ── */
+@media (max-width: 420px) {
+  .mobile-tab-btn { height: 34px; font-size: 13px; }
+}
+
+/* ------------------------------------------------------------------
+   Home actions: ensure buttons are not clipped on small screens
+   and respect safe-area insets (notch / bottom bars)
+   ------------------------------------------------------------------ */
+/* ── Mobile comment panel: full-screen chat layout (active when comment tab open) ── */
+@media (max-width: 767px) {
+  /* Container switches to flex-column, no scroll, no padding */
+  #detailContent.chat-mode {
+    overflow: hidden !important;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+  }
+  #detailContent.chat-mode .detail-two-col {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0 !important;
+    display: flex;
+    flex-direction: column;
+  }
+  #detailContent.chat-mode .detail-comments-col {
+    flex: 1;
+    min-height: 0;
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden;
+    margin-top: 0;
+  }
+  /* Card wrapper: edge-to-edge, flex column */
+  #detailContent.chat-mode .detail-comments-col > .bg-white {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    overflow: hidden;
+    position: static !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 0 !important;
+    background: var(--surface-1) !important;
+  }
+  /* Hide the redundant header (tab bar already shows count) */
+  #detailContent.chat-mode .detail-comments-col .flex.items-center.justify-between:first-child {
+    display: none !important;
+  }
+  /* Message list: fills space and scrolls */
+  #detailContent.chat-mode #detailCommentsList {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding: 12px 16px 6px !important;
+    margin-top: 0 !important;
+    gap: 6px;
+  }
+  /* Input bar: pinned at bottom, messenger style */
+  #detailContent.chat-mode .detail-comments-col > .bg-white > .mt-3:last-child {
+    flex-shrink: 0;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid var(--border-1);
+    background: var(--surface-1);
+    margin-top: 0 !important;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  /* Make textarea and send-row stack nicely */
+  #detailContent.chat-mode .detail-comments-col textarea#detailCommentInput {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--border-2);
+    border-radius: 22px;
+    padding: 10px 14px;
+    font-size: 14px;
+    background: var(--surface-2);
+    color: var(--text-main);
+    min-height: 40px;
+    max-height: 100px;
+    font-family: inherit;
+    line-height: 1.4;
+    overflow-y: auto;
+    transition: height 0.1s ease;
+  }
+  #detailContent.chat-mode .detail-comments-col .flex.justify-end.mt-2 {
+    display: contents; /* let button sit inline with textarea */
+  }
+  #detailContent.chat-mode .detail-comments-col button[onclick*="addDetailComment"] {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    background: var(--primary-bg);
+    color: var(--primary-text);
+    font-size: 0; /* hide text, icon via ::before */
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #detailContent.chat-mode .detail-comments-col button[onclick*="addDetailComment"]::before {
+    content: '➤';
+    font-size: 16px;
+    transform: translateX(1px);
+  }
+
+  /* ── Chat bubble styles ── */
+  #detailContent.chat-mode #detailCommentsList .comment-item {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 0 !important;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-item.comment-me {
+    align-items: flex-end;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-item.comment-other {
+    align-items: flex-start;
+  }
+  /* Sender name + time */
+  #detailContent.chat-mode #detailCommentsList .comment-meta {
+    font-size: 11px;
+    color: var(--text-soft);
+    padding: 0 4px;
+    gap: 6px;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-meta {
+    flex-direction: row-reverse;
+  }
+  /* Bubbles */
+  #detailContent.chat-mode #detailCommentsList .comment-bubble {
+    max-width: 78%;
+    padding: 9px 13px;
+    margin-top: 2px;
+    word-break: break-word;
+  }
+  /* Remove base margin-top from body text inside bubble */
+  #detailContent.chat-mode #detailCommentsList .comment-body {
+    margin-top: 0 !important;
+  }
+  /* Italic emphasised text inside chat: slightly different color per side */
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-body em,
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-body i {
+    font-style: italic;
+    color: rgba(255,255,255,0.92); /* slightly lighter on dark bubble */
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-other .comment-body em,
+  #detailContent.chat-mode #detailCommentsList .comment-other .comment-body i {
+    font-style: italic;
+    color: rgba(15,23,42,0.85); /* slightly darker gray on light bubble */
+  }
+  /* small timestamp inside bubble: smaller, italic, user-requested color */
+  #detailContent.chat-mode #detailCommentsList .comment-time-inbubble {
+    font-size: 10px;
+    font-style: italic;
+    margin-top: 6px;
+    line-height: 1.1;
+    color: #4A4B4C;
+  }
+  /* align time according to side */
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-time-inbubble {
+    text-align: right;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-other .comment-time-inbubble {
+    text-align: left;
+  }
+  /* Make sender/time slightly less prominent */
+  #detailContent.chat-mode #detailCommentsList .comment-meta {
+    font-size: 10px;
+    opacity: 0.8;
+    color: var(--text-soft);
+    margin-bottom: 2px;
+  }
+  /* Short-message bubbles should have a minimum width/height so single-word messages look balanced */
+  #detailContent.chat-mode #detailCommentsList .comment-bubble.short {
+    min-width: 76px;
+    min-height: 36px;
+    display: inline-block;
+    padding: 9px 12px;
+    /* alignment controlled per-side: left for my messages, right for others */
+  }
+
+  /* Align message text inside bubbles according to side */
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-body {
+    text-align: left;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-other .comment-body {
+    text-align: right;
+  }
+  /* Use surface colors so bubbles follow theme variables (light/dark) */
+  #detailContent.chat-mode #detailCommentsList .comment-me .comment-bubble {
+    background: var(--surface-3);
+    border-radius: 16px 4px 16px 16px;
+  }
+  #detailContent.chat-mode #detailCommentsList .comment-other .comment-bubble {
+    background: var(--surface-2);
+    border-radius: 4px 16px 16px 16px;
+  }
+  /* subtle separation from page background: light border and tiny shadow */
+  #detailContent.chat-mode #detailCommentsList .comment-bubble {
+    border: 1px solid rgba(0,0,0,0.04);
+    box-shadow: 0 1px 0 rgba(15,23,42,0.03);
+  }
+  /* dark-mode tweaks: invert border/shadow to keep separation subtle */
+  .theme-dark #detailContent.chat-mode #detailCommentsList .comment-bubble {
+    border: 1px solid rgba(255,255,255,0.03);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.02);
+  }
+  /* Use theme-aware text color for comment content: var(--text-main) is
+     dark in light theme and light in dark theme, satisfying requirement
+     "dark theme -> white text, light theme -> black text" */
+  #detailContent.chat-mode #detailCommentsList .comment-bubble .comment-body {
+    color: var(--text-main) !important;
+    font-size: 14px;
+  }
+  /* Hide role tag (redundant in chat) */
+  #detailContent.chat-mode #detailCommentsList .comment-role {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  #homeActions {
+    max-width: 92vw !important;
+    padding-bottom: calc(env(safe-area-inset-bottom, 12px) + 8px);
+    box-sizing: border-box;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #homeActions > button {
+    font-size: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    border-radius: 12px;
+  }
+}
+
+/* ── Quick-fill samples in Tab 3 (mobile) ────────────────────────── */
+#quickSamples .quick-sample {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.06);
+  background: rgba(0,0,0,0.04);
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+#quickSamples .quick-sample:hover {
+  background: rgba(0,0,0,0.06);
+}
+
+/* Quick-sample appearance in dark mode: subtle light overlay and faint border */
+.theme-dark #quickSamples .quick-sample {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.03);
+  color: var(--text-main);
+}
+.theme-dark #quickSamples .quick-sample:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+/* quick-fill helper note style: slightly faded and italic */
+#quickFillNote {
+  color: var(--text-soft);
+  opacity: 0.9;
+}
+.theme-dark #quickFillNote { color: var(--text-soft); opacity: 0.85; }
+
+#quickFillCollapsed {
+  cursor: pointer;
+}
+
+/* Small collapsed quick-fill button style */
+.quick-fill-collapsed {
+  border: 1px solid rgba(255,255,255,0.06);
+  background: #111827; /* keep dark background to match theme */
+  color: #fff;
+}
+.quick-fill-collapsed:hover { opacity: 0.95; }
+
+/* When textarea expanded show small collapse control */
+/* collapse row adjustments: note left, controls right */
+#quickFillCollapseRow { margin-top: 6px; }
+.quick-fill-collapsed { margin-left: 8px; }
+.quick-fill-collapsed span { line-height: 1; }
+.quick-fill-collapsed { white-space: nowrap; }
+
+/* Overlay edit-request button shown on design viewer for Heineken users */
+.dv-edit-request-btn { display: none !important; }
+
+
+  /* Zoom bottom bar with two buttons (compact, theme-aware) */
+  .dv-zoom-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    display: flex;
+    justify-content: center;
+    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    pointer-events: auto;
+    background: transparent; /* remove outer white background */
+  }
+  .dv-zoom-bottom-inner {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    gap: 8px;
+    background: transparent; /* ensure no container bg */
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  .dv-zoom-btn {
+    flex: 1;
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    min-height: 40px;
+    background: #ffffff; /* white button */
+    color: #111827; /* black text */
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: none;
+  }
+  .dv-zoom-btn-edit { /* left button */ }
+  .dv-zoom-btn-view { /* right button */ }
+
+  @media (max-width: 420px) {
+    .dv-zoom-bottom-inner { gap: 6px; }
+    .dv-zoom-btn { padding: 9px 10px; font-size: 12px; min-height: 38px; }
+  }
+
+/* make design wrapper a positioned container so overlays position correctly */
+.dv-wrap { position: relative; }
+
+/* Design info header tabs (Chi tiết / Bình luận) */
+.info-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding: 0 12px; }
+.info-title { font-weight:700; color: var(--text-main, #111827); }
+.dv-info-tabs { display:flex; gap:6px; }
+.dv-info-tab { padding:6px 10px; border-radius:8px; background: transparent; border: 1px solid transparent; font-weight:600; font-size:13px; color: var(--text-secondary, #9ca3af); }
+.dv-info-tab.active { background: rgba(255,255,255,0.06); color: var(--text-main, #111827); border-color: rgba(0,0,0,0.06); }
+.theme-dark .dv-info-tab.active { background: rgba(255,255,255,0.04); color: #fff; border-color: rgba(255,255,255,0.06); }
+
+/* Comments list inside design modal should have a little padding when shown */
+#dvInfoComments .comment-list { padding: 8px 0 40px; }
+
+/* Make design-info a column container so footer can stick and comments scroll */
+.design-info { display: flex; flex-direction: column; position: relative; }
+
+/* Comments container: fill available space and allow internal scrolling */
+#dvInfoComments { display: flex; flex-direction: column; flex: 1 1 auto; overflow: hidden; padding: 8px 12px 0; }
+#dvInfoComments .comment-list { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
+
+/* Sticky comment footer fixed at bottom of design-info (small input) */
+.design-comment-footer {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.02));
+  border-top: 1px solid rgba(0,0,0,0.06);
+  z-index: 6;
+}
+.theme-dark .design-comment-footer { background: linear-gradient(180deg, rgba(3,7,18,0.6), rgba(3,7,18,0.6)); border-top: 1px solid rgba(255,255,255,0.04); }
+
+.design-comment-input { min-height: 40px; max-height: 96px; padding: 10px 12px; border-radius: 10px; }
+.design-comment-send { padding: 8px 12px; border-radius: 10px; }
+

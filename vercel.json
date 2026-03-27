@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "headers": [
+    {
+      "source": "/(.*\\.html)",
+      "headers": [
+        { "key": "Content-Type", "value": "text/html; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ],
+  "routes": [
+    { "src": "/app/api/(.*)", "dest": "/app/api/$1" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
+}

@@ -1,0 +1,1176 @@
+/* ====================================================================
+   base.css — global styles, components, utilities (no media queries)
+   ==================================================================== */
+
+/* Global font */
+* { font-family: 'Be Vietnam Pro', sans-serif; }
+
+/* Map modal: full screen on mobile, capped on desktop */
+.map-modal-panel {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+@media (min-width: 768px) {
+  .map-modal-panel {
+    height: auto;
+    max-height: 680px;
+  }
+}
+
+/* App layout variables */
+:root {
+  --app-header-height: 56px; /* adjust if your header height changes */
+  --page-bg: #eef4f8;
+  --text-main: #0f172a;
+  --text-soft: #64748b;
+  --surface-1: #ffffff;
+  --surface-2: #f8fafc;
+  --surface-3: #f1f5f9;
+  --border-1: #e5e7eb;
+  --border-2: #d1d5db;
+  --primary-bg: #111827;
+  --primary-text: #ffffff;
+}
+
+.theme-dark {
+  --page-bg: #0b1220;
+  --text-main: #e5e7eb;
+  --text-soft: #94a3b8;
+  --surface-1: #111827;
+  --surface-2: #1f2937;
+  --surface-3: #334155;
+  --border-1: #374151;
+  --border-2: #475569;
+  --primary-bg: #e5e7eb;
+  --primary-text: #111827;
+}
+
+/* Header session info (sale name) should be white in dark mode for contrast */
+.theme-dark #sessionInfoBar,
+.theme-dark #sessionInfoBar * {
+  color: #ffffff !important;
+}
+
+/* Region selection buttons */
+.region-btn.selected {
+  border-color: #111827;
+  background: #111827;
+  color: #ffffff !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+}
+
+.tab-active { border-bottom: 2px solid #1a1a1a; color: #1a1a1a; }
+.tab-inactive { border-bottom: 2px solid transparent; color: #888; }
+/* Locked tabs: visually disabled and slightly muted */
+.tab-locked { border-bottom: 2px solid transparent; color: #b0b0b0; opacity: 0.65; cursor: not-allowed; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary-bg); }
+.input-locked { background: inherit !important; border-color: #16a34a !important; color: inherit !important; }
+input.input-locked { box-shadow: none !important; transition: background-color 0.15s, border-color 0.15s; }
+
+/* Prevent mobile browsers from auto-zooming on focus by ensuring
+   form controls use a readable font size on small viewports. This
+   keeps fields accessible but prevents automatic zoom behavior
+   caused by fonts smaller than ~16px on iOS/Android. */
+@media (max-width: 900px) {
+  input[type="text"], input[type="tel"], input[type="number"], input[type="email"], textarea, select, .cs-trigger, .cs-label {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+  /* ensure custom select triggers also present at readable size */
+  .cs-trigger { padding: 10px 12px !important; }
+}
+
+/* Location button layout: left button fixed size, right action fills remaining width */
+.locate-btn { height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Location row: left button fixed width, right action fills remaining space and truncates text.
+  Use min-width:0 on flex children so ellipsis works properly in many browsers. */
+.location-row .locate-btn { flex: 0 0 110px; max-width: 110px; box-sizing: border-box; }
+.location-row .flex-1 { min-width: 0; }
+.location-row .location-action-btn { flex: 1 1 auto; min-width: 0; height: 40px; display: inline-flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Ensure the preview text (when no location chosen) matches the action button box
+   so both left and right controls are horizontally aligned in the same row. */
+.location-row > .flex-1 { display: flex; align-items: center; }
+.location-row #locationPreviewText {
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #6b7280; /* text-gray-500 */
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-sizing: border-box;
+  width: 100%;
+}
+.location-row #locationPreviewText.hidden { display: none; }
+
+/* Stronger rule for New Request outlet input to override dark-mode overrides
+   — when New Outlet is ON the input shows a subtle green background for clarity */
+#newRequestScreen input.input-locked,
+.theme-dark #newRequestScreen input.input-locked {
+  background-color: rgba(22,163,74,0.06) !important; /* light green, subtle */
+  border-color: #16a34a !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+.toggle-switch { width: 44px; height: 24px; }
+.toggle-slider { transition: transform 0.2s; }
+.toggle-on .toggle-slider { transform: translateX(20px); }
+/* TBA toggle: when turned on, use orange (cam) color */
+#tbToggle.toggle-on { background-color: #fb923c !important; }
+.theme-dark #tbToggle.toggle-on { background-color: #fb923c !important; }
+.fade-in { animation: fadeIn 0.2s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.image-preview { width: 80px; height: 80px; object-fit: cover; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+body { box-sizing: border-box; background: var(--page-bg); color: var(--text-main); }
+
+/* Reduce vertical spacing for labels and field groups in Tab 1 */
+#tab1 label { margin-bottom: 0.0625rem !important; }
+/* tighten vertical gap between stacked fields inside the .space-y-4 container on Tab 1 */
+#tab1 .space-y-4 > * + * { margin-top: 0.3125rem !important; }
+
+.theme-dark .region-btn.selected {
+  border-color: #e5e7eb;
+  background: #ffffff;
+  color: #111827 !important;
+}
+
+.theme-dark .tab-active { border-bottom-color: var(--primary-bg); color: var(--primary-bg); }
+.theme-dark .tab-inactive { color: var(--text-soft); }
+/* Dark-mode locked tab style */
+.theme-dark .tab-locked { color: rgba(255,255,255,0.35); opacity: 0.6; }
+
+.theme-dark .bg-white { background-color: var(--surface-1) !important; }
+.theme-dark .bg-gray-50 { background-color: var(--surface-2) !important; }
+.theme-dark .bg-gray-100,
+.theme-dark .bg-gray-200,
+/* Detail comments card: light in light-theme, darker in dark-theme for contrast */
+.detail-comments-col > .bg-white {
+  background-color: var(--surface-1);
+  color: var(--text-main);
+  border: 1px solid var(--border-1);
+}
+.theme-dark .detail-comments-col > .bg-white {
+  background-color: var(--surface-2);
+  color: var(--text-main);
+  border: 1px solid var(--border-1);
+}
+
+/* Ensure chat message bubbles use dark backgrounds and light text in dark theme */
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-bubble {
+  border: 1px solid rgba(255,255,255,0.03);
+  box-shadow: none;
+}
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-me .comment-bubble {
+  background: var(--surface-3) !important;
+}
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-other .comment-bubble {
+  background: var(--surface-2) !important;
+}
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-body,
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-meta,
+.theme-dark #detailContent.chat-mode #detailCommentsList .comment-time-inbubble {
+  color: var(--text-main) !important;
+}
+.theme-dark .bg-gray-300 { background-color: var(--surface-3) !important; }
+
+.theme-dark .text-gray-900 { color: var(--text-main) !important; }
+.theme-dark .text-gray-700,
+.theme-dark .text-gray-600,
+.theme-dark .text-gray-500,
+.theme-dark .text-gray-400 { color: var(--text-soft) !important; }
+
+.theme-dark .border-gray-100,
+.theme-dark .border-gray-200,
+.theme-dark .border-gray-300 { border-color: var(--border-1) !important; }
+
+/* Ensure high contrast for text in New Request -> Tab 2 (items) when in dark mode */
+.theme-dark #newRequestScreen #tab2,
+.theme-dark #newRequestScreen #tab2 label,
+.theme-dark #newRequestScreen #tab2 .font-medium,
+.theme-dark #newRequestScreen #tab2 .text-sm,
+.theme-dark #newRequestScreen #tab2 .request-items,
+.theme-dark #newRequestScreen #tab2 .requestItems {
+  color: var(--text-main) !important;
+}
+
+/* Inputs/selects inside Tab 2: readable text on dark surfaces */
+.theme-dark #newRequestScreen #tab2 input,
+.theme-dark #newRequestScreen #tab2 textarea,
+.theme-dark #newRequestScreen #tab2 select,
+.theme-dark #newRequestScreen #tab2 .cs-trigger {
+  color: var(--text-main) !important;
+  background: var(--surface-2) !important;
+  border-color: var(--border-1) !important;
+}
+
+/* Placeholder color slightly muted but readable */
+.theme-dark #newRequestScreen #tab2 ::placeholder {
+  color: var(--text-soft) !important;
+}
+
+/* Stronger override for the custom select trigger in Tab 2 (dark mode) */
+.theme-dark #newRequestScreen #tab2 .cs-trigger {
+  background: #2b3038 !important; /* slightly lighter than page bg */
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-1) !important;
+}
+.theme-dark #newRequestScreen #tab2 .cs-trigger .cs-label {
+  color: var(--text-main) !important;
+  opacity: 0.95;
+}
+.theme-dark #newRequestScreen #tab2 .cs-trigger:hover {
+  background: #34414a !important;
+}
+
+/* Ensure options dropdown is readable */
+.theme-dark #newRequestScreen #tab2 .cs-options {
+  background: var(--surface-1) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-1) !important;
+}
+
+/* Make dropdown options in Tab 2 subtle in dark mode: not white, hover only slightly lighter */
+.theme-dark #newRequestScreen #tab2 .cs-options {
+  background: #131517 !important; /* match dark surface, not white */
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4) !important;
+  border: 1px solid rgba(255,255,255,0.03) !important;
+}
+/* When a modal overlay is active, blur and disable interaction on the app content
+   but keep fixed-position modals interactive. Scoped to direct children of #app
+   so modal elements (which use .fixed) remain usable. */
+body.modal-open #app > *:not(.fixed) {
+  filter: blur(6px);
+  transition: filter 160ms ease;
+  pointer-events: none;
+  user-select: none;
+}
+/* Ensure modal overlays remain interactive */
+body.modal-open .fixed.z-60 {
+  pointer-events: auto !important;
+}
+
+.theme-dark #newRequestScreen #tab2 .cs-option {
+  padding: 8px 10px;
+  background: transparent !important;
+  color: var(--text-main) !important;
+  border-bottom: 1px solid #414042 !important; /* stronger divider */
+}
+.theme-dark #newRequestScreen #tab2 .cs-option:last-child { border-bottom: none !important; }
+.theme-dark #newRequestScreen #tab2 .cs-option:hover {
+  background: rgba(255,255,255,0.02) !important; /* slight lightening */
+}
+
+/* Make the Tab 1 primary action area sticky so the "Tiếp tục" button is always visible
+   inside the Tab 1 scroll container (prevents it from being pushed off-screen). */
+/* Make Tab containers flush so their action/footer area can stick to screen bottom */
+#tab1,
+#tab2,
+#tab3 {
+  position: relative; /* ensure sticky works within these scroll containers */
+  padding-bottom: 0 !important; /* remove parent bottom padding so sticky can reach screen bottom */
+}
+#tab1 > .mt-6,
+#tab2 > .mt-6,
+#tab3 > .mt-6 {
+  position: sticky;
+  left: calc(-1 * 1rem); /* compensate parent .p-4 horizontal padding (1rem) so background stretches edge-to-edge */
+  right: calc(-1 * 1rem);
+  bottom: 0;
+  background: var(--surface-1); /* solid background attached to bottom */
+  padding: 12px 1rem calc(12px + env(safe-area-inset-bottom)); /* include safe-area, keep inner horizontal padding */
+  border-top: 1px solid var(--border-1);
+  z-index: 50;
+}
+
+/* Make the action/footer area fixed to the bottom immediately when the tab is visible
+   (no .hidden). Also add bottom padding to the tab content so it isn't covered. */
+#tab2:not(.hidden) > .mt-6,
+#tab3:not(.hidden) > .mt-6 {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: var(--surface-1) !important;
+  padding: 12px 1rem calc(12px + env(safe-area-inset-bottom)) !important;
+  border-top: 1px solid var(--border-1) !important;
+  z-index: 60 !important;
+}
+
+/* Ensure the visible tab content has extra bottom space so content isn't hidden
+   behind the fixed action area. The value should be slightly larger than the
+   action area height to provide breathing room. */
+#tab2:not(.hidden),
+#tab3:not(.hidden) {
+  /* increase bottom padding so scroll can reveal content hidden behind fixed footer
+     increased from 72px to 120px to account for larger buttons and any extra margins */
+  padding-bottom: calc(120px + env(safe-area-inset-bottom)) !important;
+}
+#tab1 > .mt-6 > button {
+  width: 100%;
+}
+
+/* Ensure primary action buttons in Tab 2 keep dark appearance in dark mode */
+.theme-dark #newRequestScreen #tab2 button.bg-gray-900,
+.theme-dark #newRequestScreen #tab2 .w-full.bg-gray-900 {
+  background-color: var(--primary-bg) !important;
+  color: var(--primary-text) !important;
+  border-color: transparent !important;
+}
+.theme-dark #newRequestScreen #tab2 button.bg-gray-900:active,
+.theme-dark #newRequestScreen #tab2 button.bg-gray-900.active {
+  background-color: rgba(255,255,255,0.92) !important; /* keep active darker contrast if needed */
+}
+
+.theme-dark .bg-gray-900,
+.theme-dark .text-white.bg-gray-900,
+.theme-dark .bg-gray-900.text-white {
+  background-color: var(--primary-bg) !important;
+  color: var(--primary-text) !important;
+}
+
+/* Override blue requester card in dark mode to match other surface cards */
+.theme-dark .bg-blue-50 {
+  background: var(--surface-2) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-1) !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+}
+.theme-dark .text-blue-900 { color: var(--text-main) !important; }
+.theme-dark h3.text-blue-900 { color: var(--text-main) !important; }
+
+/* Make all detail view blocks use the same dark surface as requester card */
+.theme-dark #detailContent .bg-white,
+.theme-dark #detailContent .bg-gray-50,
+.theme-dark #detailContent .detail-card,
+.theme-dark #detailContent .design-info,
+.theme-dark #detailContent .comment-item,
+.theme-dark #detailContent .detail-main .bg-white,
+.theme-dark #detailContent .detail-main .bg-gray-50,
+.theme-dark #detailContent .detail-comments-col > .bg-white {
+  background: var(--surface-2) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-1) !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+}
+
+/* Ensure headings and labels inside detail blocks are visible */
+.theme-dark #detailContent .text-gray-500,
+.theme-dark #detailContent .text-gray-700,
+.theme-dark #detailContent .text-gray-600,
+.theme-dark #detailContent .text-gray-400 {
+  color: var(--text-soft) !important;
+}
+
+/* Table-like request items: make borders softer in dark */
+.theme-dark #detailContent table,
+.theme-dark #detailContent th,
+.theme-dark #detailContent td {
+  border-color: rgba(255,255,255,0.04) !important;
+}
+
+.theme-dark .active\:bg-gray-50:active,
+.theme-dark .hover\:bg-gray-50:hover { background-color: var(--surface-2) !important; }
+.theme-dark .active\:bg-gray-800:active,
+.theme-dark .hover\:bg-gray-800:hover { background-color: var(--surface-3) !important; }
+
+.theme-dark .cs-trigger,
+.theme-dark .cs-options,
+.theme-dark .comment-item,
+.theme-dark .design-info,
+.theme-dark .mobile-tabs-sticky,
+.theme-dark .mobile-tab-btn,
+.theme-dark .design-comment-footer,
+.theme-dark .detail-main .bg-gray-50,
+.theme-dark .detail-main .bg-white,
+.theme-dark .detail-card,
+.theme-dark .bg-gray-50.rounded-xl,
+.theme-dark .bg-white.rounded-xl {
+  background: var(--surface-1) !important;
+  color: var(--text-main);
+  border-color: var(--border-1) !important;
+}
+
+.theme-dark .cs-option,
+.theme-dark .design-info .info-title,
+.theme-dark .design-comment-input,
+.theme-dark .comment-meta,
+.theme-dark .comment-role,
+.theme-dark .comment-time,
+.theme-dark .comment-body,
+.theme-dark .design-info .meta-label,
+.theme-dark .design-info .section-title,
+.theme-dark .design-info .meta-value,
+.theme-dark .detail-main h3,
+.theme-dark .mobile-tab-btn.active {
+  color: var(--text-main) !important;
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-1);
+  background: var(--surface-1);
+  color: var(--text-main);
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.theme-toggle-btn .theme-icon { font-size: 13px; line-height: 1; }
+
+@media (max-width: 639px) {
+  .theme-toggle-btn {
+    top: auto;
+    bottom: 20px;
+    right: 16px;
+  }
+}
+
+/* When toggle is placed inside the top user bar, use compact inline style */
+.top-user-bar .theme-toggle-btn {
+  position: static;
+  margin-left: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: var(--text-main);
+}
+.top-user-bar .theme-toggle-btn .theme-icon { font-size: 14px; }
+.top-user-bar .theme-toggle-btn .theme-label { display: inline-block; font-size: 12px; }
+
+/* ============================================================
+   DESIGN VIEWER (MQ) — toolbar
+   ============================================================ */
+
+/* Survey badge used for items marked 'survey' (global). Red in light theme, yellow in dark theme. */
+.qcag-survey-badge {
+  color: #ef4444; /* red */
+  font-weight: 700;
+}
+.theme-dark .qcag-survey-badge,
+body.dark .qcag-survey-badge,
+.dark .qcag-survey-badge {
+  color: #facc15; /* yellow */
+}
+@media (prefers-color-scheme: dark) {
+  .qcag-survey-badge { color: #facc15; }
+}
+
+.dv-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dv-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.07);
+  user-select: none;
+}
+.dv-mode-btn.active {
+  background: #fff;
+  color: #111;
+  border-color: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+}
+
+/* ============================================================
+   ZOOM OVERLAY
+   ============================================================ */
+
+#dvZoomOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: rgba(0,0,0,0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+.dv-zoom-img {
+  max-width: 100vw;
+  max-height: 100dvh;
+  object-fit: contain;
+  transform-origin: center center;
+  will-change: transform;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: auto;
+}
+.dv-zoom-img.grabbing { cursor: grabbing; }
+.dv-zoom-close {
+  position: absolute; top: 16px; right: 16px; z-index: 5001;
+  background: rgba(255,255,255,0.15);
+  border: none; color: #fff;
+  width: 44px; height: 44px;
+  border-radius: 50%; font-size: 20px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.dv-zoom-scale {
+  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.55); font-size: 12px; font-weight: 600;
+  pointer-events: none; letter-spacing: 0.03em;
+}
+.dv-zoom-hint {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,0.3); font-size: 11px; white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Bottom white bar inside zoom overlay (mobile) */
+.dv-zoom-bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5005;
+  background: #fff;
+  color: #111;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.18);
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  user-select: none;
+  text-align: center;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.dv-zoom-bottom::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  background: #e6e6e6;
+  border-radius: 999px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03) inset;
+}
+
+/* Rounded dropdowns in item editor */
+
+/* Rounded dropdowns in item editor */
+#requestItems select,
+#newRequestScreen select,
+#warrantyScreen select,
+#tab2 select {
+  border-radius: 12px;
+}
+
+/* ============================================================
+   CUSTOM SELECT DROPDOWN
+   ============================================================ */
+
+.custom-select { position: relative; }
+.cs-trigger { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; cursor: pointer; font-size:14px; }
+.cs-trigger .cs-label { color: #111; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cs-options { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: #fff; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.10); max-height: 260px; overflow-y: auto; z-index: 80; }
+.cs-options.dropup { top: auto; bottom: calc(100% + 6px); }
+
+/* Locked outlet input styling */
+.input-locked {
+  background: #f3f4f6 !important; /* slightly darker to indicate locked */
+  border-color: #cbd5e1 !important;
+  color: #374151 !important;
+}
+
+/* Lock icon wrapper styles */
+.outlet-lock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  background: transparent; /* no background for lock icon wrapper */
+}
+.outlet-lock-icon svg { width: 22px; height: 22px; color: #16a34a; }
+.cs-option { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #f3f4f6; font-size:14px; line-height:1.2; }
+/* Button icon inside footer buttons */
+.btn-icon {
+  display: inline-block;
+  margin-left: 8px;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1;
+}
+.cs-option:last-child { border-bottom: none; }
+.cs-option:hover { background: #f9fafb; }
+.cs-options.hidden { display: none; }
+
+/* Validation highlight: match red outline style used by New Outlet locked state */
+#newRequestScreen .field-error {
+  border-color: #ef4444 !important;
+  box-shadow: none !important;
+}
+
+/* ============================================================
+   DESIGN VIEWER — shared structural styles
+   ============================================================ */
+
+.dv-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Carousel */
+.design-carousel {
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.design-carousel::-webkit-scrollbar { display: none; }
+.design-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+}
+.design-img {
+  width: 100%;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+}
+
+/* Dots */
+.dv-dots { display: flex; justify-content: center; gap: 6px; padding: 8px 0; }
+.dv-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.35); transition: background 0.2s; cursor: pointer; }
+.dv-dot.active { background: #fff; }
+
+/* Info panel shared */
+.design-info {
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.design-info .info-title {
+  padding: 12px 14px 10px;
+  font-weight: 700;
+  font-size: 15px;
+  border-bottom: 1px solid #f1f1f1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.design-info .info-scroll {
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  flex: 1;
+}
+.design-info .meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.design-info .meta-label { color: #6b7280; font-size: 12px; white-space: nowrap; }
+.design-info .meta-value { font-weight: 600; font-size: 13px; text-align: right; }
+.design-info .section-title { font-weight: 600; font-size: 13px; margin: 12px 0 6px; color: #111; }
+.sign-thumb { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; margin: 2px; }
+
+/* Handle (mobile/tablet only) */
+.dv-handle {
+  display: none;
+  text-align: center;
+  padding: 6px 0 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dv-handle-bar {
+  display: inline-block;
+  width: 36px;
+  height: 4px;
+  background: #ccc;
+  border-radius: 2px;
+}
+
+/* ============================================================
+   COMMENTS
+   ============================================================ */
+
+.comment-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.comment-item { background: #fff; border: 1px solid #eef2f7; padding: 8px 10px; border-radius: 8px; }
+.comment-meta { font-size: 12px; color: #374151; display:flex; gap:8px; align-items:center; }
+.comment-role { font-size: 11px; color: #6b7280; padding-left:6px; }
+.comment-time { font-size: 11px; color: #9ca3af; margin-left: auto; }
+.comment-body { margin-top:6px; font-size:13px; color:#111827; white-space:pre-wrap; }
+
+/* System-generated comments: centered plain text without framed card */
+.comment-item.comment-system { background: transparent; border: none; padding: 0; border-radius: 0; display: flex; flex-direction: column; align-items: center; }
+.comment-item.comment-system .comment-body { background: transparent; padding: 6px 8px; border-radius: 6px; color: #374151; text-align: center; font-weight: 600; }
+.comment-item.comment-system .system-time { font-size: 11px; color: #9ca3af; margin-top: 4px; }
+
+/* ============================================================
+   DETAIL VIEW LAYOUT
+   ============================================================ */
+
+.detail-tabs { display:flex; gap:8px; }
+.detail-tab { flex:1; padding:10px 12px; text-align:center; border-bottom:2px solid transparent; cursor:pointer; font-weight:600; }
+.detail-tab.active { border-bottom-color:#111827; color:#111827; }
+.comment-badge { background:#111827; color:#fff; font-size:11px; padding:2px 6px; border-radius:999px; margin-left:8px; }
+
+/* Desktop: two-column detail layout */
+.detail-two-col { display:flex; gap:16px; align-items:flex-start; max-width:1100px; margin: 0 auto; padding: 12px; box-sizing: border-box; }
+.detail-main { flex:1; min-width:0; }
+.detail-comments-col { width:360px; flex-shrink:0; }
+
+/* Make detail blocks visually stronger than page background */
+.detail-main .bg-gray-50,
+.detail-main .bg-white {
+  /* unified card appearance for left content blocks */
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  box-shadow: 0 2px 6px rgba(2,6,23,0.04);
+  padding: 16px !important;
+  margin-bottom: 16px !important;
+}
+.detail-main .rounded-xl { border-radius: 10px; }
+.detail-main h3 { color: #0f172a; font-weight:700; margin-top:0; }
+
+/* helper class for cards */
+.detail-card { background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-bottom:16px; }
+
+/* Global card rule: any rounded block that used bg-gray-50 or bg-white becomes a card
+   — this ensures consistent card appearance across the detail UI */
+.bg-gray-50.rounded-xl,
+.bg-white.rounded-xl {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  padding: 16px !important;
+  margin-bottom: 16px !important;
+  box-shadow: 0 2px 6px rgba(2,6,23,0.03);
+}
+
+/* Mobile detail fixed tab bar */
+.mobile-tabs-sticky { position: sticky; top: 0; z-index: 80; background: white; padding: 6px 8px; display:flex; gap:8px; border-bottom: 1px solid #eef2f7; }
+.mobile-tab-btn { flex:1; min-width:0; padding: 6px 8px; height:36px; display:flex; align-items:center; justify-content:center; gap:8px; text-align:center; border:1px solid #d1d5db; border-radius:10px; background:#fff; font-weight:700; font-size:14px; }
+.mobile-tab-btn.active { border-color:#111827; background:#f8fafc; color:#111827; }
+.mobile-tab-badge { margin-left:6px; font-size:11px; background:#111827; color:#fff; padding:3px 6px; border-radius:999px; display:inline-block; }
+
+/* Mobile main bottom nav (Home / List / Notifications / Account) */
+.mobile-main-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 85;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+}
+
+.main-nav-btn {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #6b7280;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 2px;
+  border-radius: 10px;
+}
+
+.main-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.main-nav-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+}
+
+.main-nav-btn.active {
+  color: #111827;
+  background: #f3f4f6;
+}
+
+@media (min-width: 768px) {
+  .mobile-main-nav {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .mobile-main-screen {
+    padding-bottom: calc(36px + env(safe-area-inset-bottom));
+  }
+
+  /* allow inner content to scroll and avoid being clipped by fixed bottom nav */
+  .mobile-main-screen > .flex-1 {
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* even smaller bottom padding so final content sits closer above the fixed bottom nav */
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+  }
+}
+
+.theme-dark .mobile-main-nav {
+  background: var(--surface-1);
+  border-top-color: var(--border-1);
+}
+
+.theme-dark .main-nav-btn {
+  color: var(--text-soft);
+}
+
+/* ============================================================
+   EDIT REQUEST — Fixed footer bar
+   Mobile-first footer-style action placed above the main nav.
+   ============================================================ */
+
+.edit-request-fab {
+  /* Mobile: pill-style bubble with icon + small label to the right */
+  position: fixed;
+  left: 12px;
+  bottom: calc(4px + env(safe-area-inset-bottom));
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--accent-900, #0f172a);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 10px 12px;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(2,6,23,0.18);
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  max-width: calc(100vw - 36px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.edit-request-fab svg { width: 20px; height: 20px; opacity: 0.98; flex-shrink: 0; }
+.edit-request-fab span { display: inline-block; margin-left: 8px; font-size: 12px; line-height: 1; }
+.edit-request-fab:active { transform: translateY(1px); }
+
+/* Placement helpers: left (default) and right variants for mobile */
+.edit-request-fab.fab-left { left: 12px; right: auto; }
+.edit-request-fab.fab-right { right: 12px; left: auto; }
+
+/* hide/move FAB smoothly when it would cover messages */
+.edit-request-fab.fab-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(24px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+@media (min-width: 768px) {
+  /* On larger screens use the wider bar on the bottom-right */
+  .edit-request-fab {
+    left: auto;
+    right: 24px;
+    bottom: 26px;
+    width: auto;
+    height: auto;
+    border-radius: 12px;
+    padding: 10px 14px;
+  }
+  .edit-request-fab span { display: inline-block; margin-left: 8px; }
+}
+
+/* ============================================================
+   EDIT REQUEST — Bottom Sheet
+   ============================================================ */
+
+.edit-request-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 9999; /* ensure overlay sits above all UI */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.edit-request-sheet-overlay.hidden { display: none; }
+
+.edit-request-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  padding: 16px 20px calc(24px + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.26s cubic-bezier(0.32,0.72,0,1);
+  max-height: 92vh;
+  overflow: auto;
+  box-shadow: 0 -12px 40px rgba(2,6,23,0.24);
+  pointer-events: auto;
+}
+.edit-request-sheet-overlay.sheet-open .edit-request-sheet {
+  transform: translateY(0);
+}
+
+/* ============================================================
+   Heineken MQ quick-jump hint (center floating, gentle bounce)
+   ============================================================ */
+.mq-jump-hint {
+  position: fixed;
+  right: 18px; /* move to right side */
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1300;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(2,6,23,0.22);
+  border: 1px solid rgba(255,255,255,0.06);
+  animation: mqHintBounce 1.15s ease-in-out infinite;
+}
+.mq-jump-hint svg.mq-jump-hint-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.mq-jump-hint span { display: inline-block; }
+.mq-jump-hint.hidden {
+  display: none;
+}
+
+@keyframes mqHintBounce {
+  0%, 100% { transform: translateY(-50%); }
+  50% { transform: translateY(-56%); }
+}
+
+/* when overlay is open allow interactions */
+.edit-request-sheet-overlay.sheet-open {
+  pointer-events: auto;
+}
+
+/* Ensure global toasts/notifications appear above the edit-request sheet overlay */
+#toast {
+  z-index: 11000 !important;
+}
+
+/* Category option rows */
+.edit-cat-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #111827;
+  user-select: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.edit-cat-option:active { background: #f3f4f6; }
+
+/* Checkbox circle */
+.edit-cat-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid #d1d5db;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  transition: background 0.15s, border-color 0.15s;
+}
+.edit-cat-check.checked {
+  background: #e6f2ff;
+  border-color: #60a5fa;
+}
+.edit-cat-check.checked::after {
+  content: '';
+  width: 6px;
+  height: 10px;
+  border-right: 2px solid #60a5fa;
+  border-bottom: 2px solid #60a5fa;
+  transform: rotate(40deg) translateY(-1px);
+  display: block;
+}
+/* highlight option row when checked */
+.edit-cat-option:has(.edit-cat-check.checked) {
+  border-color: #60a5fa;
+  background: #eff6ff;
+}
+
+/* ============================================================
+   EDIT REQUEST — Comment card
+   ============================================================ */
+
+.comment-item.comment-edit-request {
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+.cer-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #374151;
+  margin-bottom: 4px;
+}
+.cer-badge {
+  font-size: 11px;
+  font-weight: 700;
+  background: #f59e0b;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+.cer-cats {
+  font-size: 11px;
+  color: #b45309;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.cer-body {
+  font-size: 13px;
+  color: #111827;
+  margin-top: 0;
+  white-space: pre-wrap;
+}
+
+/* ── In-bubble edit-request tag (new bubble-style render) ── */
+.cer-tag-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.14);
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  align-self: flex-start;
+}
+.cer-tag-inline svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.cer-tag-main {
+  display: inline-block;
+}
+/* container for small category chips shown after the main tag */
+.cer-cats-inline {
+  margin-top: 6px;
+  color: #92400e;
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 600;
+  opacity: 0.95;
+}
+.theme-dark .cer-cats-inline {
+  color: #fbbf24;
+  opacity: 0.95;
+}
+.theme-dark .cer-tag-inline {
+  /* dark theme: darker capsule and yellow text for contrast */
+  background: rgba(30, 30, 30, 0.44);
+  color: #fbbf24;
+}
+.theme-dark .cer-chip {
+  background: rgba(245,158,11,0.08);
+  color: #fbbf24;
+}
+
+/* dark mode adjustments */
+.theme-dark .edit-request-sheet { background: var(--surface-1); }
+.theme-dark .edit-cat-option { background: var(--surface-2); border-color: var(--border-1); color: var(--text-main); }
+.theme-dark .edit-cat-check { background: var(--surface-1); border-color: var(--border-1); }
+.theme-dark .comment-item.comment-edit-request { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.3); }
+.theme-dark .cer-header, .theme-dark .cer-body { color: var(--text-main); }
+
+/* Dark-mode checked visuals: soft blue accent */
+.theme-dark .edit-cat-check.checked {
+  background: rgba(96,165,250,0.12);
+  border-color: #60a5fa;
+}
+.theme-dark .edit-cat-check.checked::after {
+  border-right: 2px solid #60a5fa;
+  border-bottom: 2px solid #60a5fa;
+}
+.theme-dark .edit-cat-option:has(.edit-cat-check.checked) {
+  border-color: rgba(96,165,250,0.5);
+  background: rgba(59,130,246,0.06);
+}
+
+
+.theme-dark .main-nav-btn.active {
+  color: var(--text-main);
+  background: var(--surface-2);
+}
