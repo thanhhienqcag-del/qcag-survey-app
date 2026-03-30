@@ -1,5 +1,5 @@
-// ====================================================================
-// js/flows/desktop-qcag-flow.js — dedicated desktop UI for QCAG users
+﻿// ====================================================================
+// js/flows/desktop-qcag-flow.js â€” dedicated desktop UI for QCAG users
 // ====================================================================
 'use strict';
 
@@ -13,6 +13,8 @@ let _qcagDesktopSearchDebounce = null;
 
 let _qcagRequestsVersion = 0;
 let _qcagRequestCodeCache = { version: 0, codes: {} };
+let _qcagDetailedDataCache = {};
+let _qcagPrefetchTimer = null;
 
 // Index of the currently shown old design entry in the carousel
 let _qcagOldDesignIdx = 0;
@@ -55,17 +57,17 @@ function qcagDesktopInitials(name) {
 // Copy outlet code to clipboard and show toast
 function qcagCopyOutletCode(code) {
   try {
-    if (!code) { showToast('Không có Outlet Code để sao chép'); return; }
+    if (!code) { showToast('KhÃ´ng cÃ³ Outlet Code Ä‘á»ƒ sao chÃ©p'); return; }
     if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(String(code)).then(() => {
-        showToast('Đã sao chép Outlet Code');
+        showToast('ÄÃ£ sao chÃ©p Outlet Code');
       }).catch(() => {
         // fallback
         const ta = document.createElement('textarea');
         ta.value = String(code);
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); showToast('Đã sao chép Outlet Code'); } catch (e) { showToast('Không thể sao chép'); }
+        try { document.execCommand('copy'); showToast('ÄÃ£ sao chÃ©p Outlet Code'); } catch (e) { showToast('KhÃ´ng thá»ƒ sao chÃ©p'); }
         ta.remove();
       });
     } else {
@@ -73,16 +75,16 @@ function qcagCopyOutletCode(code) {
       ta.value = String(code);
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); showToast('Đã sao chép Outlet Code'); } catch (e) { showToast('Không thể sao chép'); }
+      try { document.execCommand('copy'); showToast('ÄÃ£ sao chÃ©p Outlet Code'); } catch (e) { showToast('KhÃ´ng thá»ƒ sao chÃ©p'); }
       ta.remove();
     }
-  } catch (e) { console.error('qcagCopyOutletCode', e); showToast('Lỗi sao chép'); }
+  } catch (e) { console.error('qcagCopyOutletCode', e); showToast('Lá»—i sao chÃ©p'); }
 }
 
 function qcagDesktopDesignState(req) {
-  if (req.editingRequestedAt) return 'Chờ chỉnh sửa';
+  if (req.editingRequestedAt) return 'Chá» chá»‰nh sá»­a';
   const designImgs = qcagDesktopParseJson(req.designImages, []);
-  return designImgs.length > 0 ? 'Có MQ thiết kế' : 'Chờ MQ thiết kế';
+  return designImgs.length > 0 ? 'CÃ³ MQ thiáº¿t káº¿' : 'Chá» MQ thiáº¿t káº¿';
 }
 
 // Assign standardized tags for UI-independent classification.
@@ -96,52 +98,52 @@ function assignStandardTags(req) {
   const items = qcagDesktopParseJson(req.items, []);
   const status = String(req.status || 'pending').toLowerCase();
 
-  // Processing / Yêu cầu (new)
+  // Processing / YÃªu cáº§u (new)
   if (String(req.type || '').toLowerCase() === 'new') {
     if (req.editingRequestedAt) {
-      tags.push('Chờ chỉnh sửa');
+      tags.push('Chá» chá»‰nh sá»­a');
     }
-    // any item marked as survey *without* a confirmed surveySize -> Chờ khảo sát
+    // any item marked as survey *without* a confirmed surveySize -> Chá» kháº£o sÃ¡t
     try {
       if (Array.isArray(items) && items.some(it => !!it.survey && !(it.surveySize && it.surveySize.width && it.surveySize.height))) {
-        tags.push('Chờ khảo sát');
+        tags.push('Chá» kháº£o sÃ¡t');
       }
     } catch (e) {}
-    // No MQ at all -> Chờ thiết kế
+    // No MQ at all -> Chá» thiáº¿t káº¿
     if (!Array.isArray(designImgs) || designImgs.length === 0) {
-      tags.push('Chờ thiết kế');
+      tags.push('Chá» thiáº¿t káº¿');
     }
-    // Has MQ but not marked done -> Chờ xác nhận
+    // Has MQ but not marked done -> Chá» xÃ¡c nháº­n
     if (Array.isArray(designImgs) && designImgs.length > 0 && !(status === 'done' || status === 'processed')) {
-      tags.push('Chờ xác nhận');
+      tags.push('Chá» xÃ¡c nháº­n');
     }
   }
 
-  // Processing / Bảo hành (warranty)
+  // Processing / Báº£o hÃ nh (warranty)
   if (String(req.type || '').toLowerCase() === 'warranty') {
     if (!Array.isArray(statusImgs) || statusImgs.length === 0) {
-      tags.push('Đang chờ kiểm tra bảo hành');
+      tags.push('Äang chá» kiá»ƒm tra báº£o hÃ nh');
     }
     // Possible rejection / expired indicators (best-effort detection)
     if (req.rejected === true || req.rejectedAt || String(req.status || '').toLowerCase() === 'rejected') {
-      tags.push('Yêu cầu bị từ chối');
+      tags.push('YÃªu cáº§u bá»‹ tá»« chá»‘i');
     }
     if (req.warrantyExpired === true || req.warrantyExpiredAt || String(req.status || '').toLowerCase() === 'expired') {
-      tags.push('Đã hết hạn bảo hành');
+      tags.push('ÄÃ£ háº¿t háº¡n báº£o hÃ nh');
     }
   }
 
   // Done tab tags
   if (Array.isArray(designImgs) && designImgs.length > 0 && (status === 'done' || status === 'processed')) {
-    tags.push('Đã có MQ');
-    // placeholder for external施工 flag (Đã thi công) — controlled by external API later
+    tags.push('ÄÃ£ cÃ³ MQ');
+    // placeholder for externalæ–½å·¥ flag (ÄÃ£ thi cÃ´ng) â€” controlled by external API later
     if (req.executed === true || req.installed === true || String(req.workStatus || '').toLowerCase() === 'done') {
-      tags.push('Đã thi công');
+      tags.push('ÄÃ£ thi cÃ´ng');
     }
   }
 
   if (String(req.type || '').toLowerCase() === 'warranty' && (status === 'done' || status === 'processed')) {
-    tags.push('Đã Bảo hành');
+    tags.push('ÄÃ£ Báº£o hÃ nh');
   }
 
   // remove duplicates and preserve order
@@ -255,30 +257,30 @@ function qcagDesktopComputeRequestCodes() {
 }
 
 function qcagDesktopStatusBadge(req) {
-  // Edit request takes highest priority — move back to processing regardless of done state
+  // Edit request takes highest priority â€” move back to processing regardless of done state
   if (qcagDesktopIsPendingEditRequest(req)) {
-    return { label: 'Chờ chỉnh sửa', cls: 'pending' };
+    return { label: 'Chá» chá»‰nh sá»­a', cls: 'pending' };
   }
 
   const designImgs = qcagDesktopParseJson(req && req.designImages, []);
   if (!designImgs || designImgs.length === 0) {
-    return { label: 'Chờ thiết kế', cls: 'pending' };
+    return { label: 'Chá» thiáº¿t káº¿', cls: 'pending' };
   }
 
   const s = String(req && req.status || 'pending').toLowerCase();
-  if (s === 'done' || s === 'processed') return { label: 'Hoàn thành', cls: 'done' };
-  // If MQ present but not yet confirmed -> show 'Chờ xác nhận'
-  if ((s === 'processing' || s === 'in_progress') && Array.isArray(designImgs) && designImgs.length > 0) return { label: 'Chờ xác nhận', cls: 'pending-confirm' };
-  if (s === 'processing' || s === 'in_progress') return { label: 'Đang xử lý', cls: 'processing' };
-  return { label: 'Chờ xử lý', cls: 'pending' };
+  if (s === 'done' || s === 'processed') return { label: 'HoÃ n thÃ nh', cls: 'done' };
+  // If MQ present but not yet confirmed -> show 'Chá» xÃ¡c nháº­n'
+  if ((s === 'processing' || s === 'in_progress') && Array.isArray(designImgs) && designImgs.length > 0) return { label: 'Chá» xÃ¡c nháº­n', cls: 'pending-confirm' };
+  if (s === 'processing' || s === 'in_progress') return { label: 'Äang xá»­ lÃ½', cls: 'processing' };
+  return { label: 'Chá» xá»­ lÃ½', cls: 'pending' };
 }
 
 function getQCAGDesktopVisibleRequests() {
   let list = (allRequests || []).slice();
 
   // Apply status filter:
-  //   'done'       → completed items WITHOUT a pending edit request
-  //   'processing' → items still needing action OR has pending edit request (even if previously done)
+  //   'done'       â†’ completed items WITHOUT a pending edit request
+  //   'processing' â†’ items still needing action OR has pending edit request (even if previously done)
   if (_qcagDesktopStatusFilter === 'done') {
     // Show only items explicitly marked done (and not pulled back for editing)
     list = list.filter(r => {
@@ -400,7 +402,7 @@ async function openQCAGDesktop() {
     openQCAGDesktopRequest(_qcagDesktopCurrentId);
   } else {
     const detailEl = document.getElementById('qcagDesktopDetail');
-    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">ChÆ°a cÃ³ request phÃ¹ há»£p bá»™ lá»c hiá»‡n táº¡i</div>';
   }
 }
 
@@ -431,7 +433,7 @@ function qcagDesktopSetTypeFilter(type) {
     openQCAGDesktopRequest(_qcagDesktopCurrentId);
   } else {
     const detailEl = document.getElementById('qcagDesktopDetail');
-    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">ChÆ°a cÃ³ request phÃ¹ há»£p bá»™ lá»c hiá»‡n táº¡i</div>';
   }
 }
 
@@ -451,7 +453,7 @@ function qcagDesktopSetRegionFilter(region) {
     openQCAGDesktopRequest(_qcagDesktopCurrentId);
   } else {
     const detailEl = document.getElementById('qcagDesktopDetail');
-    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">ChÆ°a cÃ³ request phÃ¹ há»£p bá»™ lá»c hiá»‡n táº¡i</div>';
   }
 }
 
@@ -471,7 +473,7 @@ function qcagDesktopSetStatusFilter(status) {
   // until the user explicitly selects a request in the new tab.
   _qcagDesktopCurrentId = null;
   const detailEl = document.getElementById('qcagDesktopDetail');
-  if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+  if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">ChÆ°a cÃ³ request phÃ¹ há»£p bá»™ lá»c hiá»‡n táº¡i</div>';
 }
 
 function qcagDesktopUpdateFilterCounts() {
@@ -511,7 +513,7 @@ function qcagDesktopUpdateFilterCounts() {
         const needsMq = designImgs.length === 0;
         const needsEdit = qcagDesktopIsPendingEditRequest(r);
         // Show items needing MQ, with an edit request, or those that have MQ
-        // but are still awaiting confirmation — these should remain visible
+        // but are still awaiting confirmation â€” these should remain visible
         // under the "processing" tab so the tab count matches visible cards.
         const hasDesignAwaitingConfirm = Array.isArray(designImgs) && designImgs.length > 0 && !isDone;
         return needsEdit || needsMq || hasDesignAwaitingConfirm;
@@ -554,7 +556,7 @@ function renderQCAGDesktopList() {
 
   const requests = getQCAGDesktopVisibleRequests();
   if (requests.length === 0) {
-    listEl.innerHTML = '<div class="qcag-list-empty">Không có request</div>';
+    listEl.innerHTML = '<div class="qcag-list-empty">KhÃ´ng cÃ³ request</div>';
     return;
   }
 
@@ -575,21 +577,21 @@ function renderQCAGDesktopList() {
     // Priority: edit-request (handled in qcagDesktopStatusBadge) then survey if present.
     let displayBadge = statusBadge;
     try {
-      if (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1) {
-        displayBadge = { label: 'Chờ khảo sát', cls: 'pending survey' };
+      if (Array.isArray(stdTags) && stdTags.indexOf('Chá» kháº£o sÃ¡t') !== -1) {
+        displayBadge = { label: 'Chá» kháº£o sÃ¡t', cls: 'pending survey' };
       }
     } catch (e) {}
 
     return `
       <button class="qcag-request-item ${activeCls}" onclick="openQCAGDesktopRequest('${req.__backendId}')">
         <div class="qcag-request-item-top">
-          <div class="qcag-request-name">${escapeHtml(req.outletName || '-')} • ${escapeHtml(req.outletCode || '-')}</div>
+          <div class="qcag-request-name">${escapeHtml(req.outletName || '-')} â€¢ ${escapeHtml(req.outletCode || '-')}</div>
           <span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>
         </div>
-        <div class="qcag-request-code">${escapeHtml(saleName)} • ${escapeHtml(region)}</div>
-        <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(ss) : '<span class="qcag-ss-tba">Chức vụ TBA</span>'; })()}</div>
-        <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
-        <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
+        <div class="qcag-request-code">${escapeHtml(saleName)} â€¢ ${escapeHtml(region)}</div>
+        <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'TÃªn SS/SE: ' + escapeHtml(ss) : '<span class="qcag-ss-tba">Chá»©c vá»¥ TBA</span>'; })()}</div>
+        <div class="qcag-request-design">Thá»i gian: ${escapeHtml(dateStr)}</div>
+        <div class="qcag-request-date">MÃ£: ${escapeHtml(requestCode)}</div>
       </button>
     `;
   }).join('');
@@ -605,7 +607,7 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (!result.isOk) {
-      showToast('Không thể cập nhật request');
+      showToast('KhÃ´ng thá»ƒ cáº­p nháº­t request');
       return false;
     }
   } else {
@@ -628,13 +630,13 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
   return true;
 }
 
-// ── In-place targeted section refresh (thay thế full re-render) ──────
-// Cập nhật từng section DOM riêng lẻ thay vì gọi openQCAGDesktopRequest.
-// Tránh flicker, tránh nhảy scroll, tránh race condition với onDataChanged.
+// â”€â”€ In-place targeted section refresh (thay tháº¿ full re-render) â”€â”€â”€â”€â”€â”€
+// Cáº­p nháº­t tá»«ng section DOM riÃªng láº» thay vÃ¬ gá»i openQCAGDesktopRequest.
+// TrÃ¡nh flicker, trÃ¡nh nháº£y scroll, trÃ¡nh race condition vá»›i onDataChanged.
 function _qcagDesktopInPlaceRefresh(updatedRequest) {
   if (!updatedRequest) return;
 
-  // 1. Refresh bảng hạng mục (items table)
+  // 1. Refresh báº£ng háº¡ng má»¥c (items table)
   const itemsSec = document.getElementById('qcagItemsSection');
   if (itemsSec) {
     const items = qcagDesktopParseJson(updatedRequest.items, []);
@@ -647,15 +649,15 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
     const comments = qcagDesktopParseJson(updatedRequest.comments, []);
     timeline.innerHTML = comments.length > 0
       ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('')
-      : '<div class="qcag-detail-muted">Chưa có bình luận</div>';
+      : '<div class="qcag-detail-muted">ChÆ°a cÃ³ bÃ¬nh luáº­n</div>';
     setTimeout(() => { if (timeline) timeline.scrollTop = timeline.scrollHeight; }, 30);
   }
 
-  // 3. Refresh MQ preview + complete button + left list (một lần duy nhất)
+  // 3. Refresh MQ preview + complete button + left list (má»™t láº§n duy nháº¥t)
   qcagDesktopRefreshMQInPlace(updatedRequest);
 }
 
-// ── In-place MQ section refresh (no scroll jump) ─────────────────────
+// â”€â”€ In-place MQ section refresh (no scroll jump) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function qcagDesktopRefreshMQInPlace(updatedRequest) {
   const designImgsRaw = qcagDesktopParseJson(updatedRequest.designImages, []);
   const designImgs = Array.isArray(designImgsRaw)
@@ -669,9 +671,9 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       ? designImgs.map((img, i) => `
         <div class="qcag-thumb-item">
           <img src="${img}" onclick="showImageFull('${img}',false)">
-          <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">✕</button>
+          <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">âœ•</button>
         </div>`).join('')
-      : '<div class="qcag-detail-muted">Chưa có MQ</div>';
+      : '<div class="qcag-detail-muted">ChÆ°a cÃ³ MQ</div>';
   }
 
   // Update the complete button state
@@ -682,16 +684,16 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
     const isDone = (reqStatus === 'done' || reqStatus === 'processed') && !isPendingEdit;
 
     if (isDone) {
-      // Trạng thái đã hoàn thành — vô hiệu hoá nút, không cho click lại
-      completeBtn.textContent = 'Đã hoàn thành';
+      // Tráº¡ng thÃ¡i Ä‘Ã£ hoÃ n thÃ nh â€” vÃ´ hiá»‡u hoÃ¡ nÃºt, khÃ´ng cho click láº¡i
+      completeBtn.textContent = 'ÄÃ£ hoÃ n thÃ nh';
       completeBtn.disabled = true;
       completeBtn.classList.add('qcag-complete-btn--disabled');
-      completeBtn.title = 'Yêu cầu này đã được hoàn thành';
+      completeBtn.title = 'YÃªu cáº§u nÃ y Ä‘Ã£ Ä‘Æ°á»£c hoÃ n thÃ nh';
     } else {
-      const label = isPendingEdit ? 'Đã chỉnh sửa' : 'Hoàn thành';
+      const label = isPendingEdit ? 'ÄÃ£ chá»‰nh sá»­a' : 'HoÃ n thÃ nh';
       const disabledTitle = isPendingEdit
-        ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
-        : 'Vui lòng upload MQ thiết kế trước';
+        ? 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c khi xÃ¡c nháº­n Ä‘Ã£ chá»‰nh sá»­a'
+        : 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c';
       completeBtn.textContent = label;
       if (designImgs.length > 0) {
         completeBtn.disabled = false;
@@ -733,23 +735,23 @@ async function qcagDesktopSyncReadStatus(request) {
 }
 
 function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
-  const author = comment.authorName || comment.authorRole || 'Người dùng';
+  const author = comment.authorName || comment.authorRole || 'NgÆ°á»i dÃ¹ng';
   const role = String(comment.authorRole || '').toLowerCase();
   const isQCAG = role === 'qcag';
   const avatar = qcagDesktopInitials(author);
   const createdAt = comment.createdAt ? new Date(comment.createdAt).toLocaleString('vi-VN') : '';
   const readBy = Array.isArray(comment.readBy) ? comment.readBy : [];
-  const readText = isQCAG ? (readBy.length > 0 ? 'Đã đọc' : 'Chưa đọc') : '';
+  const readText = isQCAG ? (readBy.length > 0 ? 'ÄÃ£ Ä‘á»c' : 'ChÆ°a Ä‘á»c') : '';
   const images = Array.isArray(comment.images) ? comment.images : [];
   // Special rendering for edit-request comments (from Sale / Heineken)
   if (String(comment.commentType || '').toLowerCase() === 'edit-resolved') {
-    const resolvedText = escapeHtml((comment.text || 'QCAG đã chỉnh sửa xong theo yêu cầu').toString().trim());
+    const resolvedText = escapeHtml((comment.text || 'QCAG Ä‘Ã£ chá»‰nh sá»­a xong theo yÃªu cáº§u').toString().trim());
     return '<div class="qcag-comment-item ' + (isQCAG ? 'mine' : 'other') + '">' +
       '<div class="qcag-comment-avatar">' + escapeHtml(avatar) + '</div>' +
       '<div class="qcag-comment-col">' +
         '<div class="qcag-comment-meta"><span class="qcag-comment-author">' + escapeHtml(author) + '</span></div>' +
         '<div class="qcag-comment-body">' +
-          '<div class="cer-tag-inline"><span class="cer-tag-main">Đã chỉnh sửa</span></div>' +
+          '<div class="cer-tag-inline"><span class="cer-tag-main">ÄÃ£ chá»‰nh sá»­a</span></div>' +
           '<div class="qcag-comment-text">' + resolvedText + '</div>' +
           (readText ? ('<div class="qcag-comment-read">' + escapeHtml(readText) + '</div>') : '') +
           '<div class="qcag-comment-time-inbubble">' + createdAt + '</div>' +
@@ -762,8 +764,8 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
     const catsArr = Array.isArray(comment.editCategories) ? comment.editCategories : [];
     const isResolvedLater = qcagDesktopHasLaterEditResolvedComment(allComments, commentIndex);
     let displayText = (comment.text || '').toString().trim();
-    if (displayText.startsWith('Yêu cầu chỉnh sửa: ')) displayText = displayText.slice('Yêu cầu chỉnh sửa: '.length).trim();
-    else if (displayText === 'Yêu cầu chỉnh sửa') displayText = '';
+    if (displayText.startsWith('YÃªu cáº§u chá»‰nh sá»­a: ')) displayText = displayText.slice('YÃªu cáº§u chá»‰nh sá»­a: '.length).trim();
+    else if (displayText === 'YÃªu cáº§u chá»‰nh sá»­a') displayText = '';
     const displayTextStr = escapeHtml(displayText);
     const catsHtml = catsArr.length > 0 ? '<div class="cer-cats-inline">' + catsArr.map(ct => escapeHtml(ct)).join(', ') + '</div>' : '';
     const readHtml = readText ? ('<div class="qcag-comment-read">' + escapeHtml(readText) + '</div>') : '';
@@ -775,11 +777,11 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
         '<div class="qcag-comment-body' + (isResolvedLater ? ' qcag-edit-request-disabled' : '') + '">' +
           '<div class="cer-tag-inline">' +
             '<svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>' +
-            '<span class="cer-tag-main">Yêu cầu chỉnh sửa</span>' +
+            '<span class="cer-tag-main">YÃªu cáº§u chá»‰nh sá»­a</span>' +
           '</div>' +
           catsHtml +
           (displayTextStr ? '<div class="qcag-comment-text">' + displayTextStr + '</div>' : '') +
-          (isResolvedLater ? '<div class="qcag-edit-request-note">Đã được QCAG xử lý</div>' : '') +
+          (isResolvedLater ? '<div class="qcag-edit-request-note">ÄÃ£ Ä‘Æ°á»£c QCAG xá»­ lÃ½</div>' : '') +
           readHtml +
           '<div class="qcag-comment-time-inbubble">' + createdAt + '</div>' +
         '</div>' +
@@ -804,42 +806,42 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
 }
 
 function qcagDesktopBuildItemsHtml(items) {
-  if (!items.length) return '<div class="qcag-detail-muted">Không có hạng mục</div>';
+  if (!items.length) return '<div class="qcag-detail-muted">KhÃ´ng cÃ³ háº¡ng má»¥c</div>';
   return `
     <div class="qcag-items-table">
       <div class="qcag-items-head">
-        <div>STT</div><div>Loại bảng hiệu</div><div>Hình thức</div><div>Brand</div><div>Kích thước</div><div>Số trụ</div><div>Yêu cầu</div>
+        <div>STT</div><div>Loáº¡i báº£ng hiá»‡u</div><div>HÃ¬nh thá»©c</div><div>Brand</div><div>KÃ­ch thÆ°á»›c</div><div>Sá»‘ trá»¥</div><div>YÃªu cáº§u</div>
       </div>
       ${items.map((item, idx) => {
-        const requestText = item.type === 'Hạng mục khác' ? (item.otherContent || '-') : (item.note || '-');
+        const requestText = item.type === 'Háº¡ng má»¥c khÃ¡c' ? (item.otherContent || '-') : (item.note || '-');
         let size = '-';
         let sizeExtraNote = '';
-        if (item.type !== 'Hạng mục khác') {
+        if (item.type !== 'Háº¡ng má»¥c khÃ¡c') {
           if (item.survey) {
-            // If surveySize exists (object with width/height), show it; otherwise show 'Khảo sát' with edit button
+            // If surveySize exists (object with width/height), show it; otherwise show 'Kháº£o sÃ¡t' with edit button
             if (item.surveySize && item.surveySize.width && item.surveySize.height) {
               size = `${escapeHtml(String(item.surveySize.width))}m x ${escapeHtml(String(item.surveySize.height))}m`;
               // Always allow editing after a survey size is present
-              size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
+              size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sá»­a">\
                 <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
                 </svg>\
               </button>`;
-              sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
+              sizeExtraNote = '<div class="qcag-survey-size-note">KÃ­ch thÆ°á»›c kháº£o sÃ¡t</div>';
             } else {
-              size = `<span class="qcag-survey-badge">Khảo sát</span> <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
+              size = `<span class="qcag-survey-badge">Kháº£o sÃ¡t</span> <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sá»­a">\
                 <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
                 </svg>\
               </button>`;
             }
           } else if (item.useOldSize) {
-            size = 'KT cũ';
+            size = 'KT cÅ©';
           } else {
             size = `${item.width || '-'}m x ${item.height || '-'}m`;
           }
         }
-        const poles = (item.type !== 'Hạng mục khác') ? ((item.poles || 0) + ' trụ') : '-';
+        const poles = (item.type !== 'Háº¡ng má»¥c khÃ¡c') ? ((item.poles || 0) + ' trá»¥') : '-';
         const sizeHtml = typeof size === 'string' ? size : escapeHtml(String(size));
         return `<div class="qcag-items-row"><div>${idx + 1}</div><div>${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div>${escapeHtml(item.brand || '-')}</div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div></div>`;
       }).join('')}
@@ -856,15 +858,15 @@ function qcagEnsureSurveyModal() {
   wrap.innerHTML = `
     <div class="qcag-survey-backdrop" onclick="qcagCloseSurveySizeModal()"></div>
     <div class="qcag-survey-panel">
-      <div class="qcag-survey-header">Nhập kích thước khảo sát</div>
+      <div class="qcag-survey-header">Nháº­p kÃ­ch thÆ°á»›c kháº£o sÃ¡t</div>
       <div class="qcag-survey-body">
-        <label>Chiều ngang (m)<input id="qcagSurveyWidth" type="number" step="0.01" min="0"/></label>
-        <label>Chiều cao (m)<input id="qcagSurveyHeight" type="number" step="0.01" min="0"/></label>
+        <label>Chiá»u ngang (m)<input id="qcagSurveyWidth" type="number" step="0.01" min="0"/></label>
+        <label>Chiá»u cao (m)<input id="qcagSurveyHeight" type="number" step="0.01" min="0"/></label>
       </div>
       <div class="qcag-survey-actions">
-        <button onclick="qcagCloseSurveySizeModal()" class="btn">Hủy</button>
-        <button onclick="qcagReopenSurveyForItem()" class="btn">Khảo sát lại</button>
-        <button onclick="qcagConfirmSurveySize()" class="btn primary">Xác nhận</button>
+        <button onclick="qcagCloseSurveySizeModal()" class="btn">Há»§y</button>
+        <button onclick="qcagReopenSurveyForItem()" class="btn">Kháº£o sÃ¡t láº¡i</button>
+        <button onclick="qcagConfirmSurveySize()" class="btn primary">XÃ¡c nháº­n</button>
       </div>
     </div>
   `;
@@ -903,7 +905,7 @@ async function qcagConfirmSurveySize() {
   const w = parseFloat((wEl && wEl.value) || 0);
   const h = parseFloat((hEl && hEl.value) || 0);
   if (!w || !h) {
-    showToast('Vui lòng nhập chiều ngang và chiều cao hợp lệ');
+    showToast('Vui lÃ²ng nháº­p chiá»u ngang vÃ  chiá»u cao há»£p lá»‡');
     return;
   }
 
@@ -916,12 +918,12 @@ async function qcagConfirmSurveySize() {
   const now = new Date().toISOString();
   const displayTime = new Date(now).toLocaleString('vi-VN');
   const outletName = currentDetailRequest.outletName || '-';
-  const itemType = items[_qcagSurveyEditingIndex].type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
-  const autoCommentText = `Outlet ${outletName}: Xác nhận kích thước khảo sát ${itemType} là ${w}m x ${h}m vào ${displayTime}.`;
-  comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
+  const itemType = items[_qcagSurveyEditingIndex].type || `háº¡ng má»¥c #${_qcagSurveyEditingIndex + 1}`;
+  const autoCommentText = `Outlet ${outletName}: XÃ¡c nháº­n kÃ­ch thÆ°á»›c kháº£o sÃ¡t ${itemType} lÃ  ${w}m x ${h}m vÃ o ${displayTime}.`;
+  comments.push({ authorRole: 'system', authorName: 'Há»‡ thá»‘ng', text: autoCommentText, createdAt: now });
 
   const updated = { ...currentDetailRequest, items: JSON.stringify(items), comments: JSON.stringify(comments), updatedAt: now };
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã lưu kích thước khảo sát');
+  const ok = await qcagDesktopPersistRequest(updated, 'ÄÃ£ lÆ°u kÃ­ch thÆ°á»›c kháº£o sÃ¡t');
   if (ok) qcagCloseSurveySizeModal();
 }
 
@@ -931,7 +933,7 @@ async function qcagReopenSurveyForItem() {
   const items = qcagDesktopParseJson(currentDetailRequest.items, []);
   if (!items[_qcagSurveyEditingIndex]) return qcagCloseSurveySizeModal();
 
-  // Remove confirmed size so item becomes 'Chờ khảo sát'
+  // Remove confirmed size so item becomes 'Chá» kháº£o sÃ¡t'
   try { delete items[_qcagSurveyEditingIndex].surveySize; } catch (e) { items[_qcagSurveyEditingIndex].surveySize = null; }
   items[_qcagSurveyEditingIndex].survey = true;
 
@@ -940,12 +942,12 @@ async function qcagReopenSurveyForItem() {
   const now = new Date().toISOString();
   const displayTime = new Date(now).toLocaleString('vi-VN');
   const outletName = currentDetailRequest.outletName || '-';
-  const itemType = items[_qcagSurveyEditingIndex].type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
-  const autoCommentText = `Outlet ${outletName}: Đặt lại trạng thái khảo sát cho ${itemType} vào ${displayTime}.`;
-  comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
+  const itemType = items[_qcagSurveyEditingIndex].type || `háº¡ng má»¥c #${_qcagSurveyEditingIndex + 1}`;
+  const autoCommentText = `Outlet ${outletName}: Äáº·t láº¡i tráº¡ng thÃ¡i kháº£o sÃ¡t cho ${itemType} vÃ o ${displayTime}.`;
+  comments.push({ authorRole: 'system', authorName: 'Há»‡ thá»‘ng', text: autoCommentText, createdAt: now });
 
   const updated = { ...currentDetailRequest, items: JSON.stringify(items), comments: JSON.stringify(comments), updatedAt: now };
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã đặt lại trạng thái khảo sát');
+  const ok = await qcagDesktopPersistRequest(updated, 'ÄÃ£ Ä‘áº·t láº¡i tráº¡ng thÃ¡i kháº£o sÃ¡t');
   if (ok) qcagCloseSurveySizeModal();
 }
 
@@ -961,12 +963,12 @@ function qcagDesktopRenderCommentPreview() {
   wrap.innerHTML = _qcagDesktopPendingCommentImages.map((img, idx) => `
     <div class="qcag-preview-item">
       <img src="${img}">
-      <button onclick="qcagDesktopRemovePendingCommentImage(${idx})" type="button">✕</button>
+      <button onclick="qcagDesktopRemovePendingCommentImage(${idx})" type="button">âœ•</button>
     </div>
   `).join('');
 }
 
-// ── Old design carousel helpers ─────────────────────────────────────
+// â”€â”€ Old design carousel helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * Returns all completed requests for the same outlet that have MQ images,
@@ -996,7 +998,7 @@ function ksGetOldDesignsForOutlet(currentReq) {
  * @param {object} codeMap - { [backendId]: 'TKxx.xxxxx' }
  */
 function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
-  if (!entry) return '<div class="qcag-detail-muted">Không có thiết kế cũ</div>';
+  if (!entry) return '<div class="qcag-detail-muted">KhÃ´ng cÃ³ thiáº¿t káº¿ cÅ©</div>';
   const designImgs = qcagDesktopParseJson(entry.designImages, []);
   const requester  = qcagDesktopParseJson(entry.requester, {});
   const reqCode    = (codeMap && codeMap[entry.__backendId]) || '-';
@@ -1005,12 +1007,12 @@ function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
   const requestTime = entry.createdAt      ? new Date(entry.createdAt).toLocaleString('vi-VN')      : '-';
   const uploadTime  = entry.designUpdatedAt ? new Date(entry.designUpdatedAt).toLocaleString('vi-VN') : '-';
 
-  let imgsHtml = '<div class="qcag-detail-muted">Không có ảnh</div>';
+  let imgsHtml = '<div class="qcag-detail-muted">KhÃ´ng cÃ³ áº£nh</div>';
   if (designImgs.length === 1) {
-    imgsHtml = `<div class="qcag-gallery-rep qcag-old-gallery-rep" onclick="showImageFull('${designImgs[0]}',false)"><img src="${designImgs[0]}" alt="MQ thiết kế cũ"></div>`;
+    imgsHtml = `<div class="qcag-gallery-rep qcag-old-gallery-rep" onclick="showImageFull('${designImgs[0]}',false)"><img src="${designImgs[0]}" alt="MQ thiáº¿t káº¿ cÅ©"></div>`;
   } else if (designImgs.length > 1) {
     const enc = encodeURIComponent(JSON.stringify(designImgs));
-    imgsHtml = `<div class="qcag-gallery-rep qcag-old-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${designImgs[0]}" alt="MQ thiết kế cũ"><div class="qcag-img-more">+${designImgs.length - 1}</div></div>`;
+    imgsHtml = `<div class="qcag-gallery-rep qcag-old-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${designImgs[0]}" alt="MQ thiáº¿t káº¿ cÅ©"><div class="qcag-img-more">+${designImgs.length - 1}</div></div>`;
   }
 
   return `
@@ -1025,10 +1027,10 @@ function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
         </div>
       </div>
       <div class="qcag-old-info">
-        <div class="qcag-old-info-row"><span>Người upload MQ</span><strong>${escapeHtml(uploadedBy)}</strong></div>
-        <div class="qcag-old-info-row"><span>Sale yêu cầu</span><strong>${escapeHtml(saleName)}</strong></div>
-        <div class="qcag-old-info-row"><span>Thời gian yêu cầu</span><strong>${escapeHtml(requestTime)}</strong></div>
-        <div class="qcag-old-info-row"><span>Thời gian upload MQ</span><strong>${escapeHtml(uploadTime)}</strong></div>
+        <div class="qcag-old-info-row"><span>NgÆ°á»i upload MQ</span><strong>${escapeHtml(uploadedBy)}</strong></div>
+        <div class="qcag-old-info-row"><span>Sale yÃªu cáº§u</span><strong>${escapeHtml(saleName)}</strong></div>
+        <div class="qcag-old-info-row"><span>Thá»i gian yÃªu cáº§u</span><strong>${escapeHtml(requestTime)}</strong></div>
+        <div class="qcag-old-info-row"><span>Thá»i gian upload MQ</span><strong>${escapeHtml(uploadTime)}</strong></div>
       </div>
     </div>
   `;
@@ -1100,10 +1102,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
     : [];
   const comments = qcagDesktopParseJson(request.comments, []);
   const isPendingEditRequest = qcagDesktopIsPendingEditRequest(request);
-  const completeBtnLabel = isPendingEditRequest ? 'Đã chỉnh sửa' : 'Hoàn thành';
+  const completeBtnLabel = isPendingEditRequest ? 'ÄÃ£ chá»‰nh sá»­a' : 'HoÃ n thÃ nh';
   const completeBtnDisabledTitle = isPendingEditRequest
-    ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
-    : 'Vui lòng upload MQ thiết kế trước';
+    ? 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c khi xÃ¡c nháº­n Ä‘Ã£ chá»‰nh sá»­a'
+    : 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c';
   const requester = qcagDesktopParseJson(request.requester, {});
   const statusBadge = qcagDesktopStatusBadge(request);
 
@@ -1112,44 +1114,44 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
       <div class="qcag-detail-left">
         <div class="qcag-card">
           <div class="qcag-card-header">
-            <div class="qcag-card-title">Thông tin người yêu cầu</div>
+            <div class="qcag-card-title">ThÃ´ng tin ngÆ°á»i yÃªu cáº§u</div>
             <div class="qcag-request-time">${request.createdAt ? escapeHtml(new Date(request.createdAt).toLocaleString('vi-VN')) : '-'}</div>
           </div>
           <div class="qcag-requester-grid">
-            <div><span>Tên Sale</span><strong>${escapeHtml(requester.saleName || requester.saleName || requester.phone || '-')}</strong></div>
-            <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || '-')}</strong></div>
-            <div><span>Khu vực</span><strong>${escapeHtml(requester.region || '-')}</strong></div>
-            <div><span>Tên SS/SE</span><strong>${escapeHtml(requester.ssName || requester.ssName || '-')}</strong></div>
+            <div><span>TÃªn Sale</span><strong>${escapeHtml(requester.saleName || requester.saleName || requester.phone || '-')}</strong></div>
+            <div><span>MÃ£ Sale</span><strong>${escapeHtml(requester.saleCode || '-')}</strong></div>
+            <div><span>Khu vá»±c</span><strong>${escapeHtml(requester.region || '-')}</strong></div>
+            <div><span>TÃªn SS/SE</span><strong>${escapeHtml(requester.ssName || requester.ssName || '-')}</strong></div>
           </div>
         </div>
 
         <div class="qcag-card">
-          <div class="qcag-card-title">Thông tin Outlet</div>
+          <div class="qcag-card-title">ThÃ´ng tin Outlet</div>
             <div class="qcag-outlet-grid">
-            <div class="ot-first"><span>Tên Outlet:</span><strong>${escapeHtml(request.outletName || '-')}</strong></div>
+            <div class="ot-first"><span>TÃªn Outlet:</span><strong>${escapeHtml(request.outletName || '-')}</strong></div>
             <div class="ot-first"><span>Outlet Code:</span><strong class="qcag-outlet-code">${escapeHtml(request.outletCode || '-')}</strong>
-              <button type="button" class="qcag-copy-btn qcag-copy-btn-icon" onclick="qcagCopyOutletCode('${escapeHtml(request.outletCode || '')}')" title="Sao chép Outlet Code">
+              <button type="button" class="qcag-copy-btn qcag-copy-btn-icon" onclick="qcagCopyOutletCode('${escapeHtml(request.outletCode || '')}')" title="Sao chÃ©p Outlet Code">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                   <path d="M16 1H4a2 2 0 0 0-2 2v12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                   <rect x="8" y="5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
             </div>
-            <div class="ot-first"><span>Định vị:</span><strong>${request.outletLat && request.outletLng ? `<button class="qcag-map-btn" onclick="openSavedLocation(${request.outletLat},${request.outletLng})">Xem map</button>` : 'Không có dữ liệu GPS'}</strong></div>
-            <div class="ot-second ot-address"><span>Địa chỉ:</span><strong>${escapeHtml(request.address || '-')}</strong></div>
-            <div class="ot-second ot-phone"><span>Điện thoại:</span><strong>${escapeHtml(request.phone || '-')}</strong></div>
+            <div class="ot-first"><span>Äá»‹nh vá»‹:</span><strong>${request.outletLat && request.outletLng ? `<button class="qcag-map-btn" onclick="openSavedLocation(${request.outletLat},${request.outletLng})">Xem map</button>` : 'KhÃ´ng cÃ³ dá»¯ liá»‡u GPS'}</strong></div>
+            <div class="ot-second ot-address"><span>Äá»‹a chá»‰:</span><strong>${escapeHtml(request.address || '-')}</strong></div>
+            <div class="ot-second ot-phone"><span>Äiá»‡n thoáº¡i:</span><strong>${escapeHtml(request.phone || '-')}</strong></div>
           </div>
         </div>
 
         <div class="qcag-card">
-          <div class="qcag-card-title">Hạng mục yêu cầu</div>
+          <div class="qcag-card-title">Háº¡ng má»¥c yÃªu cáº§u</div>
           <div id="qcagItemsSection">${qcagDesktopBuildItemsHtml(items)}</div>
         </div>
 
         <div class="qcag-card qcag-card--no-frame">
           <div class="qcag-content-split">
               <div class="qcag-subcard">
-                <div class="qcag-card-title">Nội dung bảng hiệu</div>
+                <div class="qcag-card-title">Ná»™i dung báº£ng hiá»‡u</div>
                 <div class="qcag-subcard-body">
                   ${(() => {
                     try {
@@ -1163,32 +1165,32 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                             const moreOld = oldImgs.length > 1 ? (oldImgs.length - 1) : 0;
                             let galleryHtml = '';
                             if (oldImgs.length === 1) {
-                              galleryHtml = `<div class="qcag-gallery-rep" onclick="showImageFull('${firstOld}',false)"><img src="${firstOld}" alt="nội dung cũ"></div>`;
+                              galleryHtml = `<div class="qcag-gallery-rep" onclick="showImageFull('${firstOld}',false)"><img src="${firstOld}" alt="ná»™i dung cÅ©"></div>`;
                             } else {
-                              galleryHtml = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${encOld}',0)"><img src="${firstOld}" alt="nội dung cũ"><div class="qcag-img-more">${moreOld > 0 ? '+' + moreOld : ''}</div></div>`;
+                              galleryHtml = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${encOld}',0)"><img src="${firstOld}" alt="ná»™i dung cÅ©"><div class="qcag-img-more">${moreOld > 0 ? '+' + moreOld : ''}</div></div>`;
                             }
-                            return galleryHtml + (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Nội dung bổ sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : '');
+                            return galleryHtml + (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Ná»™i dung bá»• sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : '');
                           }
-                        return (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Nội dung bổ sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : `<div class="qcag-detail-muted">Chưa có ảnh nội dung cũ</div>`);
+                        return (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Ná»™i dung bá»• sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : `<div class="qcag-detail-muted">ChÆ°a cÃ³ áº£nh ná»™i dung cÅ©</div>`);
                       }
-                      return request.content ? `<div class="qcag-content-pre">${escapeHtml(request.content)}</div>` : `<div class="qcag-detail-muted">Không có mô tả</div>`;
-                    } catch (e) { return `<div class="qcag-detail-muted">Không có mô tả</div>`; }
+                      return request.content ? `<div class="qcag-content-pre">${escapeHtml(request.content)}</div>` : `<div class="qcag-detail-muted">KhÃ´ng cÃ³ mÃ´ táº£</div>`;
+                    } catch (e) { return `<div class="qcag-detail-muted">KhÃ´ng cÃ³ mÃ´ táº£</div>`; }
                   })()}
                 </div>
               </div>
 
             <div class="qcag-subcard">
-              <div class="qcag-card-title">Hiện trạng Outlet</div>
+              <div class="qcag-card-title">Hiá»‡n tráº¡ng Outlet</div>
               <div class="qcag-subcard-body qcag-content-images">
                 ${statusImgs.length > 0 ? (() => {
                   const enc = encodeURIComponent(JSON.stringify(statusImgs));
                   const first = statusImgs[0];
                   const moreCount = statusImgs.length > 1 ? (statusImgs.length - 1) : 0;
                   if (statusImgs.length === 1) {
-                    return `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng"></div>`;
+                    return `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiá»‡n tráº¡ng"></div>`;
                   }
-                  return `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng"><div class="qcag-img-more">${moreCount > 0 ? '+' + moreCount : ''}</div></div>`;
-                })() : '<div class="qcag-detail-muted">Chưa có ảnh nội dung</div>'}
+                  return `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiá»‡n tráº¡ng"><div class="qcag-img-more">${moreCount > 0 ? '+' + moreCount : ''}</div></div>`;
+                })() : '<div class="qcag-detail-muted">ChÆ°a cÃ³ áº£nh ná»™i dung</div>'}
               </div>
             </div>
           </div>
@@ -1197,10 +1199,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         <div class="qcag-card">
           <div class="qcag-actions qcag-split-cards">
             <div class="qcag-subcard">
-              <div class="qcag-card-title">Upload MQ thiết kế</div>
+              <div class="qcag-card-title">Upload MQ thiáº¿t káº¿</div>
               <div class="qcag-subcard-body">
                 <div class="qcag-action-block">
-                  <label class="qcag-upload-square" title="Upload MQ thiết kế">
+                  <label class="qcag-upload-square" title="Upload MQ thiáº¿t káº¿">
                     <input type="file" accept="image/*" multiple onchange="qcagDesktopUploadMQ(this)">
                     <div class="qcag-upload-plus">+</div>
                   </label>
@@ -1208,9 +1210,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     ${designImgs.length > 0 ? designImgs.map((img, i) => `
                       <div class="qcag-thumb-item">
                         <img src="${img}" onclick="showImageFull('${img}',false)">
-                        <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">✕</button>
+                        <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">âœ•</button>
                       </div>
-                    `).join('') : '<div class="qcag-detail-muted">Chưa có MQ</div>'}
+                    `).join('') : '<div class="qcag-detail-muted">ChÆ°a cÃ³ MQ</div>'}
                   </div>
                 </div>
                 
@@ -1238,12 +1240,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     }
 
                     const creatorLine = displayCreator
-                      ? `Thiết Kế: ${escapeHtml(displayCreator)}${displayCreatorTime ? ' • ' + escapeHtml(new Date(displayCreatorTime).toLocaleString('vi-VN')) : ''}`
-                      : 'Thiết Kế: Chưa có người thiết kế';
+                      ? `Thiáº¿t Káº¿: ${escapeHtml(displayCreator)}${displayCreatorTime ? ' â€¢ ' + escapeHtml(new Date(displayCreatorTime).toLocaleString('vi-VN')) : ''}`
+                      : 'Thiáº¿t Káº¿: ChÆ°a cÃ³ ngÆ°á»i thiáº¿t káº¿';
 
                     const editedLine = showEdited
-                      ? `Chỉnh sửa: ${escapeHtml(lastEditedBy)}${lastEditedAt ? ' • ' + escapeHtml(new Date(lastEditedAt).toLocaleString('vi-VN')) : ''}`
-                      : 'Chỉnh sửa: chưa có chỉnh sửa nào';
+                      ? `Chá»‰nh sá»­a: ${escapeHtml(lastEditedBy)}${lastEditedAt ? ' â€¢ ' + escapeHtml(new Date(lastEditedAt).toLocaleString('vi-VN')) : ''}`
+                      : 'Chá»‰nh sá»­a: chÆ°a cÃ³ chá»‰nh sá»­a nÃ o';
 
                     const creatorClass = displayCreator ? 'qcag-mq-created' : 'qcag-mq-created qcag-mq-empty';
                     const editedClass = showEdited ? 'qcag-mq-edited' : 'qcag-mq-edited qcag-mq-empty';
@@ -1257,12 +1259,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
             </div>
 
             <div class="qcag-subcard">
-              <div class="qcag-card-title">Những thiết kế cũ của Outlet</div>
+              <div class="qcag-card-title">Nhá»¯ng thiáº¿t káº¿ cÅ© cá»§a Outlet</div>
               <div class="qcag-subcard-body" id="qcagOldDesignSection">
                 ${(() => {
                   _qcagOldDesignIdx = 0;
                   const oldList = ksGetOldDesignsForOutlet(request);
-                  if (oldList.length === 0) return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
+                  if (oldList.length === 0) return '<div class="qcag-detail-muted">Outlet nÃ y chÆ°a cÃ³ thiáº¿t káº¿ nÃ o hoÃ n thÃ nh</div>';
                   const codeMap = qcagDesktopComputeRequestCodes();
                   return qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
                 })()}
@@ -1274,18 +1276,18 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
 
       <div class="qcag-detail-right">
         <div class="qcag-chat-card">
-          <div class="qcag-chat-head">Trao đổi QCAG ↔ Sale Heineken</div>
+          <div class="qcag-chat-head">Trao Ä‘á»•i QCAG â†” Sale Heineken</div>
           <div id="qcagCommentTimeline" class="qcag-comment-timeline">
-            ${comments.length > 0 ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('') : '<div class="qcag-detail-muted">Chưa có bình luận</div>'}
+            ${comments.length > 0 ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('') : '<div class="qcag-detail-muted">ChÆ°a cÃ³ bÃ¬nh luáº­n</div>'}
           </div>
           <div class="qcag-chat-input-wrap">
-            <textarea id="qcagCommentInput" rows="3" placeholder="Nhập bình luận..."></textarea>
+            <textarea id="qcagCommentInput" rows="3" placeholder="Nháº­p bÃ¬nh luáº­n..."></textarea>
             <div id="qcagCommentUploadPreview" class="qcag-upload-preview hidden"></div>
             <div class="qcag-chat-actions">
-              <label class="qcag-comment-upload">Upload hình
+              <label class="qcag-comment-upload">Upload hÃ¬nh
                 <input type="file" accept="image/*" multiple onchange="qcagDesktopPickCommentImages(this)">
               </label>
-              <button onclick="qcagDesktopSendComment()" class="qcag-send-btn">Gửi</button>
+              <button onclick="qcagDesktopSendComment()" class="qcag-send-btn">Gá»­i</button>
             </div>
           </div>
         </div>
@@ -1325,7 +1327,7 @@ async function qcagDesktopUploadMQ(input) {
   // Upload to GCS so Sale Heineken can also receive the image URL
   let imageUrl = dataUrl;
   if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
-    showToast('Đang upload MQ...');
+    showToast('Äang upload MQ...');
     try {
       const mqSubfolder = 'mq-' + String(currentDetailRequest.outletCode || 'OUTLET')
         .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
@@ -1355,8 +1357,8 @@ async function qcagDesktopUploadMQ(input) {
     const now = new Date().toISOString();
     const displayTime = new Date(now).toLocaleString('vi-VN');
     const outletName = currentDetailRequest.outletName || '-';
-    const autoCommentText = `Outlet ${outletName} đã được chỉnh sửa lần thứ ${nextEditRevisionCount} vào lúc ${displayTime}.`;
-    comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
+    const autoCommentText = `Outlet ${outletName} Ä‘Ã£ Ä‘Æ°á»£c chá»‰nh sá»­a láº§n thá»© ${nextEditRevisionCount} vÃ o lÃºc ${displayTime}.`;
+    comments.push({ authorRole: 'system', authorName: 'Há»‡ thá»‘ng', text: autoCommentText, createdAt: now });
   }
 
   const updated = {
@@ -1370,7 +1372,7 @@ async function qcagDesktopUploadMQ(input) {
       ? (currentDetailRequest.editingRequestedAt || new Date().toISOString())
       : null,
     // Set status to 'processing' after an upload so the item shows as awaiting confirmation
-    // (unless it is already completed). This ensures the badge becomes 'Chờ xác nhận'.
+    // (unless it is already completed). This ensures the badge becomes 'Chá» xÃ¡c nháº­n'.
     status: (function () {
       const s = String(currentDetailRequest.status || 'pending').toLowerCase();
       if (s === 'done' || s === 'processed') return s;
@@ -1381,7 +1383,7 @@ async function qcagDesktopUploadMQ(input) {
     updatedAt: new Date().toISOString()
   };
 
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã upload MQ thiết kế', true);
+  const ok = await qcagDesktopPersistRequest(updated, 'ÄÃ£ upload MQ thiáº¿t káº¿', true);
   if (ok) qcagDesktopRefreshMQInPlace(updated);
   input.value = '';
 }
@@ -1390,7 +1392,7 @@ async function qcagDesktopUpdateStatus(status) {
   if (!currentDetailRequest) return;
   const normalized = String(status || 'pending');
   const updated = { ...currentDetailRequest, status: normalized, updatedAt: new Date().toISOString() };
-  await qcagDesktopPersistRequest(updated, 'Đã cập nhật trạng thái');
+  await qcagDesktopPersistRequest(updated, 'ÄÃ£ cáº­p nháº­t tráº¡ng thÃ¡i');
 }
 
 async function qcagDesktopMarkProcessed() {
@@ -1400,8 +1402,8 @@ async function qcagDesktopMarkProcessed() {
   const designImgs = qcagDesktopParseJson(currentDetailRequest.designImages, []);
   if (!designImgs || designImgs.length === 0) {
     showToast(isPendingEdit
-      ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
-      : 'Vui lòng upload MQ thiết kế trước khi hoàn thành');
+      ? 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c khi xÃ¡c nháº­n Ä‘Ã£ chá»‰nh sá»­a'
+      : 'Vui lÃ²ng upload MQ thiáº¿t káº¿ trÆ°á»›c khi hoÃ n thÃ nh');
     return;
   }
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
@@ -1410,7 +1412,7 @@ async function qcagDesktopMarkProcessed() {
       authorRole: 'qcag',
       authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
       commentType: 'edit-resolved',
-      text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
+      text: 'QCAG Ä‘Ã£ chá»‰nh sá»­a xong theo yÃªu cáº§u cá»§a Sale Heineken.',
       readBy: [],
       createdAt: new Date().toISOString()
     });
@@ -1438,7 +1440,7 @@ async function qcagDesktopMarkProcessed() {
     comments: JSON.stringify(comments),
     ...extraFields
   };
-  const persistOk = await qcagDesktopPersistRequest(updated, isPendingEdit ? 'Đã xác nhận chỉnh sửa' : 'Đã hoàn thành');
+  const persistOk = await qcagDesktopPersistRequest(updated, isPendingEdit ? 'ÄÃ£ xÃ¡c nháº­n chá»‰nh sá»­a' : 'ÄÃ£ hoÃ n thÃ nh');
 
   // Fire push notification to Sale Heineken (best-effort, never blocks UI)
   if (persistOk) {
@@ -1453,10 +1455,10 @@ async function qcagDesktopMarkProcessed() {
       if (requesterPhone) {
         const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
         const tkCode = updated.__backendId || updated.outletCode || '';
-        const pushTitle = isPendingEdit ? 'QCAG — Đã hoàn thành chỉnh sửa' : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+        const pushTitle = isPendingEdit ? 'QCAG â€” ÄÃ£ hoÃ n thÃ nh chá»‰nh sá»­a' : 'QCAG â€” ÄÃ£ cÃ³ máº«u quáº£ng cÃ¡o (MQ)';
         const pushBody = isPendingEdit
-          ? `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng mở app để xem.`
-          : `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng mở app để xem.`;
+          ? `YÃªu cáº§u ${tkCode} Outlet ${outletLabel} Ä‘Ã£ Ä‘Æ°á»£c chá»‰nh sá»­a. Vui lÃ²ng má»Ÿ app Ä‘á»ƒ xem.`
+          : `YÃªu cáº§u ${tkCode} Outlet ${outletLabel} Ä‘Ã£ cÃ³ MQ. Vui lÃ²ng má»Ÿ app Ä‘á»ƒ xem.`;
 
         fetch('/api/ks/push/send', {
           method: 'POST',
@@ -1498,7 +1500,7 @@ async function qcagDesktopRemoveDesignImage(index) {
   if (!Array.isArray(imgs) || index < 0 || index >= imgs.length) return;
   imgs.splice(index, 1);
   const updated = { ...currentDetailRequest, designImages: JSON.stringify(imgs), updatedAt: new Date().toISOString() };
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã xóa ảnh MQ', true);
+  const ok = await qcagDesktopPersistRequest(updated, 'ÄÃ£ xÃ³a áº£nh MQ', true);
   if (ok) qcagDesktopRefreshMQInPlace(updated);
 }
 
@@ -1514,7 +1516,7 @@ async function qcagDesktopSendComment() {
 
   const text = String(ta.value || '').trim();
   if (!text && _qcagDesktopPendingCommentImages.length === 0) {
-    showToast('Nhập nội dung hoặc chọn hình trước khi gửi');
+    showToast('Nháº­p ná»™i dung hoáº·c chá»n hÃ¬nh trÆ°á»›c khi gá»­i');
     return;
   }
 
@@ -1529,7 +1531,7 @@ async function qcagDesktopSendComment() {
   });
 
   const updated = { ...currentDetailRequest, comments: JSON.stringify(comments), updatedAt: new Date().toISOString() };
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã gửi bình luận');
+  const ok = await qcagDesktopPersistRequest(updated, 'ÄÃ£ gá»­i bÃ¬nh luáº­n');
   if (!ok) return;
 
   _qcagDesktopPendingCommentImages = [];
@@ -1575,7 +1577,7 @@ function qcagOpenGallery(images, startIndex) {
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'qcag-gallery-close';
-  closeBtn.textContent = '✕';
+  closeBtn.textContent = 'âœ•';
   closeBtn.onclick = function (e) { e.stopPropagation(); qcagCloseGallery(); };
   wrap.appendChild(closeBtn);
 
@@ -1586,7 +1588,7 @@ function qcagOpenGallery(images, startIndex) {
     t.className = 'qcag-gallery-thumb';
     const img = document.createElement('img');
     img.src = src;
-    img.alt = 'Ảnh ' + (i + 1);
+    img.alt = 'áº¢nh ' + (i + 1);
     img.onclick = function (e) { e.stopPropagation(); try { showImageFull(src, false); } catch (err) { console.error(err); } };
     t.appendChild(img);
     thumbs.appendChild(t);
@@ -1616,3 +1618,5 @@ function qcagCloseGallery() {
   if (k) document.removeEventListener('keydown', k);
   g.remove();
 }
+
+
