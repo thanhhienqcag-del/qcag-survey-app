@@ -1,0 +1,32 @@
+{
+    "name": "qcag-backend",
+    "version": "2.0.0",
+    "description": "Vercel Serverless API – QCAG Survey & Quote App (PostgreSQL + Cloudinary)",
+    "main": "index.js",
+    "scripts": {
+        "dev": "vercel dev",
+        "deploy": "vercel --prod",
+        "db:migrate": "node scripts/migrate.js",
+        "migrate:cloudsql": "node scripts/migrate-from-cloudsql.js",
+        "diagnose:connectivity": "node scripts/diagnose-connectivity.js",
+        "test:services": "node scripts/test-services.js",
+        "test": "echo \"No tests yet\" && exit 0"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "type": "commonjs",
+    "dependencies": {
+        "@google-cloud/storage": "^7.15.0",
+        "cloudinary": "^2.9.0",
+        "cors": "^2.8.5",
+        "dotenv": "^17.3.1",
+        "express": "^4.21.2",
+        "pg": "^8.20.0",
+        "web-push": "^3.5.0"
+    },
+    "devDependencies": {
+        "mysql2": "^3.11.5",
+        "vercel": "^37.6.2"
+    }
+}

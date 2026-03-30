@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+.DS_Store
+.env
+service-account.json
+gcp-keys
+*.log
+server.err
+curl_*.txt

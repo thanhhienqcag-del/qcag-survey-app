@@ -1,0 +1,7 @@
+node_modules/
+.env
+*.key
+gcp-keys/
+service-account.json
+temp-key.json
+.vercel
