@@ -626,9 +626,52 @@
     color: #ffffff;
   }
 
-  .theme-dark .qcag-status-badge.pending-confirm {
-    background: rgba(99,102,241,0.12);
-    color: #c7d2fe;
+  /* Chờ thiết kế: blue border */
+  .qcag-status-badge.pending-design {
+    border: 2px solid #3b82f6; /* blue */
+    padding: 1px 8px;
+    background: rgba(59,130,246,0.03);
+    background-clip: padding-box;
+    color: #1e3a8a;
+  }
+  .theme-dark .qcag-status-badge.pending-design,
+  [data-theme="dark"] .qcag-status-badge.pending-design,
+  body.dark .qcag-status-badge.pending-design {
+    border-color: #3b82f6;
+    color: #bfdbfe;
+    background: rgba(59,130,246,0.06);
+  }
+
+  /* Chờ chỉnh sửa: orange border */
+  .qcag-status-badge.pending-edit {
+    border: 2px solid #f97316; /* orange */
+    padding: 1px 8px;
+    background: rgba(249,115,22,0.03);
+    background-clip: padding-box;
+    color: #92400e;
+  }
+  .theme-dark .qcag-status-badge.pending-edit,
+  [data-theme="dark"] .qcag-status-badge.pending-edit,
+  body.dark .qcag-status-badge.pending-edit {
+    border-color: #fb923c;
+    color: #ffd8bf;
+    background: rgba(249,115,22,0.06);
+  }
+
+  /* Chờ xác nhận: green border */
+  .qcag-status-badge.pending-confirm {
+    border: 2px solid #10b981; /* green */
+    padding: 1px 8px;
+    background: rgba(16,185,129,0.03);
+    background-clip: padding-box;
+    color: #065f46;
+  }
+  .theme-dark .qcag-status-badge.pending-confirm,
+  [data-theme="dark"] .qcag-status-badge.pending-confirm,
+  body.dark .qcag-status-badge.pending-confirm {
+    border-color: #10b981;
+    color: #bbf7d0;
+    background: rgba(16,185,129,0.06);
   }
 
   /* Left-column request tags */

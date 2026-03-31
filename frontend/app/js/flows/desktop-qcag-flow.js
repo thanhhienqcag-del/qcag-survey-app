@@ -782,12 +782,14 @@ function qcagDesktopComputeRequestCodes() {
 function qcagDesktopStatusBadge(req) {
   // Edit request takes highest priority — move back to processing regardless of done state
   if (qcagDesktopIsPendingEditRequest(req)) {
-    return { label: 'Chờ chỉnh sửa', cls: 'pending' };
+    // mark explicitly as an edit-request badge so we can style it differently
+    return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
   }
 
   const designImgs = qcagDesktopParseJson(req && req.designImages, []);
   if (!designImgs || designImgs.length === 0) {
-    return { label: 'Chờ thiết kế', cls: 'pending' };
+    // no design yet — show explicit "waiting for design" badge
+    return { label: 'Chờ thiết kế', cls: 'pending-design' };
   }
 
   const s = String(req && req.status || 'pending').toLowerCase();
