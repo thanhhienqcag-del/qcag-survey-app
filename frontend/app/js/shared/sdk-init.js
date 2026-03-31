@@ -31,6 +31,9 @@ function loadAllRequestsFromStorage() {
   }
 }
 
+// Snapshot of last SDK data payload (used to detect changes and show mobile toast)
+let _lastDataSdkSnapshot = null;
+
 // ── SDK initialization ────────────────────────────────────────────────
 
 async function initHomeAndLoad() {
@@ -59,7 +62,78 @@ async function initApp() {
   if (window.dataSdk) {
     const result = await window.dataSdk.init({
       onDataChanged: (data) => {
+        // Detect changes compared to previous snapshot and show a mobile toast
+        // when a request belonging to the current user receives an MQ,
+        // is marked done, or gets an edit-resolved comment.
+        try {
+          const prev = Array.isArray(_lastDataSdkSnapshot) ? _lastDataSdkSnapshot : (Array.isArray(allRequests) ? allRequests : []);
+          const prevMap = {};
+          (prev || []).forEach(r => { if (r && r.__backendId) prevMap[r.__backendId] = r; });
+          const newMap = {};
+          (data || []).forEach(r => { if (r && r.__backendId) newMap[r.__backendId] = r; });
+
+          // Only show toast for logged-in Heineken/mobile users (not QCAG desktop)
+          const isHeineken = !!(typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'heineken');
+          if (isHeineken && currentSession && currentSession.phone) {
+            for (const id in newMap) {
+              try {
+                const oldReq = prevMap[id];
+                const newReq = newMap[id];
+                if (!oldReq || !newReq) continue;
+                const oldTs = oldReq.updatedAt ? new Date(oldReq.updatedAt).getTime() : 0;
+                const newTs = newReq.updatedAt ? new Date(newReq.updatedAt).getTime() : 0;
+                if (newTs <= oldTs) continue; // not newer
+
+                // Make sure this request belongs to the current user (by phone)
+                let reqObj = {};
+                try { reqObj = (typeof newReq.requester === 'string') ? JSON.parse(newReq.requester || '{}') : (newReq.requester || {}); } catch (e) { reqObj = {}; }
+                if (String(reqObj.phone || '') !== String(currentSession.phone || '')) continue;
+
+                // 1) MQ uploaded: designImages changed from empty -> non-empty
+                let oldDesign = [];
+                let newDesign = [];
+                try { oldDesign = JSON.parse(oldReq.designImages || '[]'); } catch (e) { oldDesign = []; }
+                try { newDesign = JSON.parse(newReq.designImages || '[]'); } catch (e) { newDesign = []; }
+                if (!Array.isArray(oldDesign)) oldDesign = [];
+                if (!Array.isArray(newDesign)) newDesign = [];
+                if (oldDesign.length === 0 && newDesign.length > 0) {
+                  try { showToast('Yêu cầu của bạn đã có MQ. Mở app để xem.'); } catch (_) {}
+                  break;
+                }
+
+                // 2) Status moved to done/processed
+                const oldStatus = String(oldReq.status || '').toLowerCase();
+                const newStatus = String(newReq.status || '').toLowerCase();
+                if ((newStatus === 'done' || newStatus === 'processed') && oldStatus !== newStatus) {
+                  try { showToast('Yêu cầu của bạn đã được hoàn thành.'); } catch (_) {}
+                  break;
+                }
+
+                // 3) edit-resolved comment appended
+                let oldComments = [];
+                let newComments = [];
+                try { oldComments = JSON.parse(oldReq.comments || '[]'); } catch (e) { oldComments = []; }
+                try { newComments = JSON.parse(newReq.comments || '[]'); } catch (e) { newComments = []; }
+                if (Array.isArray(newComments) && Array.isArray(oldComments) && newComments.length > oldComments.length) {
+                  const last = newComments[newComments.length - 1] || {};
+                  if (String(last.commentType || '').toLowerCase() === 'edit-resolved') {
+                    try { showToast('QCAG đã hoàn tất chỉnh sửa theo yêu cầu.'); } catch (_) {}
+                    break;
+                  }
+                }
+              } catch (e) {
+                // per-request safety: continue to next
+                continue;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('onDataChanged diff check failed', e);
+        }
+
         allRequests = data;
+        // keep a deep clone as previous snapshot so later diffs are stable
+        try { _lastDataSdkSnapshot = data ? JSON.parse(JSON.stringify(data)) : []; } catch (e) { _lastDataSdkSnapshot = data || []; }
         updateRequestCount();
         if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
           // Chỉ refresh list khi có dữ liệu mới từ SSE realtime.
