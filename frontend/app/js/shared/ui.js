@@ -51,3 +51,22 @@ function disableModalBackdrop() {
     document.body.classList.remove('modal-open');
   } catch (e) {}
 }
+
+// Listen for messages from the service worker and show an in-app toast
+// when a push arrives while the page is open (provides Zalo-like toast UX).
+try {
+  if (typeof navigator !== 'undefined' && navigator.serviceWorker && typeof navigator.serviceWorker.addEventListener === 'function') {
+    navigator.serviceWorker.addEventListener('message', function (ev) {
+      try {
+        const d = ev && ev.data ? ev.data : null;
+        if (!d) return;
+        if (d.type === 'push') {
+          const title = d.title || '';
+          const body = d.body || '';
+          // show compact toast with title and body
+          try { showToast((title ? title + (body ? ': ' : '') : '') + body); } catch (e) {}
+        }
+      } catch (e) {}
+    });
+  }
+} catch (e) {}

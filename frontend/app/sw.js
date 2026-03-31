@@ -8,7 +8,23 @@ self.addEventListener('push', function(event) {
     badge: '/app/assets/logo-qcag-2.0-192.png',
     data: payload.data || {}
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Show a system notification and also notify any open clients so the
+  // in-app UI can display a toast when the app is in the foreground.
+  event.waitUntil((async function() {
+    try {
+      await self.registration.showNotification(title, options);
+    } catch (e) {
+      // ignore showNotification errors — still try to post message to clients
+    }
+    try {
+      const all = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of all) {
+        try {
+          client.postMessage({ type: 'push', title: title, body: options.body || '', data: options.data || {} });
+        } catch (e) {}
+      }
+    } catch (e) {}
+  })());
 });
 
 self.addEventListener('notificationclick', function(event) {
