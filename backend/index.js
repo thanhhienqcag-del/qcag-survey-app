@@ -2429,13 +2429,16 @@ app.post('/api/ks/requests', async (req, res) => {
     }
 });
 
-// ─── Helper: auto-upload base64 images in a JSON array to GCS ───────────────
+// ─── Helper: auto-upload base64 images in a JSON array to GCS ──────────────
 // Input:  JSON string like '["data:image/jpeg;base64,...","https://..."]'
-// Output: Same array with base64 replaced by GCS URLs.
+// Output: Same array with base64 replaced by GCS public URLs.
 // Folder structure: ks-surveys/{mqFolder}/{subfolder}/{ts}_{rand}.{ext}
 async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
     const ksBucket = process.env.KS_GCS_BUCKET;
-    if (!ksBucket) return jsonStr; // no bucket configured → keep as-is
+    if (!ksBucket) {
+        console.warn('[ksAutoUpload] KS_GCS_BUCKET not set — images kept as-is');
+        return jsonStr;
+    }
     let arr;
     try { arr = JSON.parse(jsonStr || '[]'); } catch (_) { return jsonStr; }
     if (!Array.isArray(arr) || arr.length === 0) return jsonStr;
@@ -2459,8 +2462,8 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
             await bucket.file(filename).save(buffer, { contentType: mimetype });
             return `https://storage.googleapis.com/${ksBucket}/${filename}`;
         } catch (uploadErr) {
-            console.warn('[ksAutoUpload] upload failed, dropping image:', uploadErr && uploadErr.message ? uploadErr.message : uploadErr);
-            return null; // drop failed item
+            console.warn('[ksAutoUpload] GCS upload failed, dropping image:', uploadErr && uploadErr.message ? uploadErr.message : uploadErr);
+            return null;
         }
     }));
     return JSON.stringify(uploaded.filter(x => x !== null));
@@ -2673,18 +2676,14 @@ app.post('/api/ks/upload', async (req, res) => {
         const ts   = Date.now();
         let filename;
         if (backendIdRaw) {
-            // Structured path: ks-surveys/{backendId}/{folder}/{ts}_{rand}.{ext}
             const safeId  = backendIdRaw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
             const safeFld = folderRaw   ? folderRaw.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 64) : 'misc';
             filename = `ks-surveys/${safeId}/${safeFld}/${ts}_${rand}.${ext}`;
         } else {
-            // Flat fallback (migration / legacy)
             const safeHint = String(filenameHint || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
             filename = `ks-attachments/${ts}_${rand}${safeHint ? '_' + safeHint : ''}.${ext}`;
         }
-        const ksBucketObj = gcs.bucket(ksBucketName);
-        const file = ksBucketObj.file(filename);
-        await file.save(buffer, { contentType: mimetype });
+        await gcs.bucket(ksBucketName).file(filename).save(buffer, { contentType: mimetype });
         const url = `https://storage.googleapis.com/${ksBucketName}/${filename}`;
         return res.json({ ok: true, url, name: filename });
     } catch (err) {

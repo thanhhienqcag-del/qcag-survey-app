@@ -447,8 +447,13 @@
     border: 1px solid rgba(0,0,0,0.08);
     box-shadow: none;
   }
-  .dv-zoom-btn-edit { /* left button */ }
-  .dv-zoom-btn-view { /* right button */ }
+  .dv-zoom-btn-edit {
+    background: #dc2626;
+    color: #fff;
+    border-color: transparent;
+  }
+  .dv-zoom-btn-edit:active { background: #b91c1c; }
+  .dv-zoom-btn-view { /* right button – default white */ }
 
   @media (max-width: 420px) {
     .dv-zoom-bottom-inner { gap: 6px; }

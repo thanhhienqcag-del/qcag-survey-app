@@ -5,6 +5,12 @@
 /* Global font */
 * { font-family: 'Be Vietnam Pro', sans-serif; }
 
+/* Thumbnail skeleton pulse animation */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
 /* Map modal: full screen on mobile, capped on desktop */
 .map-modal-panel {
   height: 100dvh;
@@ -1000,6 +1006,24 @@ body.dark .qcag-survey-badge,
 @keyframes mqHintBounce {
   0%, 100% { transform: translateY(-50%); }
   50% { transform: translateY(-56%); }
+}
+
+.qcag-survey-warning {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  display: inline-block;
+  background-color: #fde047; /* yellow */
+  color: #92400e; /* dark yellow/orange */
+}
+
+.theme-dark .qcag-survey-warning,
+[data-theme="dark"] .qcag-survey-warning {
+  background-color: #f59e0b; /* amber 500 */
+  color: #1f2937; /* gray 800 */
 }
 
 /* when overlay is open allow interactions */

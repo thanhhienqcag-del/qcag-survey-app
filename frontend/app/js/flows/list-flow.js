@@ -193,22 +193,43 @@ function renderRequestList() {
   }
 
   emptyState.classList.add('hidden');
+
+  // Track which entries need lazy image load (have placeholder ["..."])
+  const lazyLoadIds = [];
+
   container.innerHTML = filtered.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
     const dsState = getRequestDesignState(req);
     const badge = DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.waiting;
     let preview = '';
+    let hasDesignPlaceholder = false;
     try {
       const imgs = JSON.parse(req.designImages || '[]');
-      if (imgs && imgs.length > 0) preview = imgs[0];
+      if (imgs && imgs.length > 0) {
+        if (imgs[0] === '...') {
+          // List endpoint returned placeholder — lazy-load real URL after render
+          hasDesignPlaceholder = true;
+          lazyLoadIds.push(req.__backendId);
+        } else {
+          preview = imgs[0];
+        }
+      }
     } catch (e) { preview = ''; }
 
-    const thumbHtml = preview
-      ? `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" aria-label="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`
-      : `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" aria-label="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+    let thumbHtml;
+    if (preview) {
+      thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`;
+    } else if (hasDesignPlaceholder) {
+      // Placeholder skeleton — will be replaced by lazy loader below
+      thumbHtml = `<div id="thumb-${req.__backendId}" class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
+           <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+         </div>`;
+    } else {
+      thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
          </button>`;
+    }
 
     return `
       <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer">
@@ -229,6 +250,38 @@ function renderRequestList() {
       </div>
     `;
   }).join('');
+
+  // Lazy-load real thumbnails for placeholder entries (sequential to avoid rate limits)
+  if (lazyLoadIds.length > 0 && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
+    (async () => {
+      for (const backendId of lazyLoadIds) {
+        const el = document.getElementById('thumb-' + backendId);
+        if (!el) continue; // list re-rendered, skip
+        try {
+          const r = await window.dataSdk.getOne(backendId);
+          if (!r || !r.isOk || !r.data) continue;
+          const imgs = JSON.parse(r.data.designImages || '[]').filter(u => u && u !== '...');
+          if (!imgs.length) continue;
+          // Update local store
+          const idx = allRequests.findIndex(x => x.__backendId === backendId);
+          if (idx !== -1) {
+            ['designImages','statusImages','acceptanceImages','oldContentImages'].forEach(k => {
+              if (r.data[k] && r.data[k] !== '["..."]') allRequests[idx][k] = r.data[k];
+            });
+          }
+          // Replace skeleton with real thumbnail (if element still exists in DOM)
+          const thumbEl = document.getElementById('thumb-' + backendId);
+          if (!thumbEl) continue;
+          const img = document.createElement('img');
+          img.src = imgs[0];
+          img.className = 'w-16 h-16 object-cover rounded-lg cursor-pointer';
+          img.title = 'Xem thiết kế';
+          img.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
+          thumbEl.replaceWith(img);
+        } catch (e) { /* leave skeleton as-is */ }
+      }
+    })();
+  }
 }
 
 function switchListTab(tab) {

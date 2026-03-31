@@ -203,6 +203,10 @@ async function showRequestDetail(id) {
         if (idx !== -1) allRequests[idx] = fullRequest;
       }
     } catch (e) { /* use local data as fallback */ }
+    // Strip list-endpoint placeholder values so broken "..." URLs are never rendered
+    ['statusImages', 'designImages', 'acceptanceImages', 'oldContentImages'].forEach(k => {
+      if (fullRequest[k] === '["..."]') fullRequest[k] = '[]';
+    });
   }
 
   currentDetailRequest = fullRequest;
@@ -422,7 +426,7 @@ async function showRequestDetail(id) {
           <p class="text-sm text-gray-500 mb-2">Sử dụng nội dung cũ</p>
           ${oldContentImgs.length > 0 ? `
             <div class="flex flex-wrap gap-2">
-              ${oldContentImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull('${img}')">`).join('')}
+              ${oldContentImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
             </div>
           ` : ''}
         ` : `<p class="text-sm">${request.content}</p>`}
@@ -444,7 +448,7 @@ async function showRequestDetail(id) {
       <h3 class="font-medium mb-3">Ảnh hiện trạng</h3>
       ${statusImgs.length > 0 ? `
         <div class="flex flex-wrap gap-2">
-          ${statusImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull('${img}')">`).join('')}
+          ${statusImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
         </div>
       ` : '<p class="text-sm text-gray-500">Chưa có ảnh</p>'}
     </div>
@@ -472,7 +476,7 @@ async function showRequestDetail(id) {
         <h3 class="font-medium mb-3">Ảnh nghiệm thu</h3>
         ${acceptanceImgs.length > 0 ? `
           <div class="flex flex-wrap gap-2 mb-3">
-            ${acceptanceImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull('${img}')">`).join('')}
+            ${acceptanceImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
           </div>
         ` : '<p class="text-sm text-gray-500 mb-3">Chưa có ảnh nghiệm thu</p>'}
         <label class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-100">
@@ -846,17 +850,41 @@ async function uploadAcceptance(input) {
 
 // ── Design viewer (modal) ─────────────────────────────────────────────
 
-function viewDesign(id) {
-  const request = allRequests.find(r => r.__backendId === id);
+async function viewDesign(id) {
+  let request = allRequests.find(r => r.__backendId === id);
   if (!request) return;
   // ownership enforcement: only the creator can view design images
   if (!isRequestOwnedByCurrentSession(request)) {
     showToast('Không có quyền xem yêu cầu này');
     return;
   }
-  const designImgs = JSON.parse(request.designImages || '[]');
+
+  // If designImages is still the list-endpoint placeholder, fetch real URLs first
+  let designImages = request.designImages || '[]';
+  if (designImages === '["..."]' && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
+    try {
+      const r = await window.dataSdk.getOne(id);
+      if (r && r.isOk && r.data) {
+        request = Object.assign({}, request, {
+          designImages:     r.data.designImages     || request.designImages,
+          oldContentImages: r.data.oldContentImages || request.oldContentImages,
+          statusImages:     r.data.statusImages     || request.statusImages,
+          acceptanceImages: r.data.acceptanceImages || request.acceptanceImages,
+        });
+        // Strip any remaining placeholder values
+        ['designImages', 'oldContentImages', 'statusImages', 'acceptanceImages'].forEach(k => {
+          if (request[k] === '["..."]') request[k] = '[]';
+        });
+        // Update local store
+        const idx = allRequests.findIndex(x => x.__backendId === id);
+        if (idx !== -1) allRequests[idx] = request;
+      }
+    } catch (e) { /* fall through with existing data */ }
+  }
+
+  const designImgs = JSON.parse(request.designImages || '[]').filter(u => u && u !== '...');
   const items = JSON.parse(request.items || '[]');
-  const oldContentImgs = JSON.parse(request.oldContentImages || '[]');
+  const oldContentImgs = JSON.parse(request.oldContentImages || '[]').filter(u => u && u !== '...');
   const modal = document.getElementById('designModal');
   const content = document.getElementById('designModalContent');
 
@@ -878,7 +906,7 @@ function viewDesign(id) {
         <div class="design-carousel" id="dvCarousel">
           ${designImgs.map(img => `
             <div class="design-slide">
-              <img src="${img}" class="design-img" onclick="showImageFull('${img}')" title="Tap để zoom" style="cursor:zoom-in">
+              <img src="${img}" class="design-img" onclick="showImageFull(this.src, false)" title="Tap để zoom" style="cursor:zoom-in">
             </div>
           `).join('')}
         </div>
@@ -907,7 +935,7 @@ function viewDesign(id) {
           <div class="text-sm text-gray-700">
             ${request.oldContent
               ? (oldContentImgs.length > 0
-                  ? `<div class="flex flex-wrap">${oldContentImgs.map(img => `<img src="${img}" class="sign-thumb" onclick="showImageFull('${img}')">`).join('')}</div>`
+                  ? `<div class="flex flex-wrap">${oldContentImgs.map(img => `<img src="${img}" class="sign-thumb" onclick="showImageFull(this.src, false)">`).join('')}</div>`
                   : '<span class="text-gray-400">Chưa có ảnh nội dung cũ</span>')
               : (request.content || '<span class="text-gray-400">Không có nội dung</span>')}
           </div>
@@ -940,6 +968,10 @@ function viewDesign(id) {
       }
     }
   } catch (e) { /* ignore */ }
+
+  // Set current request so showImageFull can use it
+  window._dv_currentDesignReq = request;
+  window._prevScreenBeforeDesign = document.getElementById('detailScreen')?.classList.contains('flex') ? 'detail' : 'list';
 
   modal.classList.remove('hidden');
   modal.classList.add('flex');
@@ -984,7 +1016,6 @@ function closeDesignModal() {
     modal.classList.add('hidden');
     modal.classList.remove('flex');
   }
-  try { backToList(); } catch (e) { /* ignore */ }
 }
 
 function dvGoTo(idx) {
@@ -1078,21 +1109,79 @@ document.addEventListener('click', () => setTimeout(addDesignSwipeHandlers, 200)
 // ── Zoom overlay ──────────────────────────────────────────────────────
 
 function showImageFull(src, showContent = true) {
+  // Prevent immediate re-open after a recent close (debounce accidental double-open)
+  try {
+    if (window._dv_lastClosedAt && (Date.now() - window._dv_lastClosedAt) < 500) return;
+  } catch (e) { /* ignore */ }
+
+  // If the design modal is currently open (we're viewing a request's MQ),
+  // ensure the zoom overlay shows the action bar even if caller passed
+  // showContent=false (some image thumbnails call showImageFull(..., false)).
+  try {
+    const dmodal = document.getElementById('designModal');
+    if (dmodal && !dmodal.classList.contains('hidden') && window._dv_currentDesignReq) {
+      showContent = true;
+    }
+  } catch (e) { /* ignore */ }
+
   const overlay = document.createElement('div');
   overlay.id = 'dvZoomOverlay';
   overlay.innerHTML = `
     <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false">
-    <button class="dv-zoom-close" onclick="closeDvZoom()">✕</button>
-    <div class="dv-zoom-scale" id="dvZoomScale">100%</div>
-    <div class="dv-zoom-hint">Scroll / pinch để zoom  •  Kéo để di chuyển  •  Tap đúp để reset</div>`;
+    <button class="dv-zoom-close">✕</button>
+    <div class="dv-zoom-scale" id="dvZoomScale">100%</div>`;
   if (showContent) {
     const showContentBar = document.createElement('div');
     showContentBar.className = 'dv-zoom-bottom';
-    showContentBar.innerText = 'Xem nội dung yêu cầu';
-    showContentBar.onclick = function () { closeDvZoom(); };
+    const inner = document.createElement('div');
+    inner.className = 'dv-zoom-bottom-inner';
+
+    // For Heineken: add "Yêu cầu chỉnh sửa" button (do NOT close zoom)
+    if (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'heineken') {
+      const editBtn = document.createElement('button');
+      editBtn.className = 'dv-zoom-btn dv-zoom-btn-edit';
+      editBtn.textContent = 'Yêu cầu chỉnh sửa';
+      editBtn.onclick = (e) => {
+        try { e.stopPropagation(); } catch (ex) {}
+        window._editRequestOrigin = 'design';
+        if (window._dv_currentDesignReq) currentDetailRequest = window._dv_currentDesignReq;
+        openEditRequestSheet();
+      };
+      inner.appendChild(editBtn);
+    }
+
+    const viewBtn = document.createElement('button');
+    viewBtn.className = 'dv-zoom-btn dv-zoom-btn-view';
+    viewBtn.textContent = 'Xem nội dung yêu cầu';
+    viewBtn.onclick = (e) => {
+      try { e.preventDefault(); e.stopPropagation(); } catch (ex) {}
+      closeDvZoom();
+      dvSetMode('content');
+      // Hide comment section — user just wants to read the request info
+      const commentsEl = document.getElementById('designComments');
+      if (commentsEl) {
+        const sectionTitle = commentsEl.previousElementSibling;
+        if (sectionTitle) sectionTitle.style.display = 'none';
+        commentsEl.style.display = 'none';
+      }
+      const footer = document.querySelector('.design-comment-footer');
+      if (footer) footer.style.display = 'none';
+    };
+    inner.appendChild(viewBtn);
+    showContentBar.appendChild(inner);
     overlay.appendChild(showContentBar);
   }
   document.body.appendChild(overlay);
+  // attach safe handlers to close button (stop propagation so underlying
+  // elements don't receive the same click and re-open the modal)
+  try {
+    const closeBtn = overlay.querySelector('.dv-zoom-close');
+    if (closeBtn) closeBtn.addEventListener('click', (ev) => {
+      try { ev.preventDefault(); ev.stopPropagation(); } catch (ex) {}
+      closeDvZoom();
+      closeDesignModal();
+    });
+  } catch (e) { /* ignore */ }
 
   let scale = 1, tx = 0, ty = 0;
   const MAX = 3, MIN = 1;
@@ -1186,6 +1275,7 @@ function showImageFull(src, showContent = true) {
 function closeDvZoom() {
   const overlay = document.getElementById('dvZoomOverlay');
   if (overlay) overlay.remove();
+  try { window._dv_lastClosedAt = Date.now(); } catch (e) { /* ignore */ }
 }
 
 // ── Delete handlers ───────────────────────────────────────────────────
@@ -1345,3 +1435,4 @@ async function submitEditRequest() {
     showRequestDetail(backendId);
   }
 }
+

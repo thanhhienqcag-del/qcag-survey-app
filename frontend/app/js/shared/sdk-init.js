@@ -66,6 +66,35 @@ async function initApp() {
           // KHÔNG gọi openQCAGDesktop() ở đây — nó sẽ re-render toàn bộ màn hình
           // sau mỗi lần PATCH, gây giật hình và nhảy tag loạn xạ.
           if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+
+          // If a QCAG desktop detail is open, perform an in-place refresh of that
+          // detail (avoids full re-render and preserves scroll / UI state).
+          try {
+            if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest && currentDetailRequest.__backendId) {
+              const updated = (allRequests || []).find(r => r.__backendId === currentDetailRequest.__backendId);
+              if (updated) {
+                const oldTs = currentDetailRequest.updatedAt ? new Date(currentDetailRequest.updatedAt).getTime() : 0;
+                const newTs = updated.updatedAt ? new Date(updated.updatedAt).getTime() : 0;
+                if (newTs !== oldTs) {
+                  if (typeof qcagDesktopGetFullRequest === 'function' && typeof _qcagDesktopInPlaceRefresh === 'function') {
+                    qcagDesktopGetFullRequest(updated.__backendId).then(full => {
+                      if (full) {
+                        currentDetailRequest = full;
+                        if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(full);
+                        _qcagDesktopInPlaceRefresh(full);
+                      }
+                    }).catch(() => {});
+                  } else if (typeof _qcagDesktopInPlaceRefresh === 'function') {
+                    currentDetailRequest = updated;
+                    if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(updated);
+                    _qcagDesktopInPlaceRefresh(updated);
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('qcag desktop in-place refresh failed', e);
+          }
         }
         if (document.getElementById('listScreen').classList.contains('flex')) {
           renderRequestList();
