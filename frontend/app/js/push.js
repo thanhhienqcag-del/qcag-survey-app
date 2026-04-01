@@ -104,3 +104,37 @@ if ('serviceWorker' in navigator) {
     } catch (e) {}
   });
 }
+
+// Auto re-subscribe on page load if user already has a session saved
+// This ensures subscriptions stay fresh after a new deployment without re-login
+(function autoInitPushOnLoad() {
+  if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+  function tryAutoSubscribe() {
+    let session = null;
+    try { session = JSON.parse(localStorage.getItem('ks_session') || 'null'); } catch (_) {}
+    if (!session) return; // not logged in yet
+
+    const phone = session.phone || null;
+    const role  = session.role  || null;
+
+    initPush(phone, role).then(function (res) {
+      if (res && res.ok) {
+        console.log('[push] auto re-subscribed on page load, phone:', phone, 'role:', role);
+      } else {
+        console.warn('[push] auto re-subscribe failed:', res && res.error);
+      }
+    }).catch(function (err) {
+      console.warn('[push] auto re-subscribe exception:', err);
+    });
+  }
+
+  // Wait for DOM to be ready before reading localStorage session
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryAutoSubscribe);
+  } else {
+    // Small delay to allow app.js to restore session first
+    setTimeout(tryAutoSubscribe, 800);
+  }
+})();

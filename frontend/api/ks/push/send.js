@@ -23,23 +23,26 @@ module.exports = async function handler(req, res) {
     .map(s => s.trim())
     .filter(Boolean);
   const reqOrigin = String(req.headers.origin || '');
-  const isLocalOrigin = reqOrigin.startsWith('http://localhost') || reqOrigin.startsWith('https://localhost');
-  const isConfiguredOrigin = configuredOrigins.some(prefix => reqOrigin.startsWith(prefix));
-  const isVercelPreview = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(reqOrigin);
-  const allowOrigin = isLocalOrigin || isConfiguredOrigin || isVercelPreview;
+  const reqReferer = String(req.headers.referer || '');
+
+  // Same-origin fetch() does NOT send Origin header → check referer instead
+  const checkUrl = reqOrigin || reqReferer;
+  const isLocalUrl = checkUrl.startsWith('http://localhost') || checkUrl.startsWith('https://localhost') || checkUrl.startsWith('http://127.0.0.1');
+  const isConfiguredUrl = configuredOrigins.some(prefix => checkUrl.startsWith(prefix));
+  const isVercelUrl = /^https:\/\/[a-z0-9-]+\.vercel\.app/i.test(checkUrl);
+  // Also allow when no Origin AND no Referer (Vercel server-to-server or direct API calls)
+  const noOriginNoReferer = !req.headers.origin && !req.headers.referer;
+  const allowed = isLocalUrl || isConfiguredUrl || isVercelUrl || noOriginNoReferer;
 
   res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Access-Control-Allow-Origin', allowOrigin ? reqOrigin : (configuredOrigins[0] || '*'));
+  res.setHeader('Access-Control-Allow-Origin', reqOrigin || (configuredOrigins[0] || '*'));
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end('{}');
   if (req.method !== 'POST') return res.status(405).end(JSON.stringify({ ok: false }));
 
-  // Only allow calls from configured frontend origins.
-  const origin = reqOrigin || String(req.headers.referer || '');
-  const allowed = allowOrigin || origin.startsWith('http://localhost') || origin.startsWith('https://localhost');
-  if (!allowed) return res.status(403).end(JSON.stringify({ ok: false, error: 'forbidden' }));
+  if (!allowed) return res.status(403).end(JSON.stringify({ ok: false, error: 'forbidden', debug: { origin: reqOrigin, referer: reqReferer } }));
 
   const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
   const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
@@ -89,16 +92,26 @@ module.exports = async function handler(req, res) {
 
     const results = await Promise.allSettled(
       rows.rows.map(r => {
-        try {
-          return webpush.sendNotification(JSON.parse(r.subscription), payload);
-        } catch (e) {
-          return Promise.resolve();
-        }
+        let sub;
+        try { sub = JSON.parse(r.subscription); } catch (e) { return Promise.resolve({ skipped: true }); }
+        return webpush.sendNotification(sub, payload).catch(async function (err) {
+          // 410 Gone or 404 = subscription expired/unregistered, remove from DB
+          if (err && (err.statusCode === 410 || err.statusCode === 404)) {
+            try {
+              const ep = sub.endpoint || '';
+              await db.query('DELETE FROM push_subscriptions WHERE subscription LIKE $1', ['%' + ep.slice(-40) + '%']);
+            } catch (_) {}
+          } else {
+            console.error('[push/send] sendNotification error:', err && err.statusCode, err && err.body);
+          }
+          throw err;
+        });
       })
     );
 
     const sent = results.filter(r => r.status === 'fulfilled').length;
-    return res.end(JSON.stringify({ ok: true, sent }));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    return res.end(JSON.stringify({ ok: true, sent, failed, total: rows.rows.length }));
   } catch (err) {
     console.error('[push/send] error:', err && err.message ? err.message : err);
     return res.status(500).end(JSON.stringify({ ok: false, error: String(err && err.message || err) }));
