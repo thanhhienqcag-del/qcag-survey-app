@@ -2027,11 +2027,21 @@ async function qcagDesktopMarkProcessed() {
   if (persistOk) {
     try {
       let requesterPhone = null;
+      let requesterObj = {};
       try {
         const req = updated.requester;
-        const reqObj = typeof req === 'string' ? JSON.parse(req) : (req || {});
-        requesterPhone = reqObj.phone || null;
+        requesterObj = typeof req === 'string' ? JSON.parse(req) : (req || {});
+        requesterPhone = requesterObj.phone || null;
+        // Normalize: strip spaces/dashes, +84 → 0
+        if (requesterPhone) {
+          requesterPhone = String(requesterPhone).replace(/[\s\-\.]+/g, '');
+          if (requesterPhone.startsWith('+84')) requesterPhone = '0' + requesterPhone.slice(3);
+          else if (requesterPhone.startsWith('84') && requesterPhone.length >= 10) requesterPhone = '0' + requesterPhone.slice(2);
+        }
       } catch (_) {}
+
+      console.log('[push/done] requesterObj:', JSON.stringify(requesterObj));
+      console.log('[push/done] requesterPhone:', requesterPhone);
 
       if (requesterPhone) {
         const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
@@ -2050,7 +2060,19 @@ async function qcagDesktopMarkProcessed() {
             data: { backendId: updated.__backendId },
             phone: requesterPhone,
           }),
+        }).then(function(r) {
+          return r.json();
+        }).then(function(result) {
+          console.log('[push/done] sent to', requesterPhone, '→', JSON.stringify(result));
+          if (result && result.ok && result.sent > 0) {
+            showToast('Đã gửi thông báo đến Sale (' + String(result.sent) + ' thiết bị)');
+          } else if (result && result.sent === 0) {
+            console.warn('[push/done] no subscriptions found for phone:', requesterPhone);
+            showToast('⚠ Sale chưa đăng ký nhận thông báo (phone: ' + requesterPhone + ')');
+          }
         }).catch(function(e) { console.warn('[push/send]', e); });
+      } else {
+        console.warn('[push/done] requesterPhone is null — requester:', JSON.stringify(requesterObj));
       }
     } catch (e) {
       console.warn('[push] markDone push error (non-fatal):', e);

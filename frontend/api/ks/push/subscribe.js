@@ -29,7 +29,14 @@ module.exports = async function handler(req, res) {
       ? req.body
       : (req.body ? JSON.parse(req.body) : {});
 
-    const { subscription, phone, role } = body;
+    const { subscription, role } = body;
+    let { phone } = body;
+    // Normalize phone: strip spaces/dashes, convert +84 → 0
+    if (phone) {
+      phone = String(phone).replace(/[\s\-\.]+/g, '');
+      if (phone.startsWith('+84')) phone = '0' + phone.slice(3);
+      else if (phone.startsWith('84') && phone.length >= 10) phone = '0' + phone.slice(2);
+    }
     if (!subscription) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing_subscription' }));
 
     const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);

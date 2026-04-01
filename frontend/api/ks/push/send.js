@@ -65,13 +65,24 @@ module.exports = async function handler(req, res) {
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
+    // Normalize phone: strip spaces, dashes, dots; convert +84xxx → 0xxx
+    function normalizePhone(p) {
+      if (!p) return null;
+      let n = String(p).replace(/[\s\-\.]+/g, '');
+      if (n.startsWith('+84')) n = '0' + n.slice(3);
+      if (n.startsWith('84') && n.length >= 10) n = '0' + n.slice(2);
+      return n;
+    }
+
     const db = getPool();
     // Support role-based broadcast (e.g. notify all 'qcag' subscribers) or phone-specific
     let rows;
     if (phone) {
+      const normalizedPhone = normalizePhone(phone);
+      // Query by exact match OR original value for robustness
       rows = await db.query(
-        'SELECT subscription FROM push_subscriptions WHERE phone = $1',
-        [String(phone)]
+        'SELECT subscription FROM push_subscriptions WHERE phone = $1 OR phone = $2',
+        [normalizedPhone, String(phone)]
       );
     } else {
       rows = await db.query(

@@ -36,7 +36,21 @@ module.exports = async function handler(req, res) {
             OR phone IN ('test_check', 'debug_check', '0909123456')
          RETURNING id, phone, role`
       );
-      return res.end(JSON.stringify({ ok: true, deleted: result.rows.length, rows: result.rows }));
+
+      // Normalize all phone numbers: strip spaces, +84 → 0
+      const allRows = await db.query('SELECT id, phone FROM push_subscriptions WHERE phone IS NOT NULL');
+      const normalized = [];
+      for (const row of allRows.rows) {
+        let p = String(row.phone).replace(/[\s\-\.]+/g, '');
+        if (p.startsWith('+84')) p = '0' + p.slice(3);
+        else if (p.startsWith('84') && p.length >= 10) p = '0' + p.slice(2);
+        if (p !== row.phone) {
+          await db.query('UPDATE push_subscriptions SET phone = $1 WHERE id = $2', [p, row.id]);
+          normalized.push({ id: row.id, from: row.phone, to: p });
+        }
+      }
+
+      return res.end(JSON.stringify({ ok: true, deleted: result.rows.length, deleted_rows: result.rows, normalized }));
     }
 
     // GET: show what would be deleted
