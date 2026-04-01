@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
     const db = getPool();
 
     if (req.method === 'DELETE' || req.method === 'POST') {
-      // Remove subscriptions with fake/test endpoints
+      // 1. Remove fake/test subscriptions
       const result = await db.query(
         `DELETE FROM push_subscriptions
          WHERE subscription LIKE '%test.example.com%'
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
          RETURNING id, phone, role`
       );
 
-      // Normalize all phone numbers: strip spaces, +84 → 0
+      // 2. Normalize phone numbers
       const allRows = await db.query('SELECT id, phone FROM push_subscriptions WHERE phone IS NOT NULL');
       const normalized = [];
       for (const row of allRows.rows) {
@@ -50,7 +50,39 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      return res.end(JSON.stringify({ ok: true, deleted: result.rows.length, deleted_rows: result.rows, normalized }));
+      // 3. Remove duplicate subscriptions — keep only the NEWEST per (sale_code) and (phone)
+      // For rows with sale_code: keep newest per sale_code
+      const dupBySaleCode = await db.query(`
+        DELETE FROM push_subscriptions
+        WHERE id NOT IN (
+          SELECT DISTINCT ON (sale_code) id
+          FROM push_subscriptions
+          WHERE sale_code IS NOT NULL
+          ORDER BY sale_code, updated_at DESC NULLS LAST
+        )
+        AND sale_code IS NOT NULL
+        RETURNING id, phone, sale_code
+      `);
+      // For rows without sale_code: keep newest 1 per phone
+      const dupByPhone = await db.query(`
+        DELETE FROM push_subscriptions
+        WHERE id NOT IN (
+          SELECT DISTINCT ON (phone) id
+          FROM push_subscriptions
+          WHERE sale_code IS NULL AND phone IS NOT NULL
+          ORDER BY phone, updated_at DESC NULLS LAST
+        )
+        AND sale_code IS NULL AND phone IS NOT NULL
+        RETURNING id, phone
+      `);
+
+      return res.end(JSON.stringify({
+        ok: true,
+        deleted_fake: result.rows.length,
+        normalized,
+        deduped_by_sale_code: dupBySaleCode.rows.length,
+        deduped_by_phone: dupByPhone.rows.length,
+      }));
     }
 
     // GET: show what would be deleted

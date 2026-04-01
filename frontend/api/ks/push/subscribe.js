@@ -58,15 +58,31 @@ module.exports = async function handler(req, res) {
       ['%' + endpointSuffix + '%']
     );
 
+    let savedId;
     if (existing.rows.length > 0) {
       await db.query(
         'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, sale_code = $4, updated_at = NOW() WHERE id = $5',
         [subStr, phone || null, role || null, saleCode || null, existing.rows[0].id]
       );
+      savedId = existing.rows[0].id;
     } else {
-      await db.query(
-        'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())',
+      const ins = await db.query(
+        'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id',
         [subStr, phone || null, role || null, saleCode || null]
+      );
+      savedId = ins.rows[0].id;
+    }
+
+    // Auto-dedup: remove older duplicates for same sale_code or same phone
+    if (saleCode) {
+      await db.query(
+        'DELETE FROM push_subscriptions WHERE sale_code = $1 AND id != $2',
+        [saleCode, savedId]
+      );
+    } else if (phone) {
+      await db.query(
+        'DELETE FROM push_subscriptions WHERE phone = $1 AND sale_code IS NULL AND id != $2',
+        [phone, savedId]
       );
     }
 
