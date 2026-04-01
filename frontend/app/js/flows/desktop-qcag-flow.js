@@ -2027,12 +2027,14 @@ async function qcagDesktopMarkProcessed() {
   if (persistOk) {
     try {
       let requesterPhone = null;
+      let requesterSaleCode = null;
       let requesterObj = {};
       try {
         const req = updated.requester;
         requesterObj = typeof req === 'string' ? JSON.parse(req) : (req || {});
         requesterPhone = requesterObj.phone || null;
-        // Normalize: strip spaces/dashes, +84 → 0
+        requesterSaleCode = requesterObj.saleCode || null;
+        // Normalize phone
         if (requesterPhone) {
           requesterPhone = String(requesterPhone).replace(/[\s\-\.]+/g, '');
           if (requesterPhone.startsWith('+84')) requesterPhone = '0' + requesterPhone.slice(3);
@@ -2040,10 +2042,9 @@ async function qcagDesktopMarkProcessed() {
         }
       } catch (_) {}
 
-      console.log('[push/done] requesterObj:', JSON.stringify(requesterObj));
-      console.log('[push/done] requesterPhone:', requesterPhone);
+      console.log('[push/done] requester saleCode:', requesterSaleCode, 'phone:', requesterPhone);
 
-      if (requesterPhone) {
+      if (requesterSaleCode || requesterPhone) {
         const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
         const tkCode = updated.__backendId || updated.outletCode || '';
         const pushTitle = isPendingEdit ? 'QCAG — Đã hoàn thành chỉnh sửa' : 'QCAG — Đã có mẫu quảng cáo (MQ)';
@@ -2058,21 +2059,22 @@ async function qcagDesktopMarkProcessed() {
             title: pushTitle,
             body: pushBody,
             data: { backendId: updated.__backendId },
+            saleCode: requesterSaleCode,
             phone: requesterPhone,
           }),
         }).then(function(r) {
           return r.json();
         }).then(function(result) {
-          console.log('[push/done] sent to', requesterPhone, '→', JSON.stringify(result));
+          console.log('[push/done] sent to saleCode:', requesterSaleCode, 'phone:', requesterPhone, '→', JSON.stringify(result));
           if (result && result.ok && result.sent > 0) {
             showToast('Đã gửi thông báo đến Sale (' + String(result.sent) + ' thiết bị)');
           } else if (result && result.sent === 0) {
-            console.warn('[push/done] no subscriptions found for phone:', requesterPhone);
-            showToast('⚠ Sale chưa đăng ký nhận thông báo (phone: ' + requesterPhone + ')');
+            console.warn('[push/done] no subscriptions found for saleCode:', requesterSaleCode, 'phone:', requesterPhone);
+            showToast('⚠ Sale chưa đăng ký nhận thông báo. Mời Sale mở lại app để đăng ký.');
           }
         }).catch(function(e) { console.warn('[push/send]', e); });
       } else {
-        console.warn('[push/done] requesterPhone is null — requester:', JSON.stringify(requesterObj));
+        console.warn('[push/done] no saleCode or phone found in requester:', JSON.stringify(requesterObj));
       }
     } catch (e) {
       console.warn('[push] markDone push error (non-fatal):', e);

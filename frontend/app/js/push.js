@@ -76,17 +76,17 @@ async function subscribeForPush() {
   }
 }
 
-async function saveSubscriptionToServer(subscription, phone, role) {
+async function saveSubscriptionToServer(subscription, phone, role, saleCode) {
   // Always call the frontend-local subscribe endpoint (same-origin serverless function)
   const res = await fetch('/api/ks/push/subscribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ subscription, phone: phone || null, role: role || null })
+    body: JSON.stringify({ subscription, phone: phone || null, role: role || null, saleCode: saleCode || null })
   });
   return res.json();
 }
 
-async function initPush(phone, role) {
+async function initPush(phone, role, saleCode) {
   if (!('Notification' in window)) return { ok: false, error: 'Notifications not supported' };
   if (!('PushManager' in window)) return { ok: false, error: 'Push not supported' };
   try {
@@ -94,7 +94,7 @@ async function initPush(phone, role) {
     if (permission !== 'granted') return { ok: false, error: 'Permission not granted' };
     const sub = await subscribeForPush();
     // Save subscription to backend so server can push to this device
-    await saveSubscriptionToServer(sub, phone, role);
+    await saveSubscriptionToServer(sub, phone, role, saleCode);
     return { ok: true, subscription: sub };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -132,10 +132,11 @@ if ('serviceWorker' in navigator) {
     try { session = JSON.parse(localStorage.getItem('ks_session') || 'null'); } catch (_) {}
     if (!session) return; // not logged in yet
 
-    const phone = session.phone || null;
-    const role  = session.role  || null;
+    const phone    = session.phone    || null;
+    const role     = session.role     || null;
+    const saleCode = session.saleCode || null;
 
-    initPush(phone, role).then(function (res) {
+    initPush(phone, role, saleCode).then(function (res) {
       if (res && res.ok) {
         console.log('[push] auto re-subscribed on page load, phone:', phone, 'role:', role);
       } else {

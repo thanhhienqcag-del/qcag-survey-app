@@ -160,8 +160,9 @@ function launchApp() {
   // Best-effort: initialize push subscription after login (if push helpers are available)
   try {
     if (window.pushHelpers && typeof window.pushHelpers.initPush === 'function') {
-      const phone = currentSession && currentSession.phone ? currentSession.phone : null;
-      const role  = currentSession && currentSession.role  ? currentSession.role  : null;
+      const phone    = currentSession && currentSession.phone    ? currentSession.phone    : null;
+      const role     = currentSession && currentSession.role     ? currentSession.role     : null;
+      const saleCode = currentSession && currentSession.saleCode ? currentSession.saleCode : null;
 
       // On iOS, push only works in standalone (PWA) mode — show install hint instead of error toast
       const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
@@ -175,7 +176,7 @@ function launchApp() {
           } catch (_) {}
         }, 2000);
       } else {
-        window.pushHelpers.initPush(phone, role).then(function(res) {
+        window.pushHelpers.initPush(phone, role, saleCode).then(function(res) {
           if (!res || !res.ok) {
             console.warn('[push] initPush failed:', res && res.error ? res.error : res);
             // Only show toast for non-trivial errors (iOS standalone already handled above)

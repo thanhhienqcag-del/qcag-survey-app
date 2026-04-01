@@ -30,13 +30,15 @@ module.exports = async function handler(req, res) {
       : (req.body ? JSON.parse(req.body) : {});
 
     const { subscription, role } = body;
-    let { phone } = body;
+    let { phone, saleCode } = body;
     // Normalize phone: strip spaces/dashes, convert +84 → 0
     if (phone) {
       phone = String(phone).replace(/[\s\-\.]+/g, '');
       if (phone.startsWith('+84')) phone = '0' + phone.slice(3);
       else if (phone.startsWith('84') && phone.length >= 10) phone = '0' + phone.slice(2);
     }
+    // Normalize saleCode: trim whitespace
+    if (saleCode) saleCode = String(saleCode).trim();
     if (!subscription) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing_subscription' }));
 
     const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
@@ -58,13 +60,13 @@ module.exports = async function handler(req, res) {
 
     if (existing.rows.length > 0) {
       await db.query(
-        'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, updated_at = NOW() WHERE id = $4',
-        [subStr, phone || null, role || null, existing.rows[0].id]
+        'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, sale_code = $4, updated_at = NOW() WHERE id = $5',
+        [subStr, phone || null, role || null, saleCode || null, existing.rows[0].id]
       );
     } else {
       await db.query(
-        'INSERT INTO push_subscriptions (subscription, phone, role, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())',
-        [subStr, phone || null, role || null]
+        'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW())',
+        [subStr, phone || null, role || null, saleCode || null]
       );
     }
 

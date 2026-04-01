@@ -60,12 +60,12 @@ module.exports = async function handler(req, res) {
       ? req.body
       : (req.body ? JSON.parse(req.body) : {});
 
-    const { title, body: msgBody, data, phone, role } = body;
-    if (!phone && !role) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing phone or role' }));
+    const { title, body: msgBody, data, phone, role, saleCode } = body;
+    if (!phone && !role && !saleCode) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing phone, saleCode or role' }));
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
-    // Normalize phone: strip spaces, dashes, dots; convert +84xxx → 0xxx
+    // Normalize phone: strip spaces, dashes, +84 → 0
     function normalizePhone(p) {
       if (!p) return null;
       let n = String(p).replace(/[\s\-\.]+/g, '');
@@ -75,16 +75,31 @@ module.exports = async function handler(req, res) {
     }
 
     const db = getPool();
-    // Support role-based broadcast (e.g. notify all 'qcag' subscribers) or phone-specific
     let rows;
-    if (phone) {
+
+    if (saleCode) {
+      // saleCode is the most reliable identifier (8-digit employee code, typed exactly)
+      const sc = String(saleCode).trim();
+      rows = await db.query(
+        'SELECT subscription FROM push_subscriptions WHERE sale_code = $1',
+        [sc]
+      );
+      // If not found by saleCode (old subscription without saleCode), fallback to phone
+      if (!rows.rows.length && phone) {
+        const normalizedPhone = normalizePhone(phone);
+        rows = await db.query(
+          'SELECT subscription FROM push_subscriptions WHERE phone = $1 OR phone = $2',
+          [normalizedPhone, String(phone)]
+        );
+      }
+    } else if (phone) {
       const normalizedPhone = normalizePhone(phone);
-      // Query by exact match OR original value for robustness
       rows = await db.query(
         'SELECT subscription FROM push_subscriptions WHERE phone = $1 OR phone = $2',
         [normalizedPhone, String(phone)]
       );
     } else {
+      // role-based broadcast
       rows = await db.query(
         'SELECT subscription FROM push_subscriptions WHERE role = $1',
         [String(role)]
