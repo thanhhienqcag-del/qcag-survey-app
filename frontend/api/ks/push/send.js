@@ -90,11 +90,14 @@ module.exports = async function handler(req, res) {
       data: data || {},
     });
 
+    // TTL = 86400 seconds (24 hours) — push is queued if device offline, not dropped
+    const pushOptions = { TTL: 86400 };
+
     const results = await Promise.allSettled(
       rows.rows.map(r => {
         let sub;
         try { sub = JSON.parse(r.subscription); } catch (e) { return Promise.resolve({ skipped: true }); }
-        return webpush.sendNotification(sub, payload).catch(async function (err) {
+        return webpush.sendNotification(sub, payload, pushOptions).catch(async function (err) {
           // 410 Gone or 404 = subscription expired/unregistered, remove from DB
           if (err && (err.statusCode === 410 || err.statusCode === 404)) {
             try {

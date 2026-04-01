@@ -24,26 +24,33 @@ self.addEventListener('push', function (event) {
   }
 
   const title = payload.title || 'QCAG';
+  // Use unique tag per notification so they stack (don't replace each other)
+  const tag = payload.tag || ('qcag-' + Date.now());
+
+  // Keep options minimal for maximum iOS/Android compatibility
+  // NOTE: vibrate is NOT supported on iOS — omit it
   const options = {
     body: payload.body || '',
     icon: '/app/assets/logo-qcag-2.0-192.png',
     badge: '/app/assets/logo-qcag-2.0-192.png',
-    vibrate: [200, 100, 200],
-    tag: payload.tag || 'qcag-notification',
-    renotify: true,
-    requireInteraction: false,
+    tag: tag,
     data: payload.data || {}
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
-
-  // Forward to open clients so they can show an in-app toast
+  // IMPORTANT: only ONE event.waitUntil() — combine all async work into Promise.all
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-      clientList.forEach(function (client) {
-        client.postMessage({ type: 'PUSH_RECEIVED', title: title, body: options.body, data: options.data });
-      });
-    })
+    Promise.all([
+      // Show the OS notification (lock screen, notification center)
+      self.registration.showNotification(title, options),
+      // Forward push data to any open app windows for in-app toast
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+        clientList.forEach(function (client) {
+          try {
+            client.postMessage({ type: 'PUSH_RECEIVED', title: title, body: options.body, data: options.data });
+          } catch (_) {}
+        });
+      })
+    ])
   );
 });
 
