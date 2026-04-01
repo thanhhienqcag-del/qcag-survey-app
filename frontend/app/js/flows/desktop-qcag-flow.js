@@ -2044,38 +2044,50 @@ async function qcagDesktopMarkProcessed() {
 
       console.log('[push/done] requester saleCode:', requesterSaleCode, 'phone:', requesterPhone);
 
-      if (requesterSaleCode || requesterPhone) {
-        const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
-        const tkCode = updated.__backendId || updated.outletCode || '';
-        const pushTitle = isPendingEdit ? 'QCAG — Đã hoàn thành chỉnh sửa' : 'QCAG — Đã có mẫu quảng cáo (MQ)';
-        const pushBody = isPendingEdit
-          ? `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng mở app để xem.`
-          : `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng mở app để xem.`;
+      const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
+      const tkCode = updated.__backendId || updated.outletCode || '';
+      const pushTitle = isPendingEdit ? 'QCAG — Đã hoàn thành chỉnh sửa' : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+      const pushBody = isPendingEdit
+        ? `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng mở app để xem.`
+        : `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng mở app để xem.`;
 
-        fetch('/api/ks/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: pushTitle,
-            body: pushBody,
-            data: { backendId: updated.__backendId },
-            saleCode: requesterSaleCode,
-            phone: requesterPhone,
-          }),
-        }).then(function(r) {
-          return r.json();
-        }).then(function(result) {
-          console.log('[push/done] sent to saleCode:', requesterSaleCode, 'phone:', requesterPhone, '→', JSON.stringify(result));
-          if (result && result.ok && result.sent > 0) {
-            showToast('Đã gửi thông báo đến Sale (' + String(result.sent) + ' thiết bị)');
-          } else if (result && result.sent === 0) {
-            console.warn('[push/done] no subscriptions found for saleCode:', requesterSaleCode, 'phone:', requesterPhone);
-            showToast('⚠ Sale chưa đăng ký nhận thông báo. Mời Sale mở lại app để đăng ký.');
-          }
-        }).catch(function(e) { console.warn('[push/send]', e); });
+      // Build payload: prefer saleCode → phone fallback → role=heineken broadcast
+      const pushPayload = {
+        title: pushTitle,
+        body: pushBody,
+        data: { backendId: updated.__backendId },
+      };
+      if (requesterSaleCode) {
+        pushPayload.saleCode = requesterSaleCode;
+      } else if (requesterPhone) {
+        pushPayload.phone = requesterPhone;
       } else {
-        console.warn('[push/done] no saleCode or phone found in requester:', JSON.stringify(requesterObj));
+        // No identifier in old request → broadcast to all Heineken
+        console.warn('[push/done] no saleCode or phone in requester, falling back to role=heineken broadcast');
+        pushPayload.role = 'heineken';
       }
+
+      fetch('/api/ks/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pushPayload),
+      }).then(function(r) {
+        return r.json();
+      }).then(function(result) {
+        console.log('[push/done] result:', JSON.stringify(result), '| payload:', JSON.stringify(pushPayload));
+        if (result && result.ok && result.sent > 0) {
+          showToast('Đã gửi thông báo đến Sale (' + String(result.sent) + ' thiết bị)');
+        } else if (result && result.sent === 0) {
+          console.warn('[push/done] no subscriptions found, payload:', JSON.stringify(pushPayload));
+          showToast('⚠ Sale chưa đăng ký nhận thông báo. Mời Sale mở lại app để đăng ký.');
+        } else if (!result || !result.ok) {
+          console.warn('[push/done] API error:', JSON.stringify(result));
+          showToast('⚠ Lỗi gửi thông báo: ' + (result && result.error ? result.error : 'unknown'));
+        }
+      }).catch(function(e) {
+        console.warn('[push/send] fetch error:', e);
+        showToast('⚠ Không thể kết nối để gửi thông báo.');
+      });
     } catch (e) {
       console.warn('[push] markDone push error (non-fatal):', e);
     }
