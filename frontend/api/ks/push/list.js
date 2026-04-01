@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
   try {
     const db = getPool();
     const rows = await db.query(
-      `SELECT id, phone, role, created_at, updated_at,
+      `SELECT id, phone, role, sale_code, created_at, updated_at,
         LEFT(subscription::text, 80) AS subscription_preview
        FROM push_subscriptions
        ORDER BY updated_at DESC NULLS LAST
