@@ -24,6 +24,22 @@ async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) throw new Error('Service workers not supported');
   // Register at root scope so iOS 16.4+ PWA can show lock-screen push notifications
   const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+  // Force-update SW if a new version is waiting (especially important on iOS PWA)
+  if (reg.waiting) {
+    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  }
+  reg.addEventListener('updatefound', function () {
+    const newWorker = reg.installing;
+    if (!newWorker) return;
+    newWorker.addEventListener('statechange', function () {
+      if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+        // New SW installed and waiting — force activate immediately
+        newWorker.postMessage({ type: 'SKIP_WAITING' });
+      }
+    });
+  });
+
   return reg;
 }
 

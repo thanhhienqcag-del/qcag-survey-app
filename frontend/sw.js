@@ -14,6 +14,13 @@ self.addEventListener('activate', function (event) {
   event.waitUntil(self.clients.claim());
 });
 
+// ── Message: allow client to force SW update ──────────────────────────────────
+self.addEventListener('message', function (event) {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // ── Push: show OS notification ─────────────────────────────────────────────────
 self.addEventListener('push', function (event) {
   let payload = {};
