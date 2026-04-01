@@ -22,7 +22,8 @@ async function getVapidPublicKey() {
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) throw new Error('Service workers not supported');
-  const reg = await navigator.serviceWorker.register('/app/sw.js');
+  // Register at root scope so iOS 16.4+ PWA can show lock-screen push notifications
+  const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
   return reg;
 }
 
@@ -86,3 +87,20 @@ async function initPush(phone, role) {
 
 // Expose for console/testing
 window.pushHelpers = { initPush, subscribeForPush, registerServiceWorker, getVapidPublicKey, saveSubscriptionToServer };
+
+// Listen for push messages forwarded by the SW while the app is open (foreground toast)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'PUSH_RECEIVED') return;
+    try {
+      const title = event.data.title || 'QCAG';
+      const body  = event.data.body  || '';
+      const msg   = title + (body ? '\n' + body : '');
+      if (typeof showToast === 'function') {
+        showToast(msg);
+      } else {
+        console.info('[push] in-app message:', msg);
+      }
+    } catch (e) {}
+  });
+}

@@ -162,17 +162,33 @@ function launchApp() {
     if (window.pushHelpers && typeof window.pushHelpers.initPush === 'function') {
       const phone = currentSession && currentSession.phone ? currentSession.phone : null;
       const role  = currentSession && currentSession.role  ? currentSession.role  : null;
-      window.pushHelpers.initPush(phone, role).then(function(res) {
-        if (!res || !res.ok) {
-          console.warn('[push] initPush failed:', res && res.error ? res.error : res);
-          try { showToast('Push chưa kích hoạt: ' + (res && res.error ? res.error : 'unknown')); } catch (_) {}
-        } else {
-          console.log('[push] initPush succeeded');
-        }
-      }).catch(function(err) {
-        console.warn('[push] initPush exception:', err);
-        try { showToast('Push init lỗi: ' + String(err)); } catch (_) {}
-      });
+
+      // On iOS, push only works in standalone (PWA) mode — show install hint instead of error toast
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+      const isStandalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+        || (window.navigator && window.navigator.standalone === true);
+      if (isIos && !isStandalone) {
+        // Show a non-intrusive hint after a short delay
+        setTimeout(function () {
+          try {
+            showToast('📲 Thêm app vào màn hình chính (Add to Home Screen) để nhận thông báo trên iPhone/iPad');
+          } catch (_) {}
+        }, 2000);
+      } else {
+        window.pushHelpers.initPush(phone, role).then(function(res) {
+          if (!res || !res.ok) {
+            console.warn('[push] initPush failed:', res && res.error ? res.error : res);
+            // Only show toast for non-trivial errors (iOS standalone already handled above)
+            if (res && res.error && res.error !== 'Push not supported' && res.error !== 'Notifications not supported') {
+              try { showToast('Push chưa kích hoạt: ' + res.error); } catch (_) {}
+            }
+          } else {
+            console.log('[push] initPush succeeded');
+          }
+        }).catch(function(err) {
+          console.warn('[push] initPush exception:', err);
+        });
+      }
     }
   } catch (e) {}
   if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
