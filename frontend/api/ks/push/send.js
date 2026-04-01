@@ -57,16 +57,25 @@ module.exports = async function handler(req, res) {
       ? req.body
       : (req.body ? JSON.parse(req.body) : {});
 
-    const { title, body: msgBody, data, phone } = body;
-    if (!phone) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing phone' }));
+    const { title, body: msgBody, data, phone, role } = body;
+    if (!phone && !role) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing phone or role' }));
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
     const db = getPool();
-    const rows = await db.query(
-      'SELECT subscription FROM push_subscriptions WHERE phone = $1',
-      [String(phone)]
-    );
+    // Support role-based broadcast (e.g. notify all 'qcag' subscribers) or phone-specific
+    let rows;
+    if (phone) {
+      rows = await db.query(
+        'SELECT subscription FROM push_subscriptions WHERE phone = $1',
+        [String(phone)]
+      );
+    } else {
+      rows = await db.query(
+        'SELECT subscription FROM push_subscriptions WHERE role = $1',
+        [String(role)]
+      );
+    }
 
     if (!rows.rows.length) {
       return res.end(JSON.stringify({ ok: true, sent: 0, message: 'no_subscriptions' }));

@@ -638,6 +638,25 @@ async function submitNewRequest() {
       try { lastCreatedRequestId = result.data && result.data.__backendId ? result.data.__backendId : (request.__backendId || null); } catch (e) {}
       try { blurActiveInput(); } catch (e) {}
       document.getElementById('confirmModal').classList.remove('hidden');
+
+      // Fire push notification to QCAG team (best-effort, never blocks UI)
+      try {
+        const outletLabel = request.outletName || request.outletCode || 'Outlet';
+        const tkCode = (result.data && result.data.__backendId) || request.__backendId || '';
+        const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
+        fetch('/api/ks/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'QCAG — Yêu cầu mới từ Heineken',
+            body: senderName + ' vừa gửi yêu cầu mới cho Outlet ' + outletLabel + '.',
+            data: { backendId: tkCode },
+            role: 'qcag',
+          }),
+        }).catch(function (e) { console.warn('[push/new-req]', e); });
+      } catch (e) {
+        console.warn('[push] new request notify error (non-fatal):', e);
+      }
     } else {
       showToast('Lỗi tạo yêu cầu');
     }
