@@ -1989,13 +1989,10 @@ async function qcagDesktopUploadMQ(input) {
     editingRequestedAt: isPendingEdit
       ? (currentDetailRequest.editingRequestedAt || new Date().toISOString())
       : null,
-    // Set status to 'processing' after an upload so the item shows as awaiting confirmation
-    // (unless it is already completed). This ensures the badge becomes 'Chờ xác nhận'.
-    status: (function () {
-      const s = String(currentDetailRequest.status || 'pending').toLowerCase();
-      if (s === 'done' || s === 'processed') return s;
-      return 'processing';
-    })(),
+    // Always set to 'processing' after upload — requires explicit confirmation press.
+    // Even if status was 'done' (pending-edit flow or anomalous state), the QCAG
+    // must press "Đã chỉnh sửa" / "Hoàn thành" to confirm.
+    status: 'processing',
     updatedAt: new Date().toISOString()
   };
 
