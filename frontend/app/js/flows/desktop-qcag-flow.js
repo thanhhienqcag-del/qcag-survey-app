@@ -1108,6 +1108,25 @@ function renderQCAGDesktopList() {
       }
     } catch (e) {}
 
+    // Waiting time badge: bottom-right, hidden ONLY for genuinely completed items
+    // (statusBadge.cls === 'done' means: has MQ + status=done + no pending edit)
+    // Cards with status='done' but NO MQ still appear in processing list and should show badge.
+    const isDoneItem = (statusBadge.cls === 'done');
+    let waitingBadgeHtml = '';
+    if (!isDoneItem) {
+      const isPendingEdit = qcagDesktopIsPendingEditRequest(req);
+      const dateRef = isPendingEdit
+        ? (req.editingRequestedAt || req.createdAt)
+        : req.createdAt;
+      if (dateRef) {
+        const waitDays = Math.floor((Date.now() - new Date(dateRef).getTime()) / 86400000);
+        const waitColor = waitDays <= 1 ? 'wait-green' : waitDays <= 3 ? 'wait-orange' : 'wait-red';
+        const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : waitDays + ' ngày');
+        const waitNote = isPendingEdit ? ' (chỉnh sửa)' : '';
+        waitingBadgeHtml = `<span class="qcag-wait-badge ${waitColor}">${escapeHtml(waitLabel)}${waitNote}</span>`;
+      }
+    }
+
     return `
       <button class="qcag-request-item ${activeCls}" onclick="openQCAGDesktopRequest('${req.__backendId}')">
         <div class="qcag-request-item-top">
@@ -1116,8 +1135,13 @@ function renderQCAGDesktopList() {
         </div>
         <div class="qcag-request-code">${escapeHtml(saleName)} • ${escapeHtml(region)}</div>
         <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(ss) : '<span class="qcag-ss-tba">Chức vụ TBA</span>'; })()}</div>
-        <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
-        <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
+        <div class="qcag-request-footer">
+          <div class="qcag-request-footer-left">
+            <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
+            <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
+          </div>
+          ${waitingBadgeHtml}
+        </div>
       </button>
     `;
   }).join('');
@@ -1557,8 +1581,13 @@ function ksGetOldDesignsForOutlet(currentReq) {
       if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return false;
       const status = String(r.status || '').toLowerCase();
       if (status !== 'done' && status !== 'processed') return false;
-      const imgs = qcagDesktopParseJson(r.designImages, []);
-      return Array.isArray(imgs) && imgs.length > 0;
+      // Prefer cached full version for image check (avoids placeholder '["..."]')
+      const src = (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[r.__backendId]) || r;
+      const imgs = qcagDesktopParseJson(src.designImages, []);
+      // Consider a placeholder value '["..."]' as empty
+      if (!Array.isArray(imgs) || imgs.length === 0) return false;
+      if (imgs.length === 1 && imgs[0] === '...') return false;
+      return true;
     })
     .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
 }
@@ -1572,7 +1601,9 @@ function ksGetOldDesignsForOutlet(currentReq) {
  */
 function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
   if (!entry) return '<div class="qcag-detail-muted">Không có thiết kế cũ</div>';
-  const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(entry.designImages, []));
+  // Prefer cached full version for actual image URLs (avoids list placeholder '["..."]')
+  const fullEntry = (_qcagDesktopFullRequestCache && entry.__backendId && _qcagDesktopFullRequestCache[entry.__backendId]) || entry;
+  const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(fullEntry.designImages, []));
   const requester  = qcagDesktopParseJson(entry.requester, {});
   const reqCode    = (codeMap && codeMap[entry.__backendId]) || '-';
   const uploadedBy = entry.designUploadedBy || '-';
@@ -1883,6 +1914,31 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   }, 40);
 
   qcagDesktopSyncReadStatus(request);
+
+  // Background refresh: fetch full data for old design entries so real image URLs replace
+  // the '["..."]' placeholder that the list endpoint uses for bandwidth efficiency.
+  (async () => {
+    const snapshotId = _qcagDesktopCurrentId;
+    const oldList = ksGetOldDesignsForOutlet(request);
+    if (oldList.length === 0) return;
+    // Fetch full data for each old entry (skip if already cached)
+    const unfetched = oldList.filter(e => e.__backendId && !_qcagDesktopFullRequestCache[e.__backendId]);
+    if (unfetched.length > 0) {
+      await Promise.all(unfetched.map(e => qcagDesktopGetFullRequest(e.__backendId).catch(() => {})));
+      // Only re-render if this request is still open
+      if (_qcagDesktopCurrentId !== snapshotId) return;
+      const section = document.getElementById('qcagOldDesignSection');
+      if (!section) return;
+      const freshList = ksGetOldDesignsForOutlet(currentDetailRequest);
+      if (freshList.length === 0) {
+        section.innerHTML = '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
+      } else {
+        const codeMap = qcagDesktopComputeRequestCodes();
+        _qcagOldDesignIdx = Math.min(_qcagOldDesignIdx, freshList.length - 1);
+        section.innerHTML = qcagRenderOldDesignViewer(freshList[_qcagOldDesignIdx], _qcagOldDesignIdx, freshList.length, codeMap);
+      }
+    }
+  })().catch(() => {});
 }
 
 async function qcagDesktopUploadMQ(input) {
@@ -1922,19 +1978,6 @@ async function qcagDesktopUploadMQ(input) {
   const currentImgs = [imageUrl];
 
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
-  const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
-
-  // If this upload is in response to an edit request, increment edit counter
-  // and add an automatic system comment notifying the revision.
-  let nextEditRevisionCount = currentDetailRequest.editRevisionCount || 0;
-  if (isPendingEdit) {
-    nextEditRevisionCount = (currentDetailRequest.editRevisionCount || 0) + 1;
-    const now = new Date().toISOString();
-    const displayTime = new Date(now).toLocaleString('vi-VN');
-    const outletName = currentDetailRequest.outletName || '-';
-    const autoCommentText = `Outlet ${outletName} đã được chỉnh sửa lần thứ ${nextEditRevisionCount} vào lúc ${displayTime}.`;
-    comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
-  }
 
   const updated = {
     ...currentDetailRequest,
@@ -1953,8 +1996,6 @@ async function qcagDesktopUploadMQ(input) {
       if (s === 'done' || s === 'processed') return s;
       return 'processing';
     })(),
-    comments: JSON.stringify(comments),
-    editRevisionCount: nextEditRevisionCount,
     updatedAt: new Date().toISOString()
   };
 
@@ -2005,10 +2046,11 @@ async function qcagDesktopMarkProcessed() {
     extraFields.designCreatedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
     extraFields.designCreatedAt = now;
   }
-  // If this was an edit flow, record the last editor
+  // If this was an edit flow, record the last editor and increment revision counter
   if (isPendingEdit) {
     extraFields.designLastEditedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
     extraFields.designLastEditedAt = now;
+    extraFields.editRevisionCount = (currentDetailRequest.editRevisionCount || 0) + 1;
   }
 
   const updated = {
