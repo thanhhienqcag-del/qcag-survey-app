@@ -22,6 +22,10 @@ let _qcagRequestCodeCache = { version: 0, codes: {} };
 // Index of the currently shown old design entry in the carousel
 let _qcagOldDesignIdx = 0;
 
+// Pagination for left-column request list
+const _QCAG_PAGE_SIZE = 10;
+let _qcagDesktopListPage = 0;
+
 function isDesktopViewport() {
   return (window.innerWidth || 0) >= 1024;
 }
@@ -933,6 +937,7 @@ async function openQCAGDesktop() {
 }
 
 function qcagDesktopOnSearch(value) {
+  _qcagDesktopListPage = 0;
   _qcagDesktopSearchQuery = String(value || '').trim().toLowerCase();
   if (_qcagDesktopSearchDebounce) clearTimeout(_qcagDesktopSearchDebounce);
   _qcagDesktopSearchDebounce = setTimeout(() => {
@@ -941,6 +946,7 @@ function qcagDesktopOnSearch(value) {
 }
 
 function qcagDesktopSetTypeFilter(type) {
+  _qcagDesktopListPage = 0;
   _qcagDesktopFilterType = type || 'new';
   ['new', 'warranty'].forEach(t => {
     const isActive = t === _qcagDesktopFilterType;
@@ -965,6 +971,7 @@ function qcagDesktopSetTypeFilter(type) {
 }
 
 function qcagDesktopSetRegionFilter(region) {
+  _qcagDesktopListPage = 0;
   _qcagDesktopRegionFilter = region || 'all';
   const regions = ['all', 'S4', 'S5', 'S16', 'S17', '24', 'S19', 'MOT8'];
   regions.forEach(r => {
@@ -982,6 +989,7 @@ function qcagDesktopSetRegionFilter(region) {
 }
 
 function qcagDesktopSetStatusFilter(status) {
+  _qcagDesktopListPage = 0;
   _qcagDesktopStatusFilter = status || 'processing';
   ['processing', 'done'].forEach(s => {
     const isActive = s === _qcagDesktopStatusFilter;
@@ -1071,16 +1079,32 @@ function qcagDesktopUpdateFilterCounts() {
   if (warrantySpan) warrantySpan.textContent = String(warrantyCount);
 }
 
+function qcagDesktopGoToPage(p) {
+  const requests = getQCAGDesktopVisibleRequests();
+  const totalPages = Math.max(1, Math.ceil(requests.length / _QCAG_PAGE_SIZE));
+  _qcagDesktopListPage = Math.max(0, Math.min(totalPages - 1, p));
+  renderQCAGDesktopList();
+}
+
 function renderQCAGDesktopList() {
   qcagDesktopUpdateFilterCounts();
   const listEl = document.getElementById('qcagDesktopRequestList');
   if (!listEl || !shouldUseQCAGDesktop()) return;
 
-  const prevScrollTop = listEl.scrollTop || 0;
+  const allVisible = getQCAGDesktopVisibleRequests();
+  const totalPages = Math.max(1, Math.ceil(allVisible.length / _QCAG_PAGE_SIZE));
+  // Clamp current page in case filter changed and reduced total pages
+  if (_qcagDesktopListPage >= totalPages) _qcagDesktopListPage = totalPages - 1;
+  if (_qcagDesktopListPage < 0) _qcagDesktopListPage = 0;
 
-  const requests = getQCAGDesktopVisibleRequests();
-  if (requests.length === 0) {
+  const requests = allVisible.slice(
+    _qcagDesktopListPage * _QCAG_PAGE_SIZE,
+    (_qcagDesktopListPage + 1) * _QCAG_PAGE_SIZE
+  );
+
+  if (allVisible.length === 0) {
     listEl.innerHTML = '<div class="qcag-list-empty">Không có request</div>';
+    _qcagDesktopRenderPagination(0, 1, 0);
     return;
   }
 
@@ -1144,9 +1168,26 @@ function renderQCAGDesktopList() {
     `;
   }).join('');
 
-  if (prevScrollTop > 0) {
-    listEl.scrollTop = prevScrollTop;
+  listEl.scrollTop = 0;
+  _qcagDesktopRenderPagination(_qcagDesktopListPage, totalPages, allVisible.length);
+}
+
+function _qcagDesktopRenderPagination(currentPage, totalPages, total) {
+  const el = document.getElementById('qcagDesktopListPagination');
+  if (!el) return;
+  if (totalPages <= 1) {
+    el.innerHTML = total > 0
+      ? `<span class="qcag-page-info">${total} yêu cầu</span>`
+      : '';
+    return;
   }
+  const from = currentPage * _QCAG_PAGE_SIZE + 1;
+  const to   = Math.min((currentPage + 1) * _QCAG_PAGE_SIZE, total);
+  el.innerHTML = `
+    <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>‹</button>
+    <span class="qcag-page-info">${from}–${to} / ${total}</span>
+    <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>›</button>
+  `;
 }
 
 async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {

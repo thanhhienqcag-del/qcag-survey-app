@@ -407,6 +407,51 @@
     gap: 8px;
   }
 
+  /* Pagination bar below the request list */
+  .qcag-list-pagination {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    min-height: 36px;
+  }
+
+  .qcag-page-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    font-size: 16px;
+    line-height: 1;
+    color: #374151;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+
+  .qcag-page-btn:hover:not(:disabled) {
+    background: #f3f4f6;
+  }
+
+  .qcag-page-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .qcag-page-info {
+    font-size: 12px;
+    color: #6b7280;
+    min-width: 80px;
+    text-align: center;
+  }
+
   .qcag-request-item {
     width: 100%;
     text-align: left;
@@ -454,6 +499,55 @@
   .qcag-ss-tba {
     opacity: 0.55;
     font-style: italic;
+  }
+
+  /* Footer row: left (time+code) + right (wait badge) */
+  .qcag-request-footer {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .qcag-request-footer-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .qcag-request-design,
+  .qcag-request-date {
+    margin-top: 0;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  /* Waiting time badge */
+  .qcag-wait-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .qcag-wait-badge.wait-green {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .qcag-wait-badge.wait-orange {
+    background: #fff7ed;
+    color: #9a3412;
+  }
+
+  .qcag-wait-badge.wait-red {
+    background: #fee2e2;
+    color: #991b1b;
   }
 
   .qcag-status-badge {
@@ -1944,6 +2038,25 @@
   background: var(--surface-3);
 }
 
+.theme-dark .qcag-list-pagination {
+  background: var(--surface-2);
+  border-top-color: var(--border-1);
+}
+
+.theme-dark .qcag-page-btn {
+  background: var(--surface-3);
+  border-color: var(--border-1);
+  color: var(--primary-text);
+}
+
+.theme-dark .qcag-page-btn:hover:not(:disabled) {
+  background: var(--surface-1);
+}
+
+.theme-dark .qcag-page-info {
+  color: var(--secondary-text, #9ca3af);
+}
+
 .theme-dark .qcag-request-name {
   color: var(--text-main);
 }
@@ -1953,6 +2066,21 @@
 .theme-dark .qcag-request-date,
 .theme-dark .qcag-request-ss {
   color: var(--text-soft);
+}
+
+.theme-dark .qcag-wait-badge.wait-green {
+  background: rgba(134,239,172,0.18);
+  color: #86efac;
+}
+
+.theme-dark .qcag-wait-badge.wait-orange {
+  background: rgba(253,186,116,0.15);
+  color: #fdba74;
+}
+
+.theme-dark .qcag-wait-badge.wait-red {
+  background: rgba(252,165,165,0.18);
+  color: #fca5a5;
 }
 
 /* Detail panel */
