@@ -815,13 +815,15 @@ async function initKsDB() {
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS design_last_edited_by VARCHAR(255)',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS design_last_edited_at TIMESTAMPTZ',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS tk_code VARCHAR(16)',
+        // push_subscriptions: add sale_code for reliable per-user targeting
+        'ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS sale_code VARCHAR(64)',
     ]
     for (const sql of ksCols) await ensureColumn(sql);
 }
 // ======================== END KS MOBILE DB INIT ========================
 
 // ── Push notification helper ──────────────────────────────────────────
-async function sendKsPush({ title, body, data = {}, targetPhone = null }) {
+async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSaleCode = null }) {
     const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
     const VAPID_SUBJECT = process.env.VAPID_SUBJECT     || 'mailto:admin@qcag.vn';
@@ -829,19 +831,28 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null }) {
     const webpush = require('web-push');
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
     try {
-        let query_str = 'SELECT subscription FROM push_subscriptions';
-        let params = [];
-        if (targetPhone) {
-            query_str += ' WHERE phone = ?';
-            params.push(targetPhone);
+        let rows;
+        if (targetSaleCode) {
+            // Prefer sale_code lookup (most reliable, one-device per sale)
+            const sc = String(targetSaleCode).trim();
+            [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE sale_code = ?', [sc]);
+            // Fallback to phone if sale_code lookup returns nothing
+            if ((!rows || rows.length === 0) && targetPhone) {
+                [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+            }
+        } else if (targetPhone) {
+            [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+        } else {
+            [rows] = await pool.query('SELECT subscription FROM push_subscriptions', []);
         }
-        const [rows] = await pool.query(query_str, params);
         if (!rows || rows.length === 0) return;
         const payload = JSON.stringify({ title, body, data });
+        // TTL = 86400s (24h): push is queued if device offline, not dropped
+        const pushOptions = { TTL: 86400 };
         await Promise.allSettled(rows.map(r => {
             try {
                 const sub = JSON.parse(r.subscription);
-                return webpush.sendNotification(sub, payload);
+                return webpush.sendNotification(sub, payload, pushOptions);
             } catch (e) { return Promise.resolve(); }
         }));
     } catch (e) {
@@ -859,21 +870,22 @@ app.get('/api/push', (req, res) => {
 // ── POST /api/ks/push/subscribe — save or update a device subscription ─
 app.post('/api/ks/push/subscribe', async (req, res) => {
     try {
-        const { subscription, phone, role } = req.body || {};
+        const { subscription, phone, role, saleCode } = req.body || {};
         if (!subscription) return res.status(400).json({ ok: false, error: 'missing_subscription' });
         const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
         // Upsert by endpoint — each browser endpoint is unique
         const endpoint = typeof subscription === 'object' ? subscription.endpoint : JSON.parse(subStr).endpoint;
+        const sc = saleCode ? String(saleCode).trim() : null;
         const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpoint.slice(-40) + '%']);
         if (existing && existing.length > 0) {
             await pool.query(
-                'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, updated_at = NOW() WHERE id = ?',
-                [subStr, phone || null, role || null, existing[0].id]
+                'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, sale_code = ?, updated_at = NOW() WHERE id = ?',
+                [subStr, phone || null, role || null, sc, existing[0].id]
             );
         } else {
             await pool.query(
-                'INSERT INTO push_subscriptions (subscription, phone, role, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
-                [subStr, phone || null, role || null]
+                'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
+                [subStr, phone || null, role || null, sc]
             );
         }
         return res.json({ ok: true });
@@ -2600,9 +2612,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const isFirstMQ     = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
 
             if (isEditConfirm || isFirstMQ) {
-                // Lấy số điện thoại của Sale Heineken (người đang quản lý yêu cầu)
+                // Lấy thông tin của Sale Heineken từ requester field
                 let requesterPhone = null;
-                try { requesterPhone = (JSON.parse(updated.requester || '{}') || {}).phone || null; } catch (_) {}
+                let requesterSaleCode = null;
+                try {
+                    const reqObj = JSON.parse(updated.requester || '{}') || {};
+                    requesterPhone    = reqObj.phone    || null;
+                    requesterSaleCode = reqObj.saleCode || null;
+                } catch (_) {}
 
                 // Tính mã TK giống frontend: đếm requests cùng năm có id <= id hiện tại
                 let tkCode = updated.backend_id || ('db_' + updated.id);
@@ -2628,6 +2645,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng truy cập quản lý yêu cầu để xem MQ.`,
                         data: { backendId: updated.backend_id },
                         targetPhone: requesterPhone,
+                        targetSaleCode: requesterSaleCode,
                     });
                 } else {
                     await sendKsPush({
@@ -2635,6 +2653,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng truy cập quản lý yêu cầu để xem chỉnh sửa.`,
                         data: { backendId: updated.backend_id },
                         targetPhone: requesterPhone,
+                        targetSaleCode: requesterSaleCode,
                     });
                 }
             }

@@ -2059,6 +2059,9 @@ async function qcagDesktopMarkProcessed() {
       };
       if (requesterSaleCode) {
         pushPayload.saleCode = requesterSaleCode;
+        // Also include phone so send.js can fallback to phone lookup
+        // if subscription has no sale_code (e.g. older subscriptions)
+        if (requesterPhone) pushPayload.phone = requesterPhone;
       } else if (requesterPhone) {
         pushPayload.phone = requesterPhone;
       } else {
