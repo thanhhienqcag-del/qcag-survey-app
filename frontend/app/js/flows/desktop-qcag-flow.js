@@ -953,13 +953,14 @@ function qcagDesktopSetTypeFilter(type) {
 
   const requests = getQCAGDesktopVisibleRequests();
   if (!requests.find(r => r.__backendId === _qcagDesktopCurrentId)) {
-    _qcagDesktopCurrentId = requests[0] ? requests[0].__backendId : null;
-  }
-  if (_qcagDesktopCurrentId) {
-    openQCAGDesktopRequest(_qcagDesktopCurrentId);
-  } else {
-    const detailEl = document.getElementById('qcagDesktopDetail');
-    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    _qcagDesktopCurrentId = null;
+    const first = requests[0] ? requests[0].__backendId : null;
+    if (first) {
+      openQCAGDesktopRequest(first);
+    } else {
+      const detailEl = document.getElementById('qcagDesktopDetail');
+      if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    }
   }
 }
 
@@ -973,13 +974,10 @@ function qcagDesktopSetRegionFilter(region) {
   renderQCAGDesktopList();
   const requests = getQCAGDesktopVisibleRequests();
   if (!requests.find(r => r.__backendId === _qcagDesktopCurrentId)) {
-    _qcagDesktopCurrentId = requests[0] ? requests[0].__backendId : null;
-  }
-  if (_qcagDesktopCurrentId) {
-    openQCAGDesktopRequest(_qcagDesktopCurrentId);
-  } else {
-    const detailEl = document.getElementById('qcagDesktopDetail');
-    if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
+    _qcagDesktopCurrentId = null;
+    const first = requests[0] ? requests[0].__backendId : null;
+    if (first) openQCAGDesktopRequest(first);
+    else { const detailEl = document.getElementById('qcagDesktopDetail'); if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>'; }
   }
 }
 
