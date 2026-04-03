@@ -13,7 +13,8 @@ function blurActiveInput() {
   } catch (e) {}
 }
 
-function showToast(message) {
+let _toastTimer = null;
+function showToast(message, durationMs) {
   const toast = document.getElementById('toast');
   const toastInner = document.getElementById('toastInner');
   if (!toastInner) return;
@@ -25,10 +26,13 @@ function showToast(message) {
     toast.style.left = vp.offsetLeft + 'px';
     toast.style.width = vp.width + 'px';
   }
+  // Cancel any previous auto-hide timer so the new toast gets its full duration
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
   // Drop from above: remove hidden translate/scale/opacity, add visible classes
   toastInner.classList.remove('opacity-0', 'scale-90', '-translate-y-20');
   toastInner.classList.add('opacity-100', 'scale-100', 'translate-y-0');
-  setTimeout(() => {
+  _toastTimer = setTimeout(() => {
+    _toastTimer = null;
     // hide by reverting to initial hidden state (move up + shrink + fade)
     toastInner.classList.remove('opacity-100', 'scale-100', 'translate-y-0');
     toastInner.classList.add('opacity-0', 'scale-90', '-translate-y-20');
@@ -36,7 +40,7 @@ function showToast(message) {
     toast.style.top = '';
     toast.style.left = '';
     toast.style.width = '';
-  }, 2500);
+  }, durationMs || 2500);
 }
 
 // Toggle a modal backdrop class that blurs and disables the background

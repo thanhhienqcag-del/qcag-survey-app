@@ -2070,27 +2070,31 @@ async function qcagDesktopMarkProcessed() {
         pushPayload.role = 'heineken';
       }
 
-      fetch('/api/ks/push/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pushPayload),
-      }).then(function(r) {
-        return r.json();
-      }).then(function(result) {
-        console.log('[push/done] result:', JSON.stringify(result), '| payload:', JSON.stringify(pushPayload));
-        if (result && result.ok && result.sent > 0) {
-          showToast('Đã gửi thông báo đến Sale (' + String(result.sent) + ' thiết bị)');
-        } else if (result && result.sent === 0) {
-          console.warn('[push/done] no subscriptions found, payload:', JSON.stringify(pushPayload));
-          showToast('⚠ Sale chưa đăng ký nhận thông báo. Mời Sale mở lại app để đăng ký.');
-        } else if (!result || !result.ok) {
-          console.warn('[push/done] API error:', JSON.stringify(result));
-          showToast('⚠ Lỗi gửi thông báo: ' + (result && result.error ? result.error : 'unknown'));
-        }
-      }).catch(function(e) {
-        console.warn('[push/send] fetch error:', e);
-        showToast('⚠ Không thể kết nối để gửi thông báo.');
-      });
+      // Delay push toast so it doesn't overlap with 'Đã hoàn thành' toast (2.5s)
+      setTimeout(function() {
+        fetch('/api/ks/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pushPayload),
+        }).then(function(r) {
+          return r.json();
+        }).then(function(result) {
+          const target = pushPayload.saleCode || pushPayload.phone || pushPayload.role || '?';
+          console.log('[push/done] result:', JSON.stringify(result), '| target:', target);
+          if (result && result.ok && result.sent > 0) {
+            showToast('✓ Đã gửi thông báo đến Sale [' + target + '] (' + String(result.sent) + ' thiết bị)', 4000);
+          } else if (result && result.sent === 0) {
+            console.warn('[push/done] no subscriptions found, target:', target);
+            showToast('⚠ Sale [' + target + '] chưa đăng ký nhận thông báo. Mời mở lại app.', 4000);
+          } else if (!result || !result.ok) {
+            console.warn('[push/done] API error:', JSON.stringify(result));
+            showToast('⚠ Lỗi gửi thông báo: ' + (result && result.error ? result.error : 'unknown'), 4000);
+          }
+        }).catch(function(e) {
+          console.warn('[push/send] fetch error:', e);
+          showToast('⚠ Không thể kết nối để gửi thông báo.', 4000);
+        });
+      }, 2800);
     } catch (e) {
       console.warn('[push] markDone push error (non-fatal):', e);
     }
