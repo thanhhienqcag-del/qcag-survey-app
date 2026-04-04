@@ -123,9 +123,14 @@ if ('serviceWorker' in navigator) {
 
 // Auto re-subscribe on page load if user already has a session saved
 // This ensures subscriptions stay fresh after a new deployment without re-login
+// Also handles the case where session is restored from localStorage (bootApp path)
+// without going through launchApp() — e.g. Machine B that was never explicitly logged in.
 (function autoInitPushOnLoad() {
   if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  if (typeof Notification === 'undefined') return;
+  // Skip only if user explicitly denied — 'granted' re-subscribes silently,
+  // 'default' (never asked) will show the browser permission prompt once.
+  if (Notification.permission === 'denied') return;
 
   function tryAutoSubscribe() {
     let session = null;
