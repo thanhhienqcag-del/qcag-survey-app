@@ -293,12 +293,12 @@ function renderRequestList() {
   // Store filtered list for gallery swipe-navigation between outlets
   window._dvOutletList = filtered.slice();
 
-  // Preload first design image for every visible item so tap-to-view is instant
+  // Preload ALL design images for every visible item so tap-to-view is instant
   requestAnimationFrame(() => {
     filtered.forEach(req => {
       try {
         const imgs = JSON.parse(req.designImages || '[]').filter(u => u && u !== '...');
-        if (imgs[0]) { const p = new Image(); p.src = imgs[0]; }
+        imgs.forEach(src => { const p = new Image(); p.src = src; });
       } catch (e) {}
     });
   });

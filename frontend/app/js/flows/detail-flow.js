@@ -859,6 +859,14 @@ async function viewDesign(id) {
     return;
   }
 
+  // Open modal IMMEDIATELY with spinner — user sees the modal open at once,
+  // before any async fetch. This removes the perceived wait time.
+  const modal = document.getElementById('designModal');
+  const content = document.getElementById('designModalContent');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  content.innerHTML = '<div class="flex items-center justify-center flex-1"><div class="dv-loading-spinner"></div></div>';
+
   // If designImages is still the list-endpoint placeholder, fetch real URLs first
   let designImages = request.designImages || '[]';
   if (designImages === '["..."]' && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
@@ -885,8 +893,6 @@ async function viewDesign(id) {
   const designImgs = JSON.parse(request.designImages || '[]').filter(u => u && u !== '...');
   const items = JSON.parse(request.items || '[]');
   const oldContentImgs = JSON.parse(request.oldContentImages || '[]').filter(u => u && u !== '...');
-  const modal = document.getElementById('designModal');
-  const content = document.getElementById('designModalContent');
 
   // Update outlet counter (x/y) from the gallery outlet list if available
   const outletList = window._dvOutletList;
@@ -919,9 +925,12 @@ async function viewDesign(id) {
     <div class="dv-wrap flex-1 mode-content" id="dvWrap">
       <div class="dv-media">
         <div class="design-carousel" id="dvCarousel">
-          ${designImgs.map(img => `
-            <div class="design-slide">
-              <img src="${img}" class="design-img" onclick="showImageFull(this.src, false)" title="Tap để zoom" style="cursor:zoom-in">
+          ${designImgs.map((img, i) => `
+            <div class="design-slide${i > 0 ? ' dv-slide-loading' : ''}" id="dvSlide${i}">
+              <img src="${img}" class="design-img" onclick="showImageFull(this.src, false)" title="Tap để zoom"
+                style="cursor:zoom-in;opacity:${i === 0 ? '1' : '0'};transition:opacity 0.28s ease"
+                onload="this.style.opacity='1';var s=this.parentElement;if(s)s.classList.remove('dv-slide-loading');"
+                onerror="this.style.opacity='0.5';var s=this.parentElement;if(s)s.classList.remove('dv-slide-loading');">
             </div>
           `).join('')}
         </div>
@@ -988,8 +997,7 @@ async function viewDesign(id) {
   window._dv_currentDesignReq = request;
   window._prevScreenBeforeDesign = document.getElementById('detailScreen')?.classList.contains('flex') ? 'detail' : 'list';
 
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  // Modal already opened above (with spinner) — no need to re-open here.
 
   // If no design images but outlet is in waiting/editing state, show placeholder
   const dvState = typeof getRequestDesignState === 'function' ? getRequestDesignState(request) : null;
