@@ -362,20 +362,120 @@
 
      <!-- QCAG Desktop Screen -->
      <div id="qcagDesktopScreen" class="h-full hidden">
+      <!-- Nav Sidebar -->
+      <div id="qcagNavBackdrop" class="qcag-nav-backdrop hidden" onclick="qcagCloseNavSidebar()"></div>
+      <nav id="qcagNavSidebar" class="qcag-nav-sidebar">
+        <div class="qcag-nav-sidebar-header">
+          <img src="app/assets/qcag-logo.svg" alt="QCAG" class="qcag-nav-sidebar-logo">
+          <button class="qcag-nav-close-btn" onclick="qcagCloseNavSidebar()" title="Đóng">&#x2715;</button>
+        </div>
+        <ul class="qcag-nav-list">
+          <li><button class="qcag-nav-item" onclick="qcagNavShowView('list')">
+            <span class="qcag-nav-icon">&#x1F4CB;</span> Xem danh sách
+          </button></li>
+          <li><button class="qcag-nav-item" onclick="qcagNavShowView('map')">
+            <span class="qcag-nav-icon">&#x1F5FA;</span> Bản Đồ
+          </button></li>
+          <li><button class="qcag-nav-item qcag-nav-item--disabled" onclick="qcagNavShowView('stats')" title="Sắp ra mắt">
+            <span class="qcag-nav-icon">&#x1F4CA;</span> Thống kê <span class="qcag-nav-soon">Coming soon</span>
+          </button></li>
+        </ul>
+      </nav>
+
+      <!-- Nav Overlay Panels -->
+      <div id="qcagNavListPanel" class="qcag-nav-panel hidden">
+        <div class="qcag-nav-panel-header">
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
+          <span class="qcag-nav-panel-title">Danh sách yêu cầu</span>
+          <span id="qcagNavListCount" class="qcag-nav-panel-count"></span>
+        </div>
+        <div class="qcag-nav-list-toolbar">
+          <input id="qcagNavListSearch" type="search" placeholder="Tìm theo Mã TK, Tên Sale, Tên SS, Outlet code, Tên outlet, Khu vực, Brand..." oninput="qcagNavListOnSearch(this.value)" class="qcag-nav-list-search-input">
+          <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xuất Excel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Xuất Excel
+          </button>
+          <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="Bỏ chọn">Bỏ chọn</button>
+        </div>
+        <div class="qcag-nav-list-filter-bar" id="qcagNavListFilterBar">
+          <span class="qcag-nav-filter-label">Trạng thái:</span>
+          <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">Tất cả</button>
+          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Chờ khảo sát</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Chờ thiết kế</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Chờ chỉnh sửa</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Chờ xác nhận</button>
+          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">Đang xử lý</button>
+          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý</button>
+          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành</button>
+        </div>
+        <div class="qcag-nav-panel-body">
+          <div class="qcag-nav-table-wrap">
+            <table class="qcag-nav-table" id="qcagNavListTable">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Mã TK</th>
+                  <th>Khu vực</th>
+                  <th>Tên Sale</th>
+                  <th>Tên SS</th>
+                  <th>Outlet Code</th>
+                  <th>Tên Outlet</th>
+                  <th>Brand</th>
+                  <th>SL hạng mục</th>
+                  <th>Trạng thái</th>
+                  <th>Định vị</th>
+                </tr>
+              </thead>
+              <tbody id="qcagNavListBody"></tbody>
+            </table>
+          </div>
+          <div id="qcagNavListPagination" class="qcag-nav-list-pagination"></div>
+        </div>
+      </div>
+
+      <div id="qcagNavMapPanel" class="qcag-nav-panel hidden">
+        <div class="qcag-nav-panel-header">
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
+          <span class="qcag-nav-panel-title">Bản đồ điểm bán</span>
+          <span id="qcagNavMapCount" class="qcag-nav-panel-count"></span>
+          <button id="qcagNavTooltipToggleBtn" class="qcag-nav-tooltip-toggle" onclick="qcagNavToggleMapTooltips()" title="Hiện thẻ thông tin">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 10h8M8 14h4"/></svg>
+            Thẻ thông tin
+          </button>
+        </div>
+        <div class="qcag-nav-map-search-bar">
+          <input id="qcagNavMapSearch" type="search" placeholder="Tìm theo Outlet code, Mã TK, Tên outlet, Tên Sale, Tên SS, Khu vực..." oninput="qcagNavMapOnSearch(this.value)" class="qcag-nav-map-search-input">
+        </div>
+        <div id="qcagNavMapContainer" class="qcag-nav-map-container"></div>
+      </div>
+
+      <div id="qcagNavStatsPanel" class="qcag-nav-panel hidden">
+        <div class="qcag-nav-panel-header">
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
+          <span class="qcag-nav-panel-title">Thống kê</span>
+        </div>
+        <div class="qcag-nav-panel-body qcag-nav-stats-placeholder">
+          <div class="qcag-nav-stats-msg">&#x1F4CA; Chức năng Thống kê đang được phát triển.</div>
+        </div>
+      </div>
+
       <div class="qcag-desktop-shell">
         <header class="qcag-desktop-header">
+          <button class="qcag-hamburger-btn" onclick="qcagToggleNavSidebar()" title="Menu" aria-label="Mở menu">
+            <span></span><span></span><span></span>
+          </button>
           <div class="qcag-desktop-brand">
-            <div class="qcag-logo">QCAG</div>
-            <div>
-              <div class="qcag-brand-title">Quản Lý Request Bảng Hiệu</div>
-              <div class="qcag-brand-sub">Heineken ↔ Quảng Cáo An Giang</div>
-            </div>
+            <div class="qcag-logo"><img src="app/assets/qcag-logo.svg" alt="QCAG" class="qcag-logo-img"></div>
           </div>
           <div class="qcag-desktop-search-wrap">
             <input id="qcagDesktopSearch" type="search" placeholder="Tìm request theo outlet, mã, địa chỉ..." oninput="qcagDesktopOnSearch(this.value)" class="qcag-desktop-search">
           </div>
           <div class="qcag-desktop-user">
             <div id="qcagDesktopUserLabel" class="qcag-user-label">QCAG</div>
+            <button id="qcagPushBellBtn" onclick="qcagDesktopTogglePush()" class="qcag-push-bell-btn" type="button" title="Bật/tắt thông báo" aria-label="Bật/tắt thông báo">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              <span id="qcagPushBellStatus" class="qcag-push-bell-dot"></span>
+            </button>
             <button id="qcagThemeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn qcag-theme-btn hidden lg:inline-flex" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
               <span class="theme-icon" aria-hidden="true">🌙</span>
               <span class="theme-label">Tối</span>
@@ -579,15 +679,10 @@
           </div>
         </div>
       </div>
-      <div id="oldContentSection" class="hidden"><label class="block text-sm font-medium mb-1.5 text-gray-700">Ảnh nội dung cũ</label>
-       <p class="text-xs text-gray-500 mb-2">Chụp rõ ảnh nội dung cũ của bảng hiệu</p>
-      <label id="oldContentUploadLabel" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-50 mb-3">
-         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-         </svg> Upload ảnh nội dung cũ <input type="file" accept="image/*" multiple class="hidden" onchange="handleOldContentImages(this)"> </label>
-       <div id="oldContentPreview" class="flex flex-wrap gap-2 mb-2"></div>
-       <div class="mb-3">
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Nội dung bổ sung (tùy chọn)</label>
-         <textarea id="oldContentExtra" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm" placeholder="Thêm nội dung khác hoặc thay đổi so với nội dung cũ nếu cần."></textarea>
+      <div id="oldContentSection" class="hidden">
+       <div class="mb-1">
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">Yêu cầu thêm (nếu có)</label>
+         <textarea id="oldContentExtra" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm" placeholder="Ghi yêu cầu thêm hoặc thay đổi so với nội dung cũ nếu cần (không bắt buộc)."></textarea>
        </div>
       </div>
       <div class="pt-4 border-t border-gray-100"><label class="block text-sm font-medium mb-1.5 text-gray-700">Ảnh hiện trạng <span class="text-red-500">*</span></label>
@@ -643,7 +738,12 @@
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg></button>
      <h2 class="font-semibold">Danh Sách Yêu Cầu</h2>
-     <div class="w-10"></div>
+     <button onclick="toggleMobileListViewMode()" title="Đổi chế độ xem" aria-label="Đổi chế độ xem" class="p-2 -mr-2">
+      <svg id="viewModeIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+       <!-- Default to List Icon (because default mode is gallery) -->
+       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+     </button>
     </div>
     <!-- Search bar -->
     <div class="px-4 py-2 border-b border-gray-100 bg-gray-50">
@@ -770,7 +870,10 @@
     <div id="designModal" class="fixed inset-0 bg-black bg-opacity-90 hidden flex-col design-modal">
      <div class="flex items-center justify-between p-4">
        <div class="w-10"></div>
-       <h2 class="font-semibold text-white">Xem Thiết Kế</h2>
+       <div class="flex flex-col items-center gap-0.5">
+        <h2 class="font-semibold text-white leading-tight" id="dvModalTitle">Xem Thiết Kế</h2>
+        <span id="dvOutletCounter" class="text-xs text-gray-400"></span>
+       </div>
        <button onclick="closeDesignModal()" title="Đóng" aria-label="Đóng" class="p-2 text-white">
         <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg></button>

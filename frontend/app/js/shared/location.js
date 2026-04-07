@@ -62,6 +62,12 @@ function initLeafletMap() {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(lMap);
 
+  // Ensure Leaflet recalculates size after modal layout settles — prevents
+  // blank map tiles when container was hidden or had no size at init time.
+  setTimeout(() => {
+    try { lMap.invalidateSize(); } catch (e) {}
+  }, 220);
+
   // Auto-center on current GPS if no saved location
   if (!hasCoords && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition((pos) => {

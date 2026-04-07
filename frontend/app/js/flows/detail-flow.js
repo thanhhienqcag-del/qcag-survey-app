@@ -888,6 +888,21 @@ async function viewDesign(id) {
   const modal = document.getElementById('designModal');
   const content = document.getElementById('designModalContent');
 
+  // Update outlet counter (x/y) from the gallery outlet list if available
+  const outletList = window._dvOutletList;
+  const counterEl = document.getElementById('dvOutletCounter');
+  const titleEl = document.getElementById('dvModalTitle');
+  if (outletList && outletList.length > 0) {
+    window._dvOutletIdx = outletList.findIndex(r => r.__backendId === id);
+    if (counterEl && window._dvOutletIdx !== -1) {
+      counterEl.textContent = `${window._dvOutletIdx + 1} / ${outletList.length}`;
+    }
+    if (titleEl) titleEl.textContent = request.outletName || 'Xem Thiết Kế';
+  } else {
+    if (counterEl) counterEl.textContent = '';
+    if (titleEl) titleEl.textContent = 'Xem Thiết Kế';
+  }
+
   // requester info (show sale / requester details prominently)
   const requester = (() => { try { return JSON.parse(request.requester || '{}'); } catch (e) { return {}; } })();
   const requesterLabel = requester && requester.role === 'heineken'
@@ -976,6 +991,36 @@ async function viewDesign(id) {
   modal.classList.remove('hidden');
   modal.classList.add('flex');
 
+  // If no design images but outlet is in waiting/editing state, show placeholder
+  const dvState = typeof getRequestDesignState === 'function' ? getRequestDesignState(request) : null;
+  if (designImgs.length === 0 && (dvState === 'waiting' || dvState === 'editing')) {
+    const stateLabel = dvState === 'editing' ? 'Chỉnh sửa' : 'Thiết kế';
+    content.innerHTML = `
+      <div id="dvPlaceholder" class="flex flex-col items-center justify-center flex-1 p-8 text-center gap-4" style="touch-action:pan-y">
+        <svg class="w-16 h-16 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="text-white/70 text-base font-semibold">${escapeHtml(request.outletName)}</div>
+        <div class="text-white/45 text-sm">đang chờ ${stateLabel}</div>
+        <div class="text-white/30 text-xs max-w-xs leading-relaxed">Nếu cần gấp vui lòng liên hệ QCAG qua Zalo để được hỗ trợ.</div>
+      </div>`;
+    window._dv_currentDesignImgs = [];
+    window._dv_currentDesignReq = request;
+    // Attach swipe-to-navigate on the placeholder div
+    requestAnimationFrame(() => {
+      const ph = document.getElementById('dvPlaceholder');
+      if (!ph) return;
+      let sx = 0, sy = 0;
+      ph.addEventListener('touchstart', e => { if (e.touches[0]) { sx = e.touches[0].clientX; sy = e.touches[0].clientY; } }, { passive: true });
+      ph.addEventListener('touchend', e => {
+        const t = e.changedTouches && e.changedTouches[0]; if (!t) return;
+        const dx = t.clientX - sx; const dy = t.clientY - sy;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+          if (dx < 0) navigateDesignRequest(1); else navigateDesignRequest(-1);
+        }
+      }, { passive: true });
+    });
+    return;
+  }
+
   if (designImgs.length > 0) {
     showImageFull(designImgs[0]);
   }
@@ -1038,6 +1083,16 @@ function openImageFromModal() {
 }
 
 function navigateDesignRequest(delta) {
+  // Use gallery outlet list if available (from list/gallery view)
+  const outletList = window._dvOutletList;
+  if (outletList && outletList.length > 0 && window._dvOutletIdx !== undefined && window._dvOutletIdx !== -1) {
+    let newIdx = window._dvOutletIdx + delta;
+    if (newIdx < 0) newIdx = outletList.length - 1;
+    if (newIdx >= outletList.length) newIdx = 0;
+    const nextReq = outletList[newIdx];
+    if (nextReq) { viewDesign(nextReq.__backendId); return; }
+  }
+  // Fall back to detail-based navigation
   if (!currentDetailRequest) return;
   const idx = allRequests.findIndex(r => r.__backendId === currentDetailRequest.__backendId);
   if (idx === -1) return;
@@ -1127,7 +1182,7 @@ function showImageFull(src, showContent = true) {
   const overlay = document.createElement('div');
   overlay.id = 'dvZoomOverlay';
   overlay.innerHTML = `
-    <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false">
+    <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false" style="opacity:0;transition:opacity .18s ease" decoding="async">
     <button class="dv-zoom-close">✕</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>`;
   if (showContent) {
@@ -1184,13 +1239,23 @@ function showImageFull(src, showContent = true) {
   } catch (e) { /* ignore */ }
 
   let scale = 1, tx = 0, ty = 0;
-  const MAX = 3, MIN = 1;
+  const MAX = 10, MIN = 1; // 1000% max zoom
   let isDragging = false, dragStartX = 0, dragStartY = 0;
   let lastDist = null;
   let lastTap = 0;
 
   const img = document.getElementById('dvZoomImg');
   const scaleEl = document.getElementById('dvZoomScale');
+
+  // Fade in once loaded (cache-hit = nearly instant, network = smooth reveal)
+  if (img) {
+    if (img.complete && img.naturalWidth) {
+      img.style.opacity = '1';
+    } else {
+      img.onload = () => { img.style.opacity = '1'; };
+      img.onerror = () => { img.style.opacity = '1'; }; // show broken img rather than hiding
+    }
+  }
 
   function apply(animated) {
     img.style.transition = animated ? 'transform 0.2s ease' : 'none';
@@ -1199,7 +1264,7 @@ function showImageFull(src, showContent = true) {
   }
   function clamp() {
     if (scale <= 1) { tx = 0; ty = 0; return; }
-    const pad = (scale - 1) * 200;
+    const pad = (scale - 1) * 500; // larger pan range for high zoom
     tx = Math.max(-pad, Math.min(pad, tx));
     ty = Math.max(-pad, Math.min(pad, ty));
   }

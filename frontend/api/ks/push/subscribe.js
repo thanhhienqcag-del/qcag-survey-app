@@ -73,15 +73,10 @@ module.exports = async function handler(req, res) {
       savedId = ins.rows[0].id;
     }
 
-    // Auto-dedup: remove older duplicates for same sale_code only.
-    // For accounts without saleCode (e.g. QCAG role), keep all subscriptions so
-    // multiple devices (different desktops) can all receive push notifications.
-    if (saleCode) {
-      await db.query(
-        'DELETE FROM push_subscriptions WHERE sale_code = $1 AND id != $2',
-        [saleCode, savedId]
-      );
-    }
+    // NOTE: Do NOT delete other subscriptions for the same sale_code.
+    // A Heineken Sale may have both a phone and a desktop browser open —
+    // each device has its own unique push endpoint and should be kept.
+    // Dedup is already handled by endpoint-suffix matching above (upsert).
 
     return res.end(JSON.stringify({ ok: true }));
   } catch (err) {

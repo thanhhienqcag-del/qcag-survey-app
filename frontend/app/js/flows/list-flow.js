@@ -6,6 +6,7 @@
 // ── Design-state helper ──────────────────────────────────────────────────
 let currentDesignFilter = 'all'; // 'all'|'waiting'|'has_mq'|'editing'
 let currentListSearchQuery = '';  // free-text search
+let currentMobileViewMode = 'gallery'; // 'list' | 'gallery'
 
 const DESIGN_FILTER_LABELS = {
   all:              'Tất cả',
@@ -197,6 +198,13 @@ function renderRequestList() {
   // Track which entries need lazy image load (have placeholder ["..."])
   const lazyLoadIds = [];
 
+  // Update container class for grid view if needed
+  if (currentMobileViewMode === 'gallery') {
+    container.className = 'grid grid-cols-2 gap-3';
+  } else {
+    container.className = 'space-y-3';
+  }
+
   container.innerHTML = filtered.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
@@ -218,38 +226,82 @@ function renderRequestList() {
     } catch (e) { preview = ''; }
 
     let thumbHtml;
-    if (preview) {
-      thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`;
-    } else if (hasDesignPlaceholder) {
-      // Placeholder skeleton — will be replaced by lazy loader below
-      thumbHtml = `<div id="thumb-${req.__backendId}" class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
-           <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-         </div>`;
-    } else {
-      thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
-           <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
-         </button>`;
-    }
+    let fallbackIconHtml = `<svg class="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>`;
+    
+    // Check if gallery mode to determine thumb width/height
+    if (currentMobileViewMode === 'gallery') {
+       if (preview) {
+         thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-full h-32 object-cover rounded-t-xl cursor-pointer">`;
+       } else if (hasDesignPlaceholder) {
+         thumbHtml = `<div id="thumb-${req.__backendId}" class="w-full h-32 bg-gray-700 rounded-t-xl flex items-center justify-center p-4 text-center" style="animation:pulse 1.5s ease-in-out infinite">
+              <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>`;
+       } else {
+         thumbHtml = `<div onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-full h-32 bg-gray-100 rounded-t-xl flex flex-col items-center justify-center text-gray-400 p-2 text-center cursor-pointer">
+              ${fallbackIconHtml}
+              <span class="text-xs">Chưa có MQ</span>
+            </div>`;
+       }
 
-    return `
-      <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer">
-        <div class="flex items-center gap-3">
-          <div class="flex-shrink-0">${thumbHtml}</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-0.5">
-              <span class="font-medium truncate">${req.outletName}</span>
-              <span class="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
-            </div>
-            <div class="text-sm text-gray-500 truncate">${req.outletCode}</div>
-            <div class="text-xs text-gray-400 mt-0.5">${dateStr}</div>
+       return `
+        <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl relative active:bg-gray-100 cursor-pointer flex flex-col shadow-sm border border-gray-100 overflow-hidden">
+          ${thumbHtml}
+          <div class="p-3 flex-1 flex flex-col">
+            <span class="absolute top-2 right-2 flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm z-10 opacity-90">${badge.label}</span>
+            <div class="font-medium text-sm line-clamp-2 leading-snug mb-1">${req.outletName}</div>
+            <div class="text-xs text-gray-500 truncate mb-1">${req.outletCode}</div>
+            <div class="text-[10px] text-gray-400 mt-auto pt-1">${dateStr}</div>
           </div>
-          <svg class="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-          </svg>
         </div>
-      </div>
-    `;
+      `;
+    } else {
+       // List Mode HTML
+       if (preview) {
+         thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`;
+       } else if (hasDesignPlaceholder) {
+         // Placeholder skeleton — will be replaced by lazy loader below
+         thumbHtml = `<div id="thumb-${req.__backendId}" class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
+              <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>`;
+       } else {
+         thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
+            </button>`;
+       }
+
+       return `
+         <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer">
+           <div class="flex items-center gap-3">
+             <div class="flex-shrink-0">${thumbHtml}</div>
+             <div class="flex-1 min-w-0">
+               <div class="flex items-center gap-2 mb-0.5">
+                 <span class="font-medium truncate">${req.outletName}</span>
+                 <span class="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
+               </div>
+               <div class="text-sm text-gray-500 truncate">${req.outletCode}</div>
+               <div class="text-xs text-gray-400 mt-0.5">${dateStr}</div>
+             </div>
+             <svg class="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+             </svg>
+           </div>
+         </div>
+       `;
+    }
   }).join('');
+
+  // Store filtered list for gallery swipe-navigation between outlets
+  window._dvOutletList = filtered.slice();
+
+  // Preload first design image for every visible item so tap-to-view is instant
+  requestAnimationFrame(() => {
+    filtered.forEach(req => {
+      try {
+        const imgs = JSON.parse(req.designImages || '[]').filter(u => u && u !== '...');
+        if (imgs[0]) { const p = new Image(); p.src = imgs[0]; }
+      } catch (e) {}
+    });
+  });
 
   // Lazy-load real thumbnails for placeholder entries (sequential to avoid rate limits)
   if (lazyLoadIds.length > 0 && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
@@ -272,12 +324,22 @@ function renderRequestList() {
           // Replace skeleton with real thumbnail (if element still exists in DOM)
           const thumbEl = document.getElementById('thumb-' + backendId);
           if (!thumbEl) continue;
-          const img = document.createElement('img');
-          img.src = imgs[0];
-          img.className = 'w-16 h-16 object-cover rounded-lg cursor-pointer';
-          img.title = 'Xem thiết kế';
-          img.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
-          thumbEl.replaceWith(img);
+          
+          if (currentMobileViewMode === 'gallery') {
+            const img = document.createElement('img');
+            img.src = imgs[0];
+            img.className = 'w-full h-32 object-cover rounded-t-xl cursor-pointer';
+            img.title = 'Xem thiết kế';
+            img.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
+            thumbEl.replaceWith(img);
+          } else {
+            const img = document.createElement('img');
+            img.src = imgs[0];
+            img.className = 'w-16 h-16 object-cover rounded-lg cursor-pointer';
+            img.title = 'Xem thiết kế';
+            img.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
+            thumbEl.replaceWith(img);
+          }
         } catch (e) { /* leave skeleton as-is */ }
       }
     })();
@@ -294,5 +356,20 @@ function switchListTab(tab) {
   document.getElementById('listTab2Btn').className = tab === 'warranty' ? 'flex-1 py-3 text-sm font-medium tab-active' : 'flex-1 py-3 text-sm font-medium tab-inactive';
   document.getElementById('newCount').className = tab === 'new' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
   document.getElementById('warrantyCount').className = tab === 'warranty' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
+  renderRequestList();
+}
+
+function toggleMobileListViewMode() {
+  currentMobileViewMode = currentMobileViewMode === 'list' ? 'gallery' : 'list';
+  const icon = document.getElementById('viewModeIcon');
+  if (icon) {
+    if (currentMobileViewMode === 'list') {
+      // Now in list mode → show grid icon so user can switch back to gallery
+      icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>`;
+    } else {
+      // Now in gallery mode → show list icon so user can switch to list
+      icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>`;
+    }
+  }
   renderRequestList();
 }

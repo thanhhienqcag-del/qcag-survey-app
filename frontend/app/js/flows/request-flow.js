@@ -304,10 +304,7 @@ function attachValidationClearing() {
     if (statusInput) {
       statusInput.addEventListener('change', () => { try { document.getElementById('statusUploadLabel')?.classList.remove('field-error'); } catch (e) {} });
     }
-    const oldInput = document.querySelector('#oldContentPreview')?.parentElement?.querySelector('input[type=file]');
-    if (oldInput) {
-      oldInput.addEventListener('change', () => { try { document.getElementById('oldContentUploadLabel')?.classList.remove('field-error'); } catch (e) {} });
-    }
+    // oldContent image upload removed — no oldInput listener needed
   } catch (e) {}
 }
 
@@ -530,10 +527,7 @@ async function submitNewRequest() {
     markFieldError(document.getElementById('signContent'));
     hasError = true;
   }
-  if (isOldContent && oldContentImages.length === 0) {
-    markFieldError(document.getElementById('oldContentUploadLabel'));
-    hasError = true;
-  }
+  // Old content image upload removed — no image validation needed for oldContent
   if (statusImages.length === 0) {
     markFieldError(document.getElementById('statusUploadLabel'));
     hasError = true;
@@ -555,6 +549,12 @@ async function submitNewRequest() {
   btn.disabled = true;
   btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang xử lý...';
 
+  // Pre-generate __backendId so GCS folder name is consistent between create and patch
+  const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+
+  // Capture status images now (before form reset) for background upload
+  const _capturedStatus = statusImages.slice();
+
   const request = {
     type: 'new',
     outletCode: document.getElementById('outletCode').value.trim(),
@@ -567,46 +567,19 @@ async function submitNewRequest() {
     content: isOldContent ? '' : content,
     oldContent: isOldContent,
     oldContentExtra: isOldContent ? (document.getElementById('oldContentExtra')||{value:''}).value.trim() : '',
-    oldContentImages: JSON.stringify(oldContentImages),
-    statusImages: JSON.stringify(statusImages),
+    oldContentImages: '[]',   // no longer collected from user
+    statusImages: '[]',        // uploaded in background after modal shown — see _bgUploadAndPatch
     designImages: '[]',
     acceptanceImages: '[]',
     createdAt: new Date().toISOString(),
     status: 'pending',
-    requester: JSON.stringify(currentSession || {})
+    requester: JSON.stringify(currentSession || {}),
+    __backendId: __preBackendId,
   };
 
-  // Pre-generate __backendId so GCS folder paths can be built before dataSdk.create()
-  const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  request.__backendId = __preBackendId;
-
-  // Upload images to GCS if dataSdk is available (structured paths)
-  if (window.dataSdk && window.dataSdk.uploadImage) {
-    try {
-      const uploadArr = async (arr, subfolder) => {
-        const urls = [];
-        for (let i = 0; i < arr.length; i++) {
-          const src = arr[i];
-          if (typeof src === 'string' && src.startsWith('data:')) {
-            const url = await window.dataSdk.uploadImage(src, null, __preBackendId, subfolder);
-            urls.push(url || src); // fallback to base64 if upload fails
-          } else {
-            urls.push(src); // already a URL
-          }
-        }
-        return urls;
-      };
-      const uploadedStatus = await uploadArr(statusImages, 'hien-trang');
-      request.statusImages = JSON.stringify(uploadedStatus);
-      if (isOldContent && oldContentImages.length > 0) {
-        const uploadedOld = await uploadArr(oldContentImages, 'noi-dung');
-        request.oldContentImages = JSON.stringify(uploadedOld);
-      }
-    } catch (uploadErr) {
-      console.warn('[request-flow] pre-upload failed, keeping base64:', uploadErr);
-      // keep original base64 arrays — already set above
-    }
-  }
+  // NOTE: Images are NOT sent in the create payload — they are uploaded in
+  // background AFTER the request is created and modal is shown to the user.
+  // This reduces perceived wait time from ~5-12s → <1s.
 
   // If user previously confirmed "Hạng mục mới" for this outlet, ensure items are not identical to the latest existing request
   try {
@@ -638,6 +611,11 @@ async function submitNewRequest() {
       try { lastCreatedRequestId = result.data && result.data.__backendId ? result.data.__backendId : (request.__backendId || null); } catch (e) {}
       try { blurActiveInput(); } catch (e) {}
       document.getElementById('confirmModal').classList.remove('hidden');
+
+      // Background: upload status images then PATCH (user sees modal immediately)
+      if (window.dataSdk && window.dataSdk.uploadImage && _capturedStatus.length > 0) {
+        _bgUploadAndPatch(__preBackendId, _capturedStatus);
+      }
 
       // Fire push notification to QCAG team (best-effort, never blocks UI)
       try {
@@ -673,6 +651,37 @@ async function submitNewRequest() {
   btn.disabled = false;
   btn.textContent = 'Xác nhận yêu cầu';
 }
+
+// ── Background image upload (runs AFTER modal shown — never blocks UI) ─────────
+// Uploads status + oldContent images in parallel, then PATCHes the request.
+async function _bgUploadAndPatch(backendId, statusImgs) {
+  if (!window.dataSdk || !window.dataSdk.uploadImage) return;
+  try {
+    const uploadOne = async (src) => {
+      if (typeof src !== 'string' || !src.startsWith('data:')) return src;
+      try {
+        const url = await window.dataSdk.uploadImage(src, null, backendId, 'hien-trang');
+        return url || null;
+      } catch (e) { return null; }
+    };
+
+    // Upload all status images in parallel
+    const uploaded = await Promise.all(statusImgs.map(uploadOne));
+    const finalStatus = uploaded.filter(Boolean);
+    if (finalStatus.length === 0) return;
+
+    // PATCH only statusImages field
+    await window.dataSdk.update({
+      __backendId: backendId,
+      statusImages: JSON.stringify(finalStatus),
+      updatedAt: new Date().toISOString(),
+    });
+    console.log('[bg-upload] status images patched OK for', backendId);
+  } catch (e) {
+    console.warn('[bg-upload] failed (non-fatal):', e);
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function viewLastCreatedRequest() {
   try { document.getElementById('confirmModal').classList.add('hidden'); } catch (e) {}
@@ -723,7 +732,6 @@ function resetNewRequestForm() {
   document.getElementById('newContentSection').classList.remove('hidden');
   try { const e = document.getElementById('oldContentExtra'); if (e) e.value = ''; } catch (e) {}
   document.getElementById('oldContentSection').classList.add('hidden');
-  document.getElementById('oldContentPreview').innerHTML = '';
   document.getElementById('statusImagesPreview').innerHTML = '';
   document.getElementById('outletLat').value = '';
   document.getElementById('outletLng').value = '';

@@ -23,6 +23,12 @@
   }
 }
 
+/* Ensure map container inside modal gets a minimum height on desktop so
+   Leaflet has a usable rendering box even when other panel elements exist. */
+@media (min-width: 768px) {
+  #mapContainer { min-height: 360px; }
+}
+
 /* App layout variables */
 :root {
   --app-header-height: 56px; /* adjust if your header height changes */
@@ -252,6 +258,7 @@ body.modal-open #app > *:not(.fixed) {
   filter: blur(6px);
   transition: filter 160ms ease;
   pointer-events: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 /* Ensure modal overlays remain interactive */
@@ -489,6 +496,7 @@ body.dark .qcag-survey-badge,
   border: 1.5px solid rgba(255,255,255,0.2);
   color: rgba(255,255,255,0.5);
   background: rgba(255,255,255,0.07);
+  -webkit-user-select: none;
   user-select: none;
 }
 .dv-mode-btn.active {
@@ -520,8 +528,8 @@ body.dark .qcag-survey-badge,
   transform-origin: center center;
   will-change: transform;
   cursor: grab;
+  -webkit-user-select: none;
   user-select: none;
-  -webkit-user-drag: none;
   pointer-events: auto;
 }
 .dv-zoom-img.grabbing { cursor: grabbing; }
@@ -532,8 +540,8 @@ body.dark .qcag-survey-badge,
   width: 44px; height: 44px;
   border-radius: 50%; font-size: 20px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 .dv-zoom-scale {
   position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
@@ -561,6 +569,7 @@ body.dark .qcag-survey-badge,
   font-weight: 700;
   font-size: 15px;
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
   text-align: center;
   transition: transform 160ms ease, opacity 160ms ease;
@@ -651,8 +660,6 @@ body.dark .qcag-survey-badge,
   display: flex;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
 }
 .design-carousel::-webkit-scrollbar { display: none; }
 .design-slide {
@@ -856,7 +863,6 @@ body.dark .qcag-survey-badge,
   .mobile-main-screen > .flex-1 {
     min-height: 0;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
     /* even smaller bottom padding so final content sits closer above the fixed bottom nav */
     padding-bottom: calc(56px + env(safe-area-inset-bottom));
     box-sizing: border-box;
@@ -1049,6 +1055,7 @@ body.dark .qcag-survey-badge,
   font-size: 14px;
   font-weight: 500;
   color: #111827;
+  -webkit-user-select: none;
   user-select: none;
   transition: border-color 0.15s, background 0.15s;
 }

@@ -129,9 +129,11 @@ if ('serviceWorker' in navigator) {
 (function autoInitPushOnLoad() {
   if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
   if (typeof Notification === 'undefined') return;
-  // Skip only if user explicitly denied — 'granted' re-subscribes silently,
-  // 'default' (never asked) will show the browser permission prompt once.
-  if (Notification.permission === 'denied') return;
+  // Only auto re-subscribe if permission was already granted.
+  // Do NOT show the browser permission prompt automatically — browsers block
+  // prompts that aren't triggered by a user gesture and silently fail.
+  // The prompt is shown explicitly via launchApp() or the QCAG desktop bell button.
+  if (Notification.permission !== 'granted') return;
 
   function tryAutoSubscribe() {
     let session = null;

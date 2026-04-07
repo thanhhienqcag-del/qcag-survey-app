@@ -4,6 +4,7 @@
 'use strict';
 
 let _qcagDesktopFilterType = 'new';
+let _qcagDesktopListScrollSave = 0; // preserves list scroll across renders
 let _qcagDesktopStatusFilter = 'processing';
 let _qcagDesktopRegionFilter = 'all';
 let _qcagDesktopSearchQuery = '';
@@ -26,6 +27,11 @@ let _qcagOldDesignIdx = 0;
 const _QCAG_PAGE_SIZE = 10;
 let _qcagDesktopListPage = 0;
 
+// Year filter (null = tất cả các năm)
+let _qcagDesktopYearFilter = new Date().getFullYear();
+// Year currently shown in the dropup picker (not yet applied until user clicks)
+let _qcagDesktopYearDropupYear = new Date().getFullYear();
+
 function isDesktopViewport() {
   return (window.innerWidth || 0) >= 1024;
 }
@@ -40,6 +46,66 @@ function shouldUseQCAGDesktop() {
 
 function qcagDesktopParseJson(raw, fallback) {
   try { return JSON.parse(raw || ''); } catch (e) { return fallback; }
+}
+
+// ── Push notification bell for QCAG desktop ──────────────────────────
+function qcagDesktopUpdateBellUI() {
+  const dot = document.getElementById('qcagPushBellStatus');
+  if (!dot) return;
+  if (typeof Notification === 'undefined' || !('PushManager' in window)) {
+    dot.className = 'qcag-push-bell-dot off';  // gray — not supported
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    dot.className = 'qcag-push-bell-dot on';   // green
+  } else if (Notification.permission === 'denied') {
+    dot.className = 'qcag-push-bell-dot denied'; // red
+  } else {
+    dot.className = 'qcag-push-bell-dot off';    // gray — not yet asked
+  }
+}
+
+async function qcagDesktopTogglePush() {
+  if (typeof Notification === 'undefined' || !('PushManager' in window)) {
+    showToast('Trình duyệt này không hỗ trợ Push Notification');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    showToast('Thông báo đã bị chặn. Vui lòng mở Cài đặt trình duyệt → Thông báo (Notifications) → cho phép trang này.');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    showToast('✓ Thông báo đã được bật. Bạn sẽ nhận push khi có yêu cầu mới từ Heineken.');
+    // Re-subscribe silently (refreshes endpoint + keeps subscription fresh)
+    try {
+      if (window.pushHelpers && window.pushHelpers.initPush) {
+        const phone = currentSession && currentSession.phone || null;
+        const role  = currentSession && currentSession.role  || null;
+        await window.pushHelpers.initPush(phone, role, null);
+      }
+    } catch (_) {}
+    qcagDesktopUpdateBellUI();
+    return;
+  }
+  // permission === 'default' → ask user
+  try {
+    const result = await Notification.requestPermission();
+    if (result === 'granted') {
+      showToast('✓ Đã bật thông báo thành công!');
+      if (window.pushHelpers && window.pushHelpers.initPush) {
+        const phone = currentSession && currentSession.phone || null;
+        const role  = currentSession && currentSession.role  || null;
+        await window.pushHelpers.initPush(phone, role, null);
+      }
+    } else if (result === 'denied') {
+      showToast('Bạn đã từ chối thông báo. Để bật lại, vào Cài đặt trình duyệt → Thông báo.');
+    } else {
+      showToast('Bạn chưa cho phép thông báo.');
+    }
+  } catch (e) {
+    showToast('Lỗi khi yêu cầu quyền thông báo: ' + e);
+  }
+  qcagDesktopUpdateBellUI();
 }
 
 function qcagDesktopNormalizeImageUrl(url) {
@@ -884,6 +950,13 @@ function getQCAGDesktopVisibleRequests() {
     );
   }
 
+  if (_qcagDesktopYearFilter !== null) {
+    list = list.filter(r => {
+      try { return new Date(r.createdAt || 0).getFullYear() === _qcagDesktopYearFilter; }
+      catch (e) { return true; }
+    });
+  }
+
   list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
   // Enrich each request with standardized tags (non-destructive)
   try {
@@ -896,6 +969,8 @@ function getQCAGDesktopVisibleRequests() {
 
 async function openQCAGDesktop() {
   if (!shouldUseQCAGDesktop()) return;
+  // Update the push bell indicator on every load
+  try { qcagDesktopUpdateBellUI(); } catch (_) {}
   const userLabel = document.getElementById('qcagDesktopUserLabel');
   if (userLabel) {
     // Prefer showing the QCAG employee name if provided; otherwise show phone or default label
@@ -947,6 +1022,7 @@ function qcagDesktopOnSearch(value) {
 
 function qcagDesktopSetTypeFilter(type) {
   _qcagDesktopListPage = 0;
+  _qcagDesktopListScrollSave = 0; // reset scroll when changing filter
   _qcagDesktopFilterType = type || 'new';
   ['new', 'warranty'].forEach(t => {
     const isActive = t === _qcagDesktopFilterType;
@@ -1083,6 +1159,7 @@ function qcagDesktopGoToPage(p) {
   const requests = getQCAGDesktopVisibleRequests();
   const totalPages = Math.max(1, Math.ceil(requests.length / _QCAG_PAGE_SIZE));
   _qcagDesktopListPage = Math.max(0, Math.min(totalPages - 1, p));
+  _qcagDesktopListScrollSave = 0; // reset scroll when changing page
   renderQCAGDesktopList();
 }
 
@@ -1135,6 +1212,7 @@ function renderQCAGDesktopList() {
     // Cards with status='done' but NO MQ still appear in processing list and should show badge.
     const isDoneItem = (statusBadge.cls === 'done');
     let waitingBadgeHtml = '';
+    let deleteBtnHtml = '';
     if (!isDoneItem) {
       const isPendingEdit = qcagDesktopIsPendingEditRequest(req);
       const dateRef = isPendingEdit
@@ -1148,9 +1226,12 @@ function renderQCAGDesktopList() {
         waitingBadgeHtml = `<span class="qcag-wait-badge ${waitColor}">${escapeHtml(waitLabel)}${waitNote}</span>`;
       }
     }
-
+    
+    if (!isDoneItem) {
+      deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${req.__backendId}'))" title="Xóa yêu cầu">🗑</button>`;
+    }
     return `
-      <button class="qcag-request-item ${activeCls}" onclick="openQCAGDesktopRequest('${req.__backendId}')">
+      <div role="button" tabindex="0" class="qcag-request-item ${activeCls}" onclick="openQCAGDesktopRequest('${req.__backendId}')">
         <div class="qcag-request-item-top">
           <div class="qcag-request-name">${escapeHtml(req.outletName || '-')} • ${escapeHtml(req.outletCode || '-')}</div>
           <span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>
@@ -1162,32 +1243,186 @@ function renderQCAGDesktopList() {
             <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
             <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
           </div>
-          ${waitingBadgeHtml}
+          ${waitingBadgeHtml}${deleteBtnHtml}
         </div>
-      </button>
+      </div>
     `;
   }).join('');
 
-  listEl.scrollTop = 0;
+  // Preserve list scroll position so clicking an item doesn't jump back to top.
+  // Only reset to 0 when the saved scroll was already 0 (initial load / page change).
+  listEl.scrollTop = _qcagDesktopListScrollSave || 0;
   _qcagDesktopRenderPagination(_qcagDesktopListPage, totalPages, allVisible.length);
 }
 
 function _qcagDesktopRenderPagination(currentPage, totalPages, total) {
   const el = document.getElementById('qcagDesktopListPagination');
   if (!el) return;
-  if (totalPages <= 1) {
-    el.innerHTML = total > 0
-      ? `<span class="qcag-page-info">${total} yêu cầu</span>`
-      : '';
-    return;
+
+  const yr = _qcagDesktopYearFilter;
+  const yearLabel = yr !== null ? String(yr) : 'Tất cả';
+  const dispYear = _qcagDesktopYearDropupYear;
+  const allActiveCls = yr === null ? ' qcag-year-all--active' : '';
+  const dispActiveCls = (yr !== null && yr === dispYear) ? ' qcag-year-disp--active' : '';
+
+  let pageNavHtml = '';
+  if (totalPages > 1) {
+    const from = currentPage * _QCAG_PAGE_SIZE + 1;
+    const to   = Math.min((currentPage + 1) * _QCAG_PAGE_SIZE, total);
+    pageNavHtml = `
+      <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>‹</button>
+      <span class="qcag-page-info">${from}–${to} / ${total}</span>
+      <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>›</button>
+    `;
+  } else if (total > 0) {
+    pageNavHtml = `<span class="qcag-page-info">${total} yêu cầu</span>`;
   }
-  const from = currentPage * _QCAG_PAGE_SIZE + 1;
-  const to   = Math.min((currentPage + 1) * _QCAG_PAGE_SIZE, total);
+
   el.innerHTML = `
-    <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>‹</button>
-    <span class="qcag-page-info">${from}–${to} / ${total}</span>
-    <button class="qcag-page-btn" onclick="qcagDesktopGoToPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>›</button>
+    <div class="qcag-year-wrap">
+      <button class="qcag-year-btn" id="qcagYearBtn" onclick="qcagDesktopYearBtnToggle()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span id="qcagYearBtnLabel">${escapeHtml(yearLabel)}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+      </button>
+      <div class="qcag-year-dropup hidden" id="qcagYearDropup">
+        <div class="qcag-year-dropup-head">Chọn Năm <span class="qcag-year-sel-ind">${yr !== null ? 'đang chọn ' + yr : 'đang xem tất cả'}</span></div>
+        <button class="qcag-year-all${allActiveCls}" onclick="qcagDesktopSetYearFilter(null)">Hiển thị tất cả</button>
+        <div class="qcag-year-picker">
+          <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(1)">◀</button>
+          <div class="qcag-year-viewport">
+            <div class="qcag-year-disp${dispActiveCls}" id="qcagYearDisp" onclick="qcagDesktopApplyDropupYear()" title="Nhấn để chọn năm này">${dispYear}</div>
+          </div>
+          <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(-1)">▶</button>
+        </div>
+      </div>
+    </div>
+    <div class="qcag-page-nav">${pageNavHtml}</div>
   `;
+
+  // Bind outside-click handler once per pagination element lifetime
+  if (!el._yearOutsideClick) {
+    el._yearOutsideClick = (e) => {
+      const dropupEl = document.getElementById('qcagYearDropup');
+      const btnEl    = document.getElementById('qcagYearBtn');
+      if (dropupEl && btnEl &&
+          !dropupEl.classList.contains('hidden') &&
+          !dropupEl.contains(e.target) &&
+          !btnEl.contains(e.target)) {
+        dropupEl.classList.add('hidden');
+      }
+    };
+    document.addEventListener('click', el._yearOutsideClick);
+  }
+}
+
+function qcagDesktopYearBtnToggle() {
+  const dropup = document.getElementById('qcagYearDropup');
+  if (!dropup) return;
+  if (dropup.classList.contains('hidden')) {
+    // Sync picker to current filter year (fallback to current year)
+    _qcagDesktopYearDropupYear = _qcagDesktopYearFilter !== null
+      ? _qcagDesktopYearFilter
+      : new Date().getFullYear();
+    const dispEl = document.getElementById('qcagYearDisp');
+    if (dispEl) {
+      dispEl.textContent = _qcagDesktopYearDropupYear;
+      if (_qcagDesktopYearFilter !== null && _qcagDesktopYearDropupYear === _qcagDesktopYearFilter) {
+        dispEl.classList.add('qcag-year-disp--active');
+      } else {
+        dispEl.classList.remove('qcag-year-disp--active');
+      }
+    }
+    dropup.classList.remove('hidden');
+  } else {
+    dropup.classList.add('hidden');
+  }
+}
+
+function qcagDesktopSetYearFilter(year) {
+  _qcagDesktopYearFilter = year;
+  _qcagDesktopYearDropupYear = year !== null ? year : new Date().getFullYear();
+  _qcagDesktopListPage = 0;
+  const dropup = document.getElementById('qcagYearDropup');
+  if (dropup) dropup.classList.add('hidden');
+  renderQCAGDesktopList();
+}
+
+function qcagDesktopApplyDropupYear() {
+  qcagDesktopSetYearFilter(_qcagDesktopYearDropupYear);
+}
+
+function qcagDesktopYearPickerStep(dir) {
+  const dispEl = document.getElementById('qcagYearDisp');
+  if (!dispEl) return;
+  // Out animation: when stepping forward (dir>0) we slide current out to left,
+  // and new value should slide in from right. Reverse for stepping backward.
+  const outCls = dir < 0 ? 'qcag-year-slide-out-right' : 'qcag-year-slide-out-left';
+  const inCls  = dir < 0 ? 'qcag-year-slide-in-left'  : 'qcag-year-slide-in-right';
+
+  dispEl.classList.add(outCls);
+  const afterOut = () => {
+    dispEl.removeEventListener('animationend', afterOut);
+    dispEl.classList.remove(outCls);
+    _qcagDesktopYearDropupYear += dir;
+    dispEl.textContent = _qcagDesktopYearDropupYear;
+    if (_qcagDesktopYearFilter !== null && _qcagDesktopYearDropupYear === _qcagDesktopYearFilter) {
+      dispEl.classList.add('qcag-year-disp--active');
+    } else {
+      dispEl.classList.remove('qcag-year-disp--active');
+    }
+    // play incoming animation from opposite side
+    dispEl.classList.add(inCls);
+    const afterIn = () => {
+      dispEl.removeEventListener('animationend', afterIn);
+      dispEl.classList.remove(inCls);
+    };
+    dispEl.addEventListener('animationend', afterIn);
+  };
+  dispEl.addEventListener('animationend', afterOut);
+}
+
+// Delete request from desktop list (only allowed for non-completed requests)
+async function qcagDesktopDeleteRequest(backendId) {
+  try {
+    const req = (allRequests || []).find(r => r.__backendId === backendId);
+    if (!req) { showToast('Không tìm thấy yêu cầu'); return; }
+    const statusBadge = qcagDesktopStatusBadge(req);
+    if (statusBadge && statusBadge.cls === 'done') {
+      showToast('Không thể xóa request đã hoàn thành');
+      return;
+    }
+    const confirmed = window.confirm('Bạn có chắc muốn xóa yêu cầu này?');
+    if (!confirmed) return;
+
+    if (window.dataSdk) {
+      const res = await window.dataSdk.delete(req);
+      if (res && res.isOk) {
+        showToast('Đã xóa yêu cầu');
+      } else {
+        showToast('Lỗi khi xóa yêu cầu');
+      }
+    } else {
+      // local fallback
+      const idx = allRequests.findIndex(r => r.__backendId === backendId);
+      if (idx !== -1) {
+        allRequests.splice(idx, 1);
+        try { saveAllRequestsToStorage(); } catch (e) {}
+        showToast('Đã xóa yêu cầu');
+      }
+    }
+
+    // Update UI
+    try { _qcagRequestsVersion += 1; } catch (e) {}
+    if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+    if (typeof renderRequestList === 'function') renderRequestList();
+    if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+      currentDetailRequest = null;
+    }
+  } catch (e) {
+    console.warn('qcagDesktopDeleteRequest error', e);
+    showToast('Lỗi khi xóa yêu cầu');
+  }
 }
 
 async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
@@ -1714,6 +1949,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   currentDetailRequest = request;
   if (!keepPendingComment) _qcagDesktopPendingCommentImages = [];
 
+  // Save current scroll before re-render so list doesn't jump to top
+  const _listForScroll = document.getElementById('qcagDesktopRequestList');
+  _qcagDesktopListScrollSave = _listForScroll ? (_listForScroll.scrollTop || 0) : 0;
   renderQCAGDesktopList();
 
   const detailEl = document.getElementById('qcagDesktopDetail');
@@ -1791,19 +2029,23 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                       const oldImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(request.oldContentImages, []));
                       const oldExtra = request.oldContentExtra || '';
                       if (isOld) {
+                        // Show "Nội dung cũ" badge + any supplementary text
+                        let html = '<div class="qcag-old-content-label">Nội dung cũ</div>';
+                        // Backward-compat: still render images if old requests have them
                         if (oldImgs.length > 0) {
-                            const encOld = encodeURIComponent(JSON.stringify(oldImgs));
-                            const firstOld = oldImgs[0];
-                            const moreOld = oldImgs.length > 1 ? (oldImgs.length - 1) : 0;
-                            let galleryHtml = '';
-                            if (oldImgs.length === 1) {
-                              galleryHtml = `<div class="qcag-gallery-rep" onclick="showImageFull(this.querySelector('img').src,false)"><img src="${firstOld}" alt="nội dung cũ"></div>`;
-                            } else {
-                              galleryHtml = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${encOld}',0)"><img src="${firstOld}" alt="nội dung cũ"><div class="qcag-img-more">${moreOld > 0 ? '+' + moreOld : ''}</div></div>`;
-                            }
-                            return galleryHtml + (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Nội dung bổ sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : '');
+                          const encOld = encodeURIComponent(JSON.stringify(oldImgs));
+                          const firstOld = oldImgs[0];
+                          const moreOld = oldImgs.length > 1 ? (oldImgs.length - 1) : 0;
+                          if (oldImgs.length === 1) {
+                            html += `<div class="qcag-gallery-rep" onclick="showImageFull(this.querySelector('img').src,false)"><img src="${firstOld}" alt="nội dung cũ"></div>`;
+                          } else {
+                            html += `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${encOld}',0)"><img src="${firstOld}" alt="nội dung cũ"><div class="qcag-img-more">${moreOld > 0 ? '+' + moreOld : ''}</div></div>`;
                           }
-                        return (oldExtra ? `<div class="qcag-supplement"><div class="qcag-supplement-title">Nội dung bổ sung:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>` : `<div class="qcag-detail-muted">Chưa có ảnh nội dung cũ</div>`);
+                        }
+                        if (oldExtra) {
+                          html += `<div class="qcag-supplement"><div class="qcag-supplement-title">Yêu cầu thêm:</div><div class="qcag-content-pre">${escapeHtml(oldExtra)}</div></div>`;
+                        }
+                        return html;
                       }
                       return request.content ? `<div class="qcag-content-pre">${escapeHtml(request.content)}</div>` : `<div class="qcag-detail-muted">Không có mô tả</div>`;
                     } catch (e) { return `<div class="qcag-detail-muted">Không có mô tả</div>`; }
@@ -2101,80 +2343,25 @@ async function qcagDesktopMarkProcessed() {
   };
   const persistOk = await qcagDesktopPersistRequest(updated, isPendingEdit ? 'Đã xác nhận chỉnh sửa' : 'Đã hoàn thành');
 
-  // Fire push notification to Sale Heineken (best-effort, never blocks UI)
+  // Push notification to Sale Heineken is now handled EXCLUSIVELY by the backend
+  // in the PATCH /api/ks/requests/:id handler (sendKsPush). This avoids duplicate
+  // push notifications that were being sent from both frontend and backend.
+  // The backend already has the correct logic to determine first-MQ vs edit-confirm
+  // and sends push with proper TK code numbering.
+  // Show a brief confirmation toast from the frontend side (best-effort).
   if (persistOk) {
     try {
-      let requesterPhone = null;
       let requesterSaleCode = null;
-      let requesterObj = {};
       try {
-        const req = updated.requester;
-        requesterObj = typeof req === 'string' ? JSON.parse(req) : (req || {});
-        requesterPhone = requesterObj.phone || null;
-        requesterSaleCode = requesterObj.saleCode || null;
-        // Normalize phone
-        if (requesterPhone) {
-          requesterPhone = String(requesterPhone).replace(/[\s\-\.]+/g, '');
-          if (requesterPhone.startsWith('+84')) requesterPhone = '0' + requesterPhone.slice(3);
-          else if (requesterPhone.startsWith('84') && requesterPhone.length >= 10) requesterPhone = '0' + requesterPhone.slice(2);
-        }
+        const reqObj = typeof updated.requester === 'string' ? JSON.parse(updated.requester) : (updated.requester || {});
+        requesterSaleCode = reqObj.saleCode || null;
       } catch (_) {}
-
-      console.log('[push/done] requester saleCode:', requesterSaleCode, 'phone:', requesterPhone);
-
-      const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
-      const tkCode = updated.__backendId || updated.outletCode || '';
-      const pushTitle = isPendingEdit ? 'QCAG — Đã hoàn thành chỉnh sửa' : 'QCAG — Đã có mẫu quảng cáo (MQ)';
-      const pushBody = isPendingEdit
-        ? `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng mở app để xem.`
-        : `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng mở app để xem.`;
-
-      // Build payload: prefer saleCode → phone fallback → role=heineken broadcast
-      const pushPayload = {
-        title: pushTitle,
-        body: pushBody,
-        data: { backendId: updated.__backendId },
-      };
-      if (requesterSaleCode) {
-        pushPayload.saleCode = requesterSaleCode;
-        // Also include phone so send.js can fallback to phone lookup
-        // if subscription has no sale_code (e.g. older subscriptions)
-        if (requesterPhone) pushPayload.phone = requesterPhone;
-      } else if (requesterPhone) {
-        pushPayload.phone = requesterPhone;
-      } else {
-        // No identifier in old request → broadcast to all Heineken
-        console.warn('[push/done] no saleCode or phone in requester, falling back to role=heineken broadcast');
-        pushPayload.role = 'heineken';
-      }
-
-      // Delay push toast so it doesn't overlap with 'Đã hoàn thành' toast (2.5s)
       setTimeout(function() {
-        fetch('/api/ks/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pushPayload),
-        }).then(function(r) {
-          return r.json();
-        }).then(function(result) {
-          const target = pushPayload.saleCode || pushPayload.phone || pushPayload.role || '?';
-          console.log('[push/done] result:', JSON.stringify(result), '| target:', target);
-          if (result && result.ok && result.sent > 0) {
-            showToast('✓ Đã gửi thông báo đến Sale [' + target + '] (' + String(result.sent) + ' thiết bị)', 4000);
-          } else if (result && result.sent === 0) {
-            console.warn('[push/done] no subscriptions found, target:', target);
-            showToast('⚠ Sale [' + target + '] chưa đăng ký nhận thông báo. Mời mở lại app.', 4000);
-          } else if (!result || !result.ok) {
-            console.warn('[push/done] API error:', JSON.stringify(result));
-            showToast('⚠ Lỗi gửi thông báo: ' + (result && result.error ? result.error : 'unknown'), 4000);
-          }
-        }).catch(function(e) {
-          console.warn('[push/send] fetch error:', e);
-          showToast('⚠ Không thể kết nối để gửi thông báo.', 4000);
-        });
+        const target = requesterSaleCode || '?';
+        showToast('✓ Đã hoàn thành — thông báo sẽ được gửi tự động đến Sale [' + target + ']', 4000);
       }, 2800);
     } catch (e) {
-      console.warn('[push] markDone push error (non-fatal):', e);
+      // non-fatal
     }
   }
 }
@@ -2271,6 +2458,71 @@ function qcagOpenGalleryEncoded(encoded, startIndex) {
   } catch (e) { console.error('qcagOpenGalleryEncoded', e); }
 }
 
+async function qcagCopyImageToClipboard(src, imgElement, btn) {
+  // If called without imgElement but with btn (for backward compatibility)
+  if (btn === undefined && imgElement && imgElement.tagName !== 'IMG') {
+    btn = imgElement;
+    imgElement = null;
+  }
+
+  try {
+    if (!navigator.clipboard || !window.ClipboardItem) {
+      if (typeof showToast === 'function') {
+        showToast('Trình duyệt không hỗ trợ copy ảnh. Yêu cầu Desktop HTTPS hoặc localhost.');
+      }
+      return;
+    }
+
+    if (btn) btn.textContent = '...';
+
+    // To prevent "Tainted canvases" error from cross origin images, we must fetch
+    // the image explicitly with anonymous CORS mode, AND append a cache buster so
+    // the browser doesn't return a cached opaque (non-CORS) reply.
+    const blob = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // Request CORS headers
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width || 100;
+          canvas.height = img.naturalHeight || img.height || 100;
+          canvas.getContext('2d').drawImage(img, 0, 0); // No longer tainted if CORS passes
+          
+          canvas.toBlob(b => {
+            if (b) resolve(b);
+            else reject(new Error('Tạo dữ liệu ảnh thất bại (toBlob trả về null).'));
+          }, 'image/png');
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        reject(new Error('Bảo mật: GCS không cho phép gọi (CORS lỗi). Vui lòng chuột phải -> Copy image.'));
+      };
+      
+      const sep = src.includes('?') ? '&' : '?';
+      img.src = src + sep + '_nocache=' + Date.now();
+    });
+
+    await navigator.clipboard.write([
+      new ClipboardItem({ 'image/png': blob })
+    ]);
+
+    if (btn) btn.textContent = '✓ Đã copy';
+    setTimeout(() => { if (btn) btn.textContent = '⎘ Copy'; }, 1800);
+  } catch (e) {
+    console.warn('Image copy failed:', e);
+    const msg = e.message || '';
+    if (typeof showToast === 'function') {
+      showToast(msg.includes('Tainted') || msg.includes('CORS') 
+        ? 'Lỗi bảo mật trình duyệt, vui lòng "Chuột phải -> Copy image"'
+        : 'Lỗi khi copy ảnh: ' + msg);
+    }
+    if (btn) btn.textContent = '✗ Lỗi';
+    setTimeout(() => { if (btn) btn.textContent = '⎘ Copy'; }, 1800);
+  }
+}
+// qcagCopyImageToClipboard removed — copy-image feature disabled
 function qcagOpenGallery(images, startIndex) {
   qcagCloseGallery();
   const wrap = document.createElement('div');
@@ -2285,7 +2537,7 @@ function qcagOpenGallery(images, startIndex) {
 
   const thumbs = document.createElement('div');
   thumbs.className = 'qcag-gallery-thumbs';
-    images.forEach((src, i) => {
+  images.forEach((src, i) => {
     const t = document.createElement('div');
     t.className = 'qcag-gallery-thumb';
     const img = document.createElement('img');
@@ -2293,6 +2545,7 @@ function qcagOpenGallery(images, startIndex) {
     img.alt = 'Ảnh ' + (i + 1);
     img.onclick = function (e) { e.stopPropagation(); try { showImageFull(src, false); } catch (err) { console.error(err); } };
     t.appendChild(img);
+    // Copy button removed — feature disabled per request
     thumbs.appendChild(t);
   });
 
@@ -2319,4 +2572,562 @@ function qcagCloseGallery() {
   const k = g._qcag_key;
   if (k) document.removeEventListener('keydown', k);
   g.remove();
+}
+
+/* =====================================================
+   NAV SIDEBAR & PANELS
+   ===================================================== */
+
+function qcagToggleNavSidebar() {
+  const sidebar = document.getElementById('qcagNavSidebar');
+  const backdrop = document.getElementById('qcagNavBackdrop');
+  if (!sidebar) return;
+  const isOpen = sidebar.classList.contains('is-open');
+  if (isOpen) {
+    sidebar.classList.remove('is-open');
+    backdrop && backdrop.classList.add('hidden');
+  } else {
+    sidebar.classList.add('is-open');
+    backdrop && backdrop.classList.remove('hidden');
+  }
+}
+
+function qcagCloseNavSidebar() {
+  const sidebar = document.getElementById('qcagNavSidebar');
+  const backdrop = document.getElementById('qcagNavBackdrop');
+  sidebar && sidebar.classList.remove('is-open');
+  backdrop && backdrop.classList.add('hidden');
+}
+
+let _qcagNavMapInstance = null;
+let _qcagNavMapMarkers = []; // [{marker, tooltipHtml, data}]
+let _qcagNavMapSearchQ = '';
+let _qcagNavTooltipsVisible = false;
+
+function qcagNavShowView(viewName) {
+  qcagCloseNavSidebar();
+  // Hide all panels first
+  ['qcagNavListPanel', 'qcagNavMapPanel', 'qcagNavStatsPanel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  if (viewName === 'list') {
+    const panel = document.getElementById('qcagNavListPanel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    _qcagNavListSearchQ = '';
+    _qcagNavListCurrentPage = 1;
+    _qcagNavListSelected.clear();
+    const si = document.getElementById('qcagNavListSearch');
+    if (si) si.value = '';
+    qcagNavRenderList();
+  } else if (viewName === 'map') {
+    const panel = document.getElementById('qcagNavMapPanel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    _qcagNavMapSearchQ = '';
+    const si = document.getElementById('qcagNavMapSearch');
+    if (si) si.value = '';
+    // Defer so the panel is visible before Leaflet measures the container
+    setTimeout(() => qcagNavRenderMap(), 80);
+  } else if (viewName === 'stats') {
+    const panel = document.getElementById('qcagNavStatsPanel');
+    if (panel) panel.classList.remove('hidden');
+  }
+}
+
+function qcagNavClosePanel() {
+  ['qcagNavListPanel', 'qcagNavMapPanel', 'qcagNavStatsPanel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+}
+
+// ---------- LIST VIEW -----------------------------------
+const _QCAG_LIST_PAGE_SIZE = 25;
+let _qcagNavListSearchQ = '';
+let _qcagNavListStatusFilter = ''; // empty = all
+let _qcagNavListCurrentPage = 1;
+let _qcagNavListFiltered = []; // filtered rows cache
+let _qcagNavListSelected = new Set(); // selected __backendId or indices
+let _qcagNavListYearFilter = new Date().getFullYear(); // null = tất cả các năm
+let _qcagNavListYearDropupYear = new Date().getFullYear();
+
+function qcagNavListSetStatusFilter(btn, statusCls) {
+  _qcagNavListStatusFilter = statusCls;
+  _qcagNavListCurrentPage = 1;
+  _qcagNavListSelected.clear();
+  // update pill active states
+  const bar = document.getElementById('qcagNavListFilterBar');
+  if (bar) bar.querySelectorAll('.qcag-nav-filter-pill').forEach(b => b.classList.toggle('active', b.dataset.status === statusCls));
+  qcagNavRenderList();
+}
+
+function qcagNavListOnSearch(val) {
+  _qcagNavListSearchQ = (val || '').toLowerCase().trim();
+  _qcagNavListCurrentPage = 1;
+  _qcagNavListSelected.clear();
+  _qcagNavListRender();
+}
+
+function qcagNavListToggleAll(checked) {
+  const page = _qcagNavListGetPage();
+  page.forEach(({ r }) => {
+    const key = r.__backendId || JSON.stringify(r);
+    if (checked) _qcagNavListSelected.add(key);
+    else _qcagNavListSelected.delete(key);
+  });
+  _qcagNavListRenderBody();
+}
+
+function qcagNavListToggleRow(key, checked) {
+  if (checked) _qcagNavListSelected.add(key);
+  else _qcagNavListSelected.delete(key);
+  _qcagNavListRenderBody();
+}
+
+function qcagNavListToggleRowByKey(key) {
+  if (_qcagNavListSelected.has(key)) _qcagNavListSelected.delete(key);
+  else _qcagNavListSelected.add(key);
+  _qcagNavListRenderBody();
+}
+
+function qcagNavListClearSelection() {
+  _qcagNavListSelected.clear();
+  _qcagNavListRenderBody();
+}
+
+function qcagNavListGoPage(page) {
+  _qcagNavListCurrentPage = page;
+  _qcagNavListRenderBody();
+  _qcagNavListRenderPagination();
+}
+
+function _qcagNavListGetPage() {
+  const start = (_qcagNavListCurrentPage - 1) * _QCAG_LIST_PAGE_SIZE;
+  return _qcagNavListFiltered.slice(start, start + _QCAG_LIST_PAGE_SIZE);
+}
+
+function _qcagNavListBuildStatus(r) {
+  // Check "Chờ khảo sát" tag first (mirrors card render logic)
+  const stdTags = Array.isArray(r.standardTags) ? r.standardTags : (typeof assignStandardTags === 'function' ? (assignStandardTags(r) || []) : []);
+  if (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1) {
+    return { label: 'Chờ khảo sát', cls: 'survey' };
+  }
+  return qcagDesktopStatusBadge(r);
+}
+
+function qcagNavRenderList() {
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  const q = _qcagNavListSearchQ;
+
+  const sf = _qcagNavListStatusFilter;
+  const yf = _qcagNavListYearFilter;
+
+  _qcagNavListFiltered = reqs
+    .map((r, originalIdx) => ({ r, idx: originalIdx }))
+    .filter(({ r }) => {
+      // year filter
+      if (yf !== null) {
+        try { if (new Date(r.createdAt || 0).getFullYear() !== yf) return false; }
+        catch(e) { return false; }
+      }
+      // text search
+      if (q) {
+        const requester = qcagDesktopParseJson(r.requester, {});
+        const textMatch = (
+          String(requester.saleCode  || '').toLowerCase().includes(q) ||
+          String(requester.saleName  || requester.phone || '').toLowerCase().includes(q) ||
+          String(requester.ssName    || '').toLowerCase().includes(q) ||
+          String(requester.region    || '').toLowerCase().includes(q) ||
+          String(r.outletCode        || '').toLowerCase().includes(q) ||
+          String(r.outletName        || '').toLowerCase().includes(q) ||
+          _qcagNavListGetBrands(r).toLowerCase().includes(q)
+        );
+        if (!textMatch) return false;
+      }
+      // status filter
+      if (sf) {
+        const status = _qcagNavListBuildStatus(r);
+        if (status.cls !== sf) return false;
+      }
+      return true;
+    });
+
+  const countEl = document.getElementById('qcagNavListCount');
+  if (countEl) {
+    const isFiltered = q || sf || yf !== null;
+    countEl.textContent = isFiltered
+      ? `${_qcagNavListFiltered.length} / ${reqs.length} yêu cầu`
+      : `${reqs.length} yêu cầu`;
+  }
+
+  _qcagNavListRenderBody();
+  _qcagNavListRenderPagination();
+}
+
+function _qcagNavListGetBrands(r) {
+  const items = qcagDesktopParseJson(r.items, []);
+  const brands = [...new Set((Array.isArray(items) ? items : []).map(it => it && it.brand).filter(Boolean))];
+  return brands.join(', ');
+}
+
+function _qcagNavListRenderBody() {
+  const tbody = document.getElementById('qcagNavListBody');
+  if (!tbody) return;
+
+  const page = _qcagNavListGetPage();
+  const startIdx = (_qcagNavListCurrentPage - 1) * _QCAG_LIST_PAGE_SIZE;
+
+  if (page.length === 0) {
+    const colspan = 12;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;padding:32px;color:var(--text-soft,#9ca3af)">Không có dữ liệu</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = page.map(({ r, idx }) => {
+    const requester = qcagDesktopParseJson(r.requester, {});
+    const items = qcagDesktopParseJson(r.items, []);
+    const itemArr = Array.isArray(items) ? items : [];
+    const totalItems = itemArr.length;
+    const brandText = escapeHtml(_qcagNavListGetBrands(r) || '-');
+    const status = _qcagNavListBuildStatus(r);
+    const key = r.__backendId || JSON.stringify(r);
+    const isSelected = _qcagNavListSelected.has(key);
+    const hasGps = !!(r.outletLat && r.outletLng);
+    const gpsBadge = hasGps
+      ? `<a class="qcag-nav-gps-badge has-gps" href="https://www.google.com/maps?q=${parseFloat(r.outletLat)},${parseFloat(r.outletLng)}" target="_blank" rel="noopener" title="Mở Google Maps">📍 Xem map</a>`
+      : `<span class="qcag-nav-gps-badge no-gps">Không có</span>`;
+
+    return `<tr class="${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}" onclick="qcagNavListToggleRowByKey('${escapeHtml(key)}')">
+      <td>${idx + 1}</td>
+      <td title="${escapeHtml(requester.saleCode || '')}">${escapeHtml(requester.saleCode || '-')}</td>
+      <td>${escapeHtml(requester.region || '-')}</td>
+      <td title="${escapeHtml(requester.saleName || requester.phone || '')}">${escapeHtml(requester.saleName || requester.phone || '-')}</td>
+      <td title="${escapeHtml(requester.ssName || '')}">${escapeHtml(requester.ssName || '-')}</td>
+      <td>${escapeHtml(r.outletCode || '-')}</td>
+      <td title="${escapeHtml(r.outletName || '')}">${escapeHtml(r.outletName || '-')}</td>
+      <td title="${brandText}">${brandText}</td>
+      <td style="text-align:center">${totalItems}</td>
+      <td><span class="qcag-nav-status-badge ${escapeHtml(status.cls)}">${escapeHtml(status.label)}</span></td>
+      <td>${gpsBadge}</td>
+    </tr>`;
+  }).join('');
+
+  // no check-all checkbox anymore
+}
+
+function _qcagNavListRenderPagination() {
+  const el = document.getElementById('qcagNavListPagination');
+  if (!el) return;
+  const total = _qcagNavListFiltered.length;
+  const totalPages = Math.max(1, Math.ceil(total / _QCAG_LIST_PAGE_SIZE));
+  const cur = _qcagNavListCurrentPage;
+
+  const yr = _qcagNavListYearFilter;
+  const yearLabel = yr !== null ? String(yr) : 'Tất cả';
+  const dispYear = _qcagNavListYearDropupYear;
+  const allActiveCls = yr === null ? ' qcag-year-all--active' : '';
+  const dispActiveCls = (yr !== null && yr === dispYear) ? ' qcag-year-disp--active' : '';
+  const yrSelText = yr !== null ? 'đang chọn ' + yr : 'đang xem tất cả';
+
+  el.innerHTML = `
+    <div class="qcag-year-wrap">
+      <button class="qcag-year-btn" id="qcagNavListYearBtn" onclick="qcagNavListYearBtnToggle()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <span id="qcagNavListYearBtnLabel">${escapeHtml(yearLabel)}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      <div class="qcag-year-dropup hidden" id="qcagNavListYearDropup">
+        <div class="qcag-year-dropup-head">Chọn Năm <span class="qcag-year-sel-ind" id="qcagNavListYearSel">${yrSelText}</span></div>
+        <button class="qcag-year-all${allActiveCls}" onclick="qcagNavListSetYearFilter(null)">Hiển thị tất cả</button>
+        <div class="qcag-year-picker">
+          <button class="qcag-year-nav" onclick="qcagNavListYearPickerStep(1)">◄</button>
+          <div class="qcag-year-viewport">
+            <div class="qcag-year-disp${dispActiveCls}" id="qcagNavListYearDisp" onclick="qcagNavListApplyYear()" title="Nhấn để chọn năm này">${dispYear}</div>
+          </div>
+          <button class="qcag-year-nav" onclick="qcagNavListYearPickerStep(-1)">►</button>
+        </div>
+      </div>
+    </div>
+    <button class="qcag-nav-page-btn" onclick="qcagNavListGoPage(${cur - 1})" ${cur === 1 ? 'disabled' : ''}>◀</button>
+    <div class="qcag-nav-page-jump">
+      <input type="number" class="qcag-nav-page-input" min="1" max="${totalPages}" value="${cur}"
+        onchange="qcagNavListGoPageInput(this)"
+        onkeydown="if(event.key==='Enter'){qcagNavListGoPageInput(this);this.blur()}"
+      >&nbsp;/ ${totalPages}
+    </div>
+    <button class="qcag-nav-page-btn" onclick="qcagNavListGoPage(${cur + 1})" ${cur === totalPages ? 'disabled' : ''}>▶</button>
+    <span class="qcag-nav-page-info">&nbsp;·&nbsp; ${total} yêu cầu</span>
+  `;
+
+  if (!el._yearOutsideClick) {
+    el._yearOutsideClick = (e) => {
+      const dropupEl = document.getElementById('qcagNavListYearDropup');
+      const btnEl = document.getElementById('qcagNavListYearBtn');
+      if (dropupEl && btnEl &&
+          !dropupEl.classList.contains('hidden') &&
+          !dropupEl.contains(e.target) &&
+          !btnEl.contains(e.target)) {
+        dropupEl.classList.add('hidden');
+      }
+    };
+    document.addEventListener('click', el._yearOutsideClick);
+  }
+}
+
+function qcagNavListGoPageInput(input) {
+  const totalPages = Math.max(1, Math.ceil(_qcagNavListFiltered.length / _QCAG_LIST_PAGE_SIZE));
+  let page = parseInt(input.value, 10);
+  if (isNaN(page)) page = _qcagNavListCurrentPage;
+  page = Math.max(1, Math.min(page, totalPages));
+  input.value = page;
+  qcagNavListGoPage(page);
+}
+
+function qcagNavListYearBtnToggle() {
+  const dropup = document.getElementById('qcagNavListYearDropup');
+  if (!dropup) return;
+  if (dropup.classList.contains('hidden')) {
+    _qcagNavListYearDropupYear = _qcagNavListYearFilter !== null
+      ? _qcagNavListYearFilter
+      : new Date().getFullYear();
+    const dispEl = document.getElementById('qcagNavListYearDisp');
+    if (dispEl) {
+      dispEl.textContent = _qcagNavListYearDropupYear;
+      dispEl.classList.toggle('qcag-year-disp--active', _qcagNavListYearFilter !== null && _qcagNavListYearDropupYear === _qcagNavListYearFilter);
+    }
+    dropup.classList.remove('hidden');
+  } else {
+    dropup.classList.add('hidden');
+  }
+}
+
+function qcagNavListSetYearFilter(year) {
+  _qcagNavListYearFilter = year;
+  _qcagNavListYearDropupYear = year !== null ? year : new Date().getFullYear();
+  _qcagNavListCurrentPage = 1;
+  const dropup = document.getElementById('qcagNavListYearDropup');
+  if (dropup) dropup.classList.add('hidden');
+  qcagNavRenderList();
+}
+
+function qcagNavListApplyYear() {
+  qcagNavListSetYearFilter(_qcagNavListYearDropupYear);
+}
+
+function qcagNavListYearPickerStep(dir) {
+  _qcagNavListYearDropupYear += dir;
+  const dispEl = document.getElementById('qcagNavListYearDisp');
+  if (dispEl) {
+    dispEl.textContent = _qcagNavListYearDropupYear;
+    dispEl.classList.toggle('qcag-year-disp--active', _qcagNavListYearFilter !== null && _qcagNavListYearDropupYear === _qcagNavListYearFilter);
+  }
+  const selEl = document.getElementById('qcagNavListYearSel');
+  if (selEl) selEl.textContent = _qcagNavListYearFilter !== null ? 'đang chọn ' + _qcagNavListYearFilter : 'đang xem tất cả';
+}
+
+function qcagNavListExportCSV() {
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  // Use selected rows if any, else all filtered
+  let exportList;
+  if (_qcagNavListSelected.size > 0) {
+    exportList = _qcagNavListFiltered.filter(({ r }) => _qcagNavListSelected.has(r.__backendId || JSON.stringify(r)));
+  } else {
+    exportList = _qcagNavListFiltered;
+  }
+  if (exportList.length === 0) { showToast && showToast('Không có dữ liệu để xuất'); return; }
+
+  const header = ['STT', 'Mã TK', 'Khu vực', 'Tên Sale', 'Tên SS', 'Outlet Code', 'Tên Outlet', 'Brand', 'SL hạng mục', 'Trạng thái', 'Định vị (Google Maps)'];
+  const csvRows = [header];
+
+  exportList.forEach(({ r, idx }) => {
+    const requester = qcagDesktopParseJson(r.requester, {});
+    const items = qcagDesktopParseJson(r.items, []);
+    const itemArr = Array.isArray(items) ? items : [];
+    const brands = [...new Set(itemArr.map(it => it && it.brand).filter(Boolean))].join(', ');
+    const status = _qcagNavListBuildStatus(r);
+    const gpsUrl = (r.outletLat && r.outletLng)
+      ? `https://www.google.com/maps?q=${parseFloat(r.outletLat)},${parseFloat(r.outletLng)}`
+      : '';
+    csvRows.push([
+      idx + 1,
+      requester.saleCode || '',
+      requester.region || '',
+      requester.saleName || requester.phone || '',
+      requester.ssName || '',
+      r.outletCode || '',
+      r.outletName || '',
+      brands || '-',
+      itemArr.length,
+      status.label,
+      gpsUrl
+    ]);
+  });
+
+  const csvContent = '\uFEFF' + csvRows.map(row =>
+    row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',')
+  ).join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'qcag-danh-sach-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+}
+
+// ---------- MAP VIEW ------------------------------------
+function qcagNavMapOnSearch(val) {
+  _qcagNavMapSearchQ = (val || '').toLowerCase().trim();
+  _qcagNavApplyMapFilter();
+}
+
+function _qcagNavApplyMapFilter() {
+  const q = _qcagNavMapSearchQ;
+  const countEl = document.getElementById('qcagNavMapCount');
+  let visible = 0;
+  _qcagNavMapMarkers.forEach(({ marker, data }) => {
+    const show = !q ||
+      data.outletCode.includes(q) ||
+      data.outletName.includes(q) ||
+      data.saleName.includes(q) ||
+      data.saleCode.includes(q) ||
+      data.ssName.includes(q) ||
+      data.region.includes(q);
+    if (show) {
+      if (!_qcagNavMapInstance.hasLayer(marker)) marker.addTo(_qcagNavMapInstance);
+      visible++;
+    } else {
+      if (_qcagNavMapInstance.hasLayer(marker)) _qcagNavMapInstance.removeLayer(marker);
+    }
+  });
+  if (countEl) {
+    const total = _qcagNavMapMarkers.length;
+    countEl.textContent = q ? `${visible} / ${total} điểm` : `${total} điểm có định vị`;
+  }
+}
+
+function qcagNavRenderMap() {
+  const container = document.getElementById('qcagNavMapContainer');
+  if (!container) return;
+
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  const points = reqs.filter(r => r.outletLat && r.outletLng);
+  const countEl = document.getElementById('qcagNavMapCount');
+  if (countEl) countEl.textContent = points.length + ' điểm có định vị';
+
+  // Leaflet guard
+  if (typeof L === 'undefined') {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#9ca3af">Leaflet chưa được tải</div>';
+    return;
+  }
+
+  // Destroy previous instance
+  if (_qcagNavMapInstance) {
+    try { _qcagNavMapInstance.remove(); } catch(e) {}
+    _qcagNavMapInstance = null;
+  }
+  _qcagNavMapMarkers = [];
+  container.innerHTML = '';
+
+  const defaultCenter = [10.3, 105.5];
+  const map = L.map(container, { center: defaultCenter, zoom: 8 });
+  _qcagNavMapInstance = map;
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    maxZoom: 18
+  }).addTo(map);
+
+  const latlngs = [];
+  points.forEach(r => {
+    const lat = parseFloat(r.outletLat);
+    const lng = parseFloat(r.outletLng);
+    if (isNaN(lat) || isNaN(lng)) return;
+    latlngs.push([lat, lng]);
+    const requester = qcagDesktopParseJson(r.requester, {});
+    const statusBadge = qcagDesktopStatusBadge(r);
+    const saleName = escapeHtml(requester.saleName || requester.phone || '-');
+    const outletName = escapeHtml(r.outletName || r.outletCode || '-');
+    const outletCode = escapeHtml(r.outletCode || '');
+    const saleCode = escapeHtml(requester.saleCode || '');
+    const ssName = escapeHtml(requester.ssName || '-');
+    const region = escapeHtml(requester.region || '-');
+    const statusLabel = escapeHtml(statusBadge ? statusBadge.label : '-');
+
+    const popupHtml = `
+      <div style="min-width:190px;font-family:inherit">
+        <strong style="font-size:13px">${outletName}</strong><br>
+        <span style="font-size:12px;color:#6b7280">${outletCode}</span><br>
+        <hr style="margin:6px 0;border:none;border-top:1px solid #e5e7eb">
+        <div style="font-size:12px">
+          <div>Sale: <strong>${saleName}</strong></div>
+          <div>Khu vực: <strong>${region}</strong></div>
+          <div>Trạng thái: <strong>${statusLabel}</strong></div>
+        </div>
+      </div>`;
+
+    const tooltipHtml = `
+      <div style="font-family:inherit;font-size:11px;line-height:1.5;max-width:160px;pointer-events:none">
+        <div style="font-weight:700;color:var(--mtt-name,#111827);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${outletName}</div>
+        <div style="color:var(--mtt-sale,#374151);margin-top:1px">${saleName}</div>
+        <div style="color:var(--mtt-region,#6b7280);font-size:10px;margin-top:1px">${region}</div>
+      </div>`;
+
+    const marker = L.marker([lat, lng]).addTo(map).bindPopup(popupHtml);
+    marker.bindTooltip(tooltipHtml, {
+      permanent: _qcagNavTooltipsVisible,
+      direction: 'top',
+      offset: [0, -10],
+      className: 'qcag-map-marker-label'
+    });
+
+    // Store searchable data alongside marker
+    _qcagNavMapMarkers.push({
+      marker,
+      tooltipHtml,
+      data: {
+        outletCode: (r.outletCode || '').toLowerCase(),
+        outletName: (r.outletName || '').toLowerCase(),
+        saleName: (requester.saleName || requester.phone || '').toLowerCase(),
+        saleCode: (requester.saleCode || '').toLowerCase(),
+        ssName: (requester.ssName || '').toLowerCase(),
+        region: (requester.region || '').toLowerCase()
+      }
+    });
+  });
+
+  if (latlngs.length > 0) {
+    map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40] });
+  }
+
+  setTimeout(() => map.invalidateSize(), 100);
+  // Apply any pending search filter
+  if (_qcagNavMapSearchQ) _qcagNavApplyMapFilter();
+  // Sync toggle button state
+  _qcagNavSyncTooltipBtn();
+}
+
+function qcagNavToggleMapTooltips() {
+  _qcagNavTooltipsVisible = !_qcagNavTooltipsVisible;
+  _qcagNavMapMarkers.forEach(({ marker, tooltipHtml }) => {
+    marker.unbindTooltip();
+    marker.bindTooltip(tooltipHtml, {
+      permanent: _qcagNavTooltipsVisible,
+      direction: 'top',
+      offset: [0, -10],
+      className: 'qcag-map-marker-label'
+    });
+  });
+  _qcagNavSyncTooltipBtn();
+}
+
+function _qcagNavSyncTooltipBtn() {
+  const btn = document.getElementById('qcagNavTooltipToggleBtn');
+  if (!btn) return;
+  btn.classList.toggle('is-active', _qcagNavTooltipsVisible);
+  btn.title = _qcagNavTooltipsVisible ? 'Ẩn thẻ thông tin' : 'Hiện thẻ thông tin';
 }

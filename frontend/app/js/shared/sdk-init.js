@@ -38,6 +38,17 @@ async function initHomeAndLoad() {
 }
 
 async function initApp() {
+  // Show cached data instantly so the list is never blank while network loads
+  try {
+    loadAllRequestsFromStorage();
+    updateRequestCount();
+    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+      if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+    }
+    const listEl = document.getElementById('listScreen');
+    if (listEl && listEl.classList.contains('flex')) renderRequestList();
+  } catch (_e) {}
+
   if (window.elementSdk) {
     window.elementSdk.init({
       defaultConfig,

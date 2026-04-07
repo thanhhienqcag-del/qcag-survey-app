@@ -5,6 +5,57 @@
 
 // ── Screen management ────────────────────────────────────────────────
 
+// ── Left-edge swipe-back gesture ────────────────────────────────────
+(function attachEdgeSwipeBack() {
+  let _sx = 0, _sy = 0, _tracking = false;
+  const EDGE = 44; // px from left edge to start tracking
+  const MIN_X = 60; // min horizontal distance to trigger back
+
+  document.addEventListener('touchstart', e => {
+    if (!e.touches || !e.touches[0]) return;
+    const t = e.touches[0];
+    if (t.clientX <= EDGE) {
+      _sx = t.clientX; _sy = t.clientY; _tracking = true;
+    } else {
+      _tracking = false;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!_tracking) return;
+    _tracking = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - _sx;
+    const dy = t.clientY - _sy;
+    if (dx < MIN_X || Math.abs(dy) > Math.abs(dx)) return; // not a right swipe
+
+    // Dismiss zoom overlay first if open
+    if (document.getElementById('dvZoomOverlay')) {
+      try { closeDvZoom(); } catch (ex) {}
+      return;
+    }
+    // Dismiss design modal if open
+    const dmodal = document.getElementById('designModal');
+    if (dmodal && !dmodal.classList.contains('hidden')) {
+      try { closeDesignModal(); } catch (ex) {}
+      return;
+    }
+    // Detail screen → back to list
+    const detail = document.getElementById('detailScreen');
+    if (detail && detail.classList.contains('flex')) {
+      try { backToList(); } catch (ex) {}
+      return;
+    }
+    // List screen → go home
+    const list = document.getElementById('listScreen');
+    if (list && list.classList.contains('flex')) {
+      try { goHome(); } catch (ex) {}
+      return;
+    }
+  }, { passive: true });
+})();
+
 function showScreen(screenId) {
   ['homeScreen', 'newRequestScreen', 'warrantyScreen', 'listScreen', 'notificationsScreen', 'accountScreen', 'detailScreen', 'qcagDesktopScreen'].forEach(id => {
     const el = document.getElementById(id);

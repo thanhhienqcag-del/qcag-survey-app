@@ -827,34 +827,60 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSa
     const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
     const VAPID_SUBJECT = process.env.VAPID_SUBJECT     || 'mailto:admin@qcag.vn';
-    if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+        console.warn('[push] sendKsPush skipped: VAPID keys not configured');
+        return;
+    }
+    // Normalize phone: strip spaces/dashes, convert +84 → 0
+    if (targetPhone) {
+        targetPhone = String(targetPhone).replace(/[\s\-\.]+/g, '');
+        if (targetPhone.startsWith('+84')) targetPhone = '0' + targetPhone.slice(3);
+        else if (targetPhone.startsWith('84') && targetPhone.length >= 10) targetPhone = '0' + targetPhone.slice(2);
+    }
     const webpush = require('web-push');
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
     try {
         let rows;
         if (targetSaleCode) {
-            // Prefer sale_code lookup (most reliable, one-device per sale)
             const sc = String(targetSaleCode).trim();
-            [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE sale_code = ?', [sc]);
+            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE sale_code = ?', [sc]);
             // Fallback to phone if sale_code lookup returns nothing
             if ((!rows || rows.length === 0) && targetPhone) {
-                [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+                [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
             }
         } else if (targetPhone) {
-            [rows] = await pool.query('SELECT subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
         } else {
-            [rows] = await pool.query('SELECT subscription FROM push_subscriptions', []);
+            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions', []);
         }
-        if (!rows || rows.length === 0) return;
+        if (!rows || rows.length === 0) {
+            console.warn('[push] sendKsPush: no subscriptions found for saleCode:', targetSaleCode, 'phone:', targetPhone);
+            return;
+        }
+        console.log('[push] sendKsPush: sending to', rows.length, 'subscription(s), saleCode:', targetSaleCode, 'phone:', targetPhone);
         const payload = JSON.stringify({ title, body, data });
         // TTL = 86400s (24h): push is queued if device offline, not dropped
         const pushOptions = { TTL: 86400 };
-        await Promise.allSettled(rows.map(r => {
+        const results = await Promise.allSettled(rows.map(r => {
             try {
                 const sub = JSON.parse(r.subscription);
-                return webpush.sendNotification(sub, payload, pushOptions);
+                return webpush.sendNotification(sub, payload, pushOptions).catch(async (err) => {
+                    // 410 Gone or 404 = subscription expired/unregistered — remove from DB
+                    if (err && (err.statusCode === 410 || err.statusCode === 404)) {
+                        try {
+                            await pool.query('DELETE FROM push_subscriptions WHERE id = ?', [r.id]);
+                            console.log('[push] removed expired subscription id:', r.id);
+                        } catch (_) {}
+                    } else {
+                        console.warn('[push] sendNotification error:', err && err.statusCode, err && err.body);
+                    }
+                    throw err;
+                });
             } catch (e) { return Promise.resolve(); }
         }));
+        const sent = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+        console.log('[push] sendKsPush result: sent:', sent, 'failed:', failed, 'total:', rows.length);
     } catch (e) {
         console.warn('[push] sendKsPush error:', e && e.message ? e.message : e);
     }
@@ -870,13 +896,21 @@ app.get('/api/push', (req, res) => {
 // ── POST /api/ks/push/subscribe — save or update a device subscription ─
 app.post('/api/ks/push/subscribe', async (req, res) => {
     try {
-        const { subscription, phone, role, saleCode } = req.body || {};
+        let { subscription, phone, role, saleCode } = req.body || {};
         if (!subscription) return res.status(400).json({ ok: false, error: 'missing_subscription' });
+        // Normalize phone: strip spaces/dashes, convert +84 → 0
+        if (phone) {
+            phone = String(phone).replace(/[\s\-\.]+/g, '');
+            if (phone.startsWith('+84')) phone = '0' + phone.slice(3);
+            else if (phone.startsWith('84') && phone.length >= 10) phone = '0' + phone.slice(2);
+        }
         const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
-        // Upsert by endpoint — each browser endpoint is unique
-        const endpoint = typeof subscription === 'object' ? subscription.endpoint : JSON.parse(subStr).endpoint;
+        const subObj = typeof subscription === 'object' ? subscription : JSON.parse(subStr);
+        const endpoint = String(subObj.endpoint || '');
+        if (!endpoint) return res.status(400).json({ ok: false, error: 'invalid_subscription' });
         const sc = saleCode ? String(saleCode).trim() : null;
-        const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpoint.slice(-40) + '%']);
+        const endpointSuffix = endpoint.slice(-40);
+        const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpointSuffix + '%']);
         if (existing && existing.length > 0) {
             await pool.query(
                 'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, sale_code = ?, updated_at = NOW() WHERE id = ?',
@@ -2420,11 +2454,14 @@ app.post('/api/ks/requests', async (req, res) => {
             console.warn('[ks/create] tk_code compute failed (non-fatal):', tkErr && tkErr.message ? tkErr.message : tkErr);
         }
 
-        // Step 3: Upload any base64 images to GCS using tk_code as folder
-        const statusImgsJson     = await ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang');
-        const oldContentImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.oldContentImages) || '[]', tkCode, 'hien-trang');
-        const designImgsJson     = await ksAutoUploadImages(normalizeBodyValue(b.designImages)     || '[]', tkCode, 'mq');
-        const acceptanceImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages) || '[]', tkCode, 'mq');
+        // Step 3: Upload any base64 images to GCS in PARALLEL (fastest path).
+        // When frontend sends '[]' (new default), these resolve instantly.
+        const [statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson] = await Promise.all([
+            ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang'),
+            ksAutoUploadImages(normalizeBodyValue(b.oldContentImages) || '[]', tkCode, 'hien-trang'),
+            ksAutoUploadImages(normalizeBodyValue(b.designImages)     || '[]', tkCode, 'mq'),
+            ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages) || '[]', tkCode, 'mq'),
+        ]);
 
         // Step 4: Update row with GCS URLs + tk_code
         await pool.query(
