@@ -573,7 +573,6 @@ async function submitNewRequest() {
     content: isOldContent ? '' : content,
     oldContent: isOldContent,
     oldContentExtra: isOldContent ? (document.getElementById('oldContentExtra')||{value:''}).value.trim() : '',
-    oldContentImages: '[]',   // no longer collected from user
     statusImages: '[]',        // uploaded in background after modal shown — see _bgUploadAndPatch
     designImages: '[]',
     acceptanceImages: '[]',
@@ -760,7 +759,6 @@ function resetNewRequestForm() {
   currentRequestItems = [];
   addRequestItem();
   isOldContent = false;
-  oldContentImages = [];
   statusImages.forEach(url => { try { URL.revokeObjectURL(url); } catch (e) {} });
   statusImages = [];
   _statusImageFiles = [];

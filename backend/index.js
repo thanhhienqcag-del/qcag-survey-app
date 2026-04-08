@@ -736,7 +736,6 @@ async function initKsDB() {
           content TEXT,
           old_content SMALLINT NOT NULL DEFAULT 0,
           old_content_extra TEXT,
-          old_content_images TEXT,
           status_images TEXT,
           design_images TEXT,
           acceptance_images TEXT,
@@ -802,7 +801,7 @@ async function initKsDB() {
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS outlet_lng VARCHAR(32)',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS old_content SMALLINT NOT NULL DEFAULT 0',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS old_content_extra TEXT',
-        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS old_content_images TEXT',
+        'ALTER TABLE ks_requests DROP COLUMN IF EXISTS old_content_images',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS design_images TEXT',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS acceptance_images TEXT',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS comments TEXT',
@@ -2260,7 +2259,6 @@ function ksRowToApp(row) {
         content:             row.content || '',
         oldContent:          Boolean(row.old_content),
         oldContentExtra:     row.old_content_extra || '',
-        oldContentImages:    row.old_content_images || '[]',
         statusImages:        row.status_images || '[]',
         designImages:        row.design_images || '[]',
         acceptanceImages:    row.acceptance_images || '[]',
@@ -2359,8 +2357,7 @@ app.get('/api/ks/requests', async (req, res) => {
                    design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
                    CASE WHEN design_images IS NOT NULL AND length(design_images) > 4 AND design_images != '[]' THEN '["..."]' ELSE '[]' END as design_images,
                    CASE WHEN status_images IS NOT NULL AND length(status_images) > 4 AND status_images != '[]' THEN '["..."]' ELSE '[]' END as status_images,
-                   CASE WHEN acceptance_images IS NOT NULL AND length(acceptance_images) > 4 AND acceptance_images != '[]' THEN '["..."]' ELSE '[]' END as acceptance_images,
-                   CASE WHEN old_content_images IS NOT NULL AND length(old_content_images) > 4 AND old_content_images != '[]' THEN '["..."]' ELSE '[]' END as old_content_images
+                   CASE WHEN acceptance_images IS NOT NULL AND length(acceptance_images) > 4 AND acceptance_images != '[]' THEN '["..."]' ELSE '[]' END as acceptance_images
             FROM ks_requests ORDER BY created_at DESC
         `);
         const mapped = rows.map(ksRowToApp);
@@ -2408,10 +2405,10 @@ app.post('/api/ks/requests', async (req, res) => {
         const [result] = await pool.query(`
             INSERT INTO ks_requests
               (backend_id, type, outlet_code, outlet_name, address, outlet_lat, outlet_lng, phone,
-               items, content, old_content, old_content_extra, old_content_images,
+               items, content, old_content, old_content_extra,
                status_images, design_images, acceptance_images, comments, requester,
                status, editing_requested_at, mq_folder, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             RETURNING id
         `, [
             backendId,
@@ -2426,7 +2423,6 @@ app.post('/api/ks/requests', async (req, res) => {
             toNullableString(b.content),
             b.oldContent ? 1 : 0,
             toNullableString(b.oldContentExtra),
-            '[]',  // images uploaded below
             '[]',
             '[]',
             '[]',
@@ -2457,17 +2453,16 @@ app.post('/api/ks/requests', async (req, res) => {
 
         // Step 3: Upload any base64 images to GCS in PARALLEL (fastest path).
         // When frontend sends '[]' (new default), these resolve instantly.
-        const [statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson] = await Promise.all([
+        const [statusImgsJson, designImgsJson, acceptanceImgsJson] = await Promise.all([
             ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang'),
-            ksAutoUploadImages(normalizeBodyValue(b.oldContentImages) || '[]', tkCode, 'hien-trang'),
             ksAutoUploadImages(normalizeBodyValue(b.designImages)     || '[]', tkCode, 'mq'),
             ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages) || '[]', tkCode, 'mq'),
         ]);
 
         // Step 4: Update row with GCS URLs + tk_code
         await pool.query(
-            `UPDATE ks_requests SET tk_code=?, status_images=?, old_content_images=?, design_images=?, acceptance_images=?, updated_at=? WHERE id=?`,
-            [tkCode, statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
+            `UPDATE ks_requests SET tk_code=?, status_images=?, design_images=?, acceptance_images=?, updated_at=? WHERE id=?`,
+            [tkCode, statusImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
         );
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
@@ -2541,7 +2536,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         // Use tk_code as folder name (falls back to backend_id for pre-existing rows)
         const folderForUpload = current.tk_code || current.backend_id || ('db_' + current.id);
         if ('statusImages' in b) b.statusImages = await ksAutoUploadImages(normalizeBodyValue(b.statusImages), folderForUpload, 'hien-trang');
-        if ('oldContentImages' in b) b.oldContentImages = await ksAutoUploadImages(normalizeBodyValue(b.oldContentImages), folderForUpload, 'hien-trang');
         if ('designImages' in b) b.designImages = await ksAutoUploadImages(normalizeBodyValue(b.designImages), folderForUpload, 'mq');
         if ('acceptanceImages' in b) b.acceptanceImages = await ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages), folderForUpload, 'mq');
 
@@ -2559,7 +2553,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         maybeStr('content',          'content');
         if ('oldContent' in b)       { fields.push('old_content = ?'); vals.push(b.oldContent ? 1 : 0); }
         maybeStr('oldContentExtra',  'old_content_extra');
-        maybeJson('oldContentImages','old_content_images');
         maybeJson('statusImages',    'status_images');
         maybeJson('comments',        'comments');
         maybeJson('requester',       'requester');
