@@ -374,6 +374,7 @@ function isTab2Complete() {
         if (!item.otherContent) return false;
       } else {
         if (!item.brand) return false;
+        if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn')) && !item.action) return false;
         if (!item.survey) {
           if (!item.useOldSize && (!item.width || !item.height)) return false;
           if (!Number.isInteger(item.poles) || item.poles < 0) return false;
@@ -488,6 +489,11 @@ function validateTab2() {
     if (item.type !== 'Hạng mục khác') {
       if (!item.brand) {
         markItemCustomSelectError(item.id, 'brand');
+        hasError = true;
+      }
+      // Hình thức (Làm mới / Thay bạt) là bắt buộc cho Bảng và Hộp đèn
+      if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn')) && !item.action) {
+        markItemCustomSelectError(item.id, 'action');
         hasError = true;
       }
       if (!item.survey) {
