@@ -656,37 +656,55 @@ async function submitNewRequest() {
 }
 
 // ── Background image upload (runs AFTER modal shown — never blocks UI) ─────────
-// Uploads status images sequentially (one at a time) then PATCHes the request.
-// Sequential upload avoids concurrent request timeouts on Cloud Run which caused
-// statusImages to appear empty in the DB even though GCS had the files.
+// FIX: Instead of multiple /api/ks/upload round-trips (which caused a race where
+// GCS received the files but the client never got the URLs back, leaving
+// status_images empty in Neon), we now read all files as base64 client-side and
+// send them directly in a single PATCH body.
+// The backend PATCH handler already calls ksAutoUploadImages() which atomically
+// uploads base64 → GCS and writes the resulting URLs to Neon.
 async function _bgUploadAndPatch(backendId, tkCode, statusFiles) {
-  if (!window.dataSdk || !window.dataSdk.uploadImage) return;
+  if (!window.dataSdk) return;
   try {
-    // tkCode (e.g. TK26.00001) becomes the GCS folder; backendId routes the PATCH.
-    const gcsFolder = tkCode || backendId;
-    const finalStatus = [];
+    // Read all files as base64 data URLs (local operation, no network calls)
+    const dataUrls = [];
     for (const file of statusFiles) {
       try {
-        // Convert File to base64 data URL for upload
         const dataUrl = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target.result);
           reader.onerror = reject;
           reader.readAsDataURL(file);
         });
-        const url = await window.dataSdk.uploadImage(dataUrl, file.name || null, gcsFolder, 'hien-trang');
-        if (url) finalStatus.push(url);
-      } catch (e) { /* non-fatal: skip this image */ }
+        if (dataUrl) dataUrls.push(dataUrl);
+      } catch (e) {
+        console.warn('[bg-upload] failed to read file (skipping):', e);
+      }
     }
-    if (finalStatus.length === 0) return;
+    if (dataUrls.length === 0) {
+      console.warn('[bg-upload] no readable files — aborting patch for', backendId);
+      return;
+    }
 
-    // PATCH only statusImages field — use backendId (srv_xxx) for PATCH routing
-    await window.dataSdk.update({
-      __backendId: backendId,
-      statusImages: JSON.stringify(finalStatus),
-      updatedAt: new Date().toISOString(),
-    });
-    console.log('[bg-upload] status images patched OK for', backendId, '(folder:', gcsFolder, ')');
+    // Single PATCH: backend uploads base64 → GCS and saves URLs to Neon atomically.
+    // Retry up to 3 times in case of transient network errors.
+    const MAX_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const result = await window.dataSdk.update({
+        __backendId: backendId,
+        statusImages: JSON.stringify(dataUrls),
+        updatedAt: new Date().toISOString(),
+      });
+      if (result && result.isOk) {
+        console.log('[bg-upload] status images patched OK for', backendId,
+          '(' + dataUrls.length + ' image(s), attempt ' + attempt + ')');
+        return;
+      }
+      if (attempt < MAX_RETRIES) {
+        console.warn('[bg-upload] patch attempt', attempt, 'failed — retrying...');
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+      }
+    }
+    console.warn('[bg-upload] all', MAX_RETRIES, 'patch attempts failed for', backendId);
   } catch (e) {
     console.warn('[bg-upload] failed (non-fatal):', e);
   }
