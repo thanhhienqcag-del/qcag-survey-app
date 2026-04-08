@@ -2268,6 +2268,7 @@ function ksRowToApp(row) {
         requester:           row.requester || '{}',
         status:              row.status || 'pending',
         editingRequestedAt:  row.editing_requested_at ? new Date(row.editing_requested_at).toISOString() : null,
+        tkCode:              row.tk_code || null,
         mqFolder:            row.mq_folder || null,
         designCreatedBy:     row.design_created_by  || null,
         designCreatedAt:     row.design_created_at  ? new Date(row.design_created_at).toISOString()  : null,
@@ -2645,10 +2646,12 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         // ── Fire push notification: khi QCAG hoàn thành MQ hoặc xác nhận chỉnh sửa ──
         try {
             const becomingDone = b.status === 'done' && current.status !== 'done';
-            const isEditConfirm = becomingDone && ('designLastEditedBy' in b);
-            const isFirstMQ     = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
+            // isPendingEdit: the request had an active edit request at time of PATCH
+            const isPendingEdit = !!(current.editing_requested_at);
+            // isNewMQ: first time a MQ is being confirmed (no prior designCreatedBy on DB row)
+            const isNewMQ = !current.design_created_by;
 
-            if (isEditConfirm || isFirstMQ) {
+            if (becomingDone) {
                 // Lấy thông tin của Sale Heineken từ requester field
                 let requesterPhone = null;
                 let requesterSaleCode = null;
@@ -2675,24 +2678,20 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 } catch (_) {}
 
                 const outletLabel = updated.outlet_name || updated.outlet_code || 'Outlet';
+                const pushTitle = isPendingEdit
+                    ? 'QCAG — Đã hoàn thành chỉnh sửa'
+                    : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+                const pushBody = isPendingEdit
+                    ? `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
+                    : `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được duyệt MQ. Vui lòng mở app để xem.`;
 
-                if (isFirstMQ) {
-                    await sendKsPush({
-                        title: 'QCAG — Đã có mẫu quảng cáo (MQ)',
-                        body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng truy cập quản lý yêu cầu để xem MQ.`,
-                        data: { backendId: updated.backend_id },
-                        targetPhone: requesterPhone,
-                        targetSaleCode: requesterSaleCode,
-                    });
-                } else {
-                    await sendKsPush({
-                        title: 'QCAG — Đã hoàn thành chỉnh sửa',
-                        body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng truy cập quản lý yêu cầu để xem chỉnh sửa.`,
-                        data: { backendId: updated.backend_id },
-                        targetPhone: requesterPhone,
-                        targetSaleCode: requesterSaleCode,
-                    });
-                }
+                await sendKsPush({
+                    title: pushTitle,
+                    body: pushBody,
+                    data: { backendId: updated.backend_id },
+                    targetPhone: requesterPhone,
+                    targetSaleCode: requesterSaleCode,
+                });
             }
         } catch (pushErr) {
             console.warn('[push] notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
@@ -2703,6 +2702,27 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
     } catch (err) {
         console.error('PATCH /api/ks/requests/:id error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'update_failed' });
+    }
+});
+
+// DELETE /api/ks/requests/:id
+app.delete('/api/ks/requests/:id', async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const id = String(req.params.id || '').trim();
+        let rows;
+        if (/^\d+$/.test(id)) {
+            [rows] = await pool.query('SELECT id FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
+        } else {
+            [rows] = await pool.query('SELECT id FROM ks_requests WHERE backend_id = ? LIMIT 1', [id]);
+        }
+        if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'not_found' });
+        await pool.query('DELETE FROM ks_requests WHERE id = ?', [rows[0].id]);
+        wsInvalidate('ks_requests', { action: 'delete', id });
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('DELETE /api/ks/requests/:id error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'delete_failed' });
     }
 });
 

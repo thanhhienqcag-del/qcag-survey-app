@@ -44,13 +44,23 @@
     // Detail screen → back to list
     const detail = document.getElementById('detailScreen');
     if (detail && detail.classList.contains('flex')) {
-      try { backToList(); } catch (ex) {}
+      detail.classList.add('swipe-back-exit');
+      detail.addEventListener('animationend', function handler() {
+        detail.classList.remove('swipe-back-exit');
+        detail.removeEventListener('animationend', handler);
+        try { backToList(); } catch (ex) {}
+      }, { once: true });
       return;
     }
     // List screen → go home
     const list = document.getElementById('listScreen');
     if (list && list.classList.contains('flex')) {
-      try { goHome(); } catch (ex) {}
+      list.classList.add('swipe-back-exit');
+      list.addEventListener('animationend', function handler() {
+        list.classList.remove('swipe-back-exit');
+        list.removeEventListener('animationend', handler);
+        try { goHome(); } catch (ex) {}
+      }, { once: true });
       return;
     }
   }, { passive: true });

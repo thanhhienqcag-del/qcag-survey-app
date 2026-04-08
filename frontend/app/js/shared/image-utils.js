@@ -19,12 +19,10 @@ function handleOldContentImages(input) {
 function handleStatusImages(input) {
   const files = Array.from(input.files);
   files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      statusImages.push(e.target.result);
-      renderImagePreviews('statusImagesPreview', statusImages, 'status');
-    };
-    reader.readAsDataURL(file);
+    const blobUrl = URL.createObjectURL(file);
+    statusImages.push(blobUrl);
+    _statusImageFiles.push(file);
+    renderImagePreviews('statusImagesPreview', statusImages, 'status');
   });
   input.value = '';
 }
@@ -61,7 +59,9 @@ function removeImage(type, idx) {
     oldContentImages.splice(idx, 1);
     renderImagePreviews('oldContentPreview', oldContentImages, 'oldContent');
   } else if (type === 'status') {
+    try { URL.revokeObjectURL(statusImages[idx]); } catch (e) {}
     statusImages.splice(idx, 1);
+    _statusImageFiles.splice(idx, 1);
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
   } else if (type === 'warranty') {
     warrantyImages.splice(idx, 1);

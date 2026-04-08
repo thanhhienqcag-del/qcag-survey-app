@@ -21,6 +21,7 @@ let nextRequestItemSeq = 1;
 let isOldContent = false;
 let oldContentImages = [];
 let statusImages = [];
+let _statusImageFiles = []; // parallel array of File objects for upload (statusImages stores blob URLs for preview only)
 let warrantyImages = [];
 
 // ── Tab tracking ──────────────────────────────────────────────────────

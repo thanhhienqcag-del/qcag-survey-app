@@ -1362,7 +1362,7 @@ function closeDeleteModal() {
 }
 
 async function confirmDelete() {
-  if (!currentDetailRequest || !window.dataSdk) return;
+  if (!currentDetailRequest || !window.dataSdk || typeof window.dataSdk.delete !== 'function') return;
   const result = await window.dataSdk.delete(currentDetailRequest);
   if (result.isOk) {
     showToast('Đã xóa yêu cầu');

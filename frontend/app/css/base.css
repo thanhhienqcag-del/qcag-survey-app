@@ -644,6 +644,16 @@ body.dark .qcag-survey-badge,
   box-shadow: none !important;
 }
 
+/* ── Swipe-back slide-out animation ─────────────────────────────────────────── */
+@keyframes swipeBackSlideOut {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(100%); opacity: 0; }
+}
+.swipe-back-exit {
+  animation: swipeBackSlideOut 0.22s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
 /* ============================================================
    DESIGN VIEWER — shared structural styles
    ============================================================ */

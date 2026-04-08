@@ -342,6 +342,23 @@
         console.error('[dataSdk] uploadImage error:', e);
         return null;
       }
+    },
+
+    async delete(req) {
+      if (!req || !req.__backendId) return { isOk: false };
+      try {
+        var response = await _fetchJsonWithRetry('/api/ks/requests/' + encodeURIComponent(req.__backendId), {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        var idx = _store.findIndex(function (r) { return r.__backendId === req.__backendId; });
+        if (idx !== -1) _store.splice(idx, 1);
+        if (_onDataChanged) _onDataChanged(_cloneStoreRows());
+        return { isOk: true };
+      } catch (e) {
+        console.error('[dataSdk] delete error:', e);
+        return { isOk: false };
+      }
     }
   };
 })();

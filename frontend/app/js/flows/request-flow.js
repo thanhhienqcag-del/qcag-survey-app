@@ -552,8 +552,8 @@ async function submitNewRequest() {
   // Pre-generate __backendId so GCS folder name is consistent between create and patch
   const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
-  // Capture status images now (before form reset) for background upload
-  const _capturedStatus = statusImages.slice();
+  // Capture File objects now (before form reset) for background upload
+  const _capturedStatus = _statusImageFiles.slice();
 
   const request = {
     type: 'new',
@@ -613,8 +613,11 @@ async function submitNewRequest() {
       document.getElementById('confirmModal').classList.remove('hidden');
 
       // Background: upload status images then PATCH (user sees modal immediately)
+      // Use TK code (e.g. TK26.00001) as GCS folder name so it matches server-side paths;
+      // fall back to __preBackendId if tkCode is not available.
       if (window.dataSdk && window.dataSdk.uploadImage && _capturedStatus.length > 0) {
-        _bgUploadAndPatch(__preBackendId, _capturedStatus);
+        const _tkCode = (result.data && result.data.tkCode) || __preBackendId;
+        _bgUploadAndPatch(__preBackendId, _tkCode, _capturedStatus);
       }
 
       // Fire push notification to QCAG team (best-effort, never blocks UI)
@@ -653,30 +656,37 @@ async function submitNewRequest() {
 }
 
 // ── Background image upload (runs AFTER modal shown — never blocks UI) ─────────
-// Uploads status + oldContent images in parallel, then PATCHes the request.
-async function _bgUploadAndPatch(backendId, statusImgs) {
+// Uploads status images sequentially (one at a time) then PATCHes the request.
+// Sequential upload avoids concurrent request timeouts on Cloud Run which caused
+// statusImages to appear empty in the DB even though GCS had the files.
+async function _bgUploadAndPatch(backendId, tkCode, statusFiles) {
   if (!window.dataSdk || !window.dataSdk.uploadImage) return;
   try {
-    const uploadOne = async (src) => {
-      if (typeof src !== 'string' || !src.startsWith('data:')) return src;
+    // tkCode (e.g. TK26.00001) becomes the GCS folder; backendId routes the PATCH.
+    const gcsFolder = tkCode || backendId;
+    const finalStatus = [];
+    for (const file of statusFiles) {
       try {
-        const url = await window.dataSdk.uploadImage(src, null, backendId, 'hien-trang');
-        return url || null;
-      } catch (e) { return null; }
-    };
-
-    // Upload all status images in parallel
-    const uploaded = await Promise.all(statusImgs.map(uploadOne));
-    const finalStatus = uploaded.filter(Boolean);
+        // Convert File to base64 data URL for upload
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        const url = await window.dataSdk.uploadImage(dataUrl, file.name || null, gcsFolder, 'hien-trang');
+        if (url) finalStatus.push(url);
+      } catch (e) { /* non-fatal: skip this image */ }
+    }
     if (finalStatus.length === 0) return;
 
-    // PATCH only statusImages field
+    // PATCH only statusImages field — use backendId (srv_xxx) for PATCH routing
     await window.dataSdk.update({
       __backendId: backendId,
       statusImages: JSON.stringify(finalStatus),
       updatedAt: new Date().toISOString(),
     });
-    console.log('[bg-upload] status images patched OK for', backendId);
+    console.log('[bg-upload] status images patched OK for', backendId, '(folder:', gcsFolder, ')');
   } catch (e) {
     console.warn('[bg-upload] failed (non-fatal):', e);
   }
@@ -727,7 +737,9 @@ function resetNewRequestForm() {
   addRequestItem();
   isOldContent = false;
   oldContentImages = [];
+  statusImages.forEach(url => { try { URL.revokeObjectURL(url); } catch (e) {} });
   statusImages = [];
+  _statusImageFiles = [];
   document.getElementById('oldContentToggle').className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
   document.getElementById('newContentSection').classList.remove('hidden');
   try { const e = document.getElementById('oldContentExtra'); if (e) e.value = ''; } catch (e) {}

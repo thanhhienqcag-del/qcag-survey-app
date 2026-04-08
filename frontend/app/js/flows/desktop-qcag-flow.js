@@ -407,66 +407,8 @@ function qcagDesktopIsPendingEditRequest(req) {
   return !!(req && (req.editingRequestedAt || qcagDesktopHasHeinekenEditRequest(req)));
 }
 
-function qcagDesktopHasPendingCategoryEdit(req) {
-  if (!qcagDesktopIsPendingEditRequest(req)) return false;
-  const comments = qcagDesktopParseJson(req && req.comments, []);
-  if (!Array.isArray(comments)) return false;
-
-  const latestIndex = (() => {
-    for (let i = comments.length - 1; i >= 0; i -= 1) {
-      const c = comments[i] || {};
-      if (String(c.commentType || '').toLowerCase() === 'edit-request' && String(c.authorRole || '').toLowerCase() === 'heineken') {
-        return i;
-      }
-    }
-    return -1;
-  })();
-
-  if (latestIndex === -1) return false;
-  const latest = comments[latestIndex] || {};
-  const cats = Array.isArray(latest.editCategories) ? latest.editCategories : [];
-  const normalized = cats.map(c => String(c || '').trim().toLowerCase());
-
-  // Only treat explicit "thay đổi hạng mục" as permission to add/remove items.
-  // Brand-change only grants inline brand editing (handled separately).
-  const hasCategory = normalized.includes('thay đổi hạng mục') || normalized.includes('thay doi hang muc');
-  if (!hasCategory) return false;
-
-  // ensure not yet resolved by an edit-resolved comment after this edit request
-  const hasResolvedAfter = comments.some((c, idx) => idx > latestIndex && String((c && c.commentType) || '').toLowerCase() === 'edit-resolved');
-  return !hasResolvedAfter;
-}
-
 function qcagDesktopCanEditItems(req) {
-  return qcagDesktopHasPendingCategoryEdit(req) && !qcagDesktopIsDone(req);
-}
-
-function qcagDesktopHasPendingBrandEdit(req) {
-  if (!qcagDesktopIsPendingEditRequest(req)) return false;
-  const comments = qcagDesktopParseJson(req && req.comments, []);
-  if (!Array.isArray(comments)) return false;
-
-  const latestIndex = (() => {
-    for (let i = comments.length - 1; i >= 0; i -= 1) {
-      const c = comments[i] || {};
-      if (String(c.commentType || '').toLowerCase() === 'edit-request' && String(c.authorRole || '').toLowerCase() === 'heineken') {
-        return i;
-      }
-    }
-    return -1;
-  })();
-
-  if (latestIndex === -1) return false;
-  const latest = comments[latestIndex] || {};
-  const cats = Array.isArray(latest.editCategories) ? latest.editCategories : [];
-  const normalized = cats.map(c => String(c || '').trim().toLowerCase());
-
-  // Recognize several variants that teams might use to mark a brand-change
-  const hasBrand = normalized.includes('đổi brand') || normalized.includes('thay đổi brand') || normalized.includes('đổi thương hiệu') || normalized.includes('change brand');
-  if (!hasBrand) return false;
-
-  const hasResolvedAfter = comments.some((c, idx) => idx > latestIndex && String((c && c.commentType) || '').toLowerCase() === 'edit-resolved');
-  return !hasResolvedAfter;
+  return !qcagDesktopIsDone(req);
 }
 
 function qcagDesktopIsDone(req) {
@@ -727,9 +669,8 @@ function qcagDesktopRemoveItem(index) {
 
 function qcagDesktopInlineChangeBrand(index, newBrand) {
   if (!currentDetailRequest) return;
-  if (!qcagDesktopHasPendingBrandEdit(currentDetailRequest) || qcagDesktopIsDone(currentDetailRequest)) {
-    showToast('Không có quyền thay đổi brand cho yêu cầu này');
-    // re-render to restore previous state
+  if (qcagDesktopIsDone(currentDetailRequest)) {
+    showToast('Không thể thay đổi brand — yêu cầu đã hoàn thành');
     _qcagDesktopInPlaceRefresh(currentDetailRequest);
     return;
   }
@@ -1383,6 +1324,27 @@ function qcagDesktopYearPickerStep(dir) {
 }
 
 // Delete request from desktop list (only allowed for non-completed requests)
+// Programmatic confirm dialog — works in PWA standalone mode (window.confirm is unreliable).
+function _qcagConfirmDialog(message) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:12px;padding:24px;max-width:320px;width:90%;text-align:center">' +
+        '<p style="margin-bottom:20px;font-size:16px;line-height:1.5">' + message + '</p>' +
+        '<div style="display:flex;gap:8px;justify-content:center">' +
+          '<button id="_qcagCancelBtn" style="flex:1;padding:12px;border-radius:8px;background:#f3f4f6;border:none;cursor:pointer;font-size:15px">Hủy</button>' +
+          '<button id="_qcagConfirmBtn" style="flex:1;padding:12px;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:15px;font-weight:600">Xóa</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    const cleanup = (result) => { document.body.removeChild(overlay); resolve(result); };
+    overlay.querySelector('#_qcagConfirmBtn').onclick = () => cleanup(true);
+    overlay.querySelector('#_qcagCancelBtn').onclick  = () => cleanup(false);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(false); };
+  });
+}
+
 async function qcagDesktopDeleteRequest(backendId) {
   try {
     const req = (allRequests || []).find(r => r.__backendId === backendId);
@@ -1392,10 +1354,10 @@ async function qcagDesktopDeleteRequest(backendId) {
       showToast('Không thể xóa request đã hoàn thành');
       return;
     }
-    const confirmed = window.confirm('Bạn có chắc muốn xóa yêu cầu này?');
+    const confirmed = await _qcagConfirmDialog('Bạn có chắc muốn xóa yêu cầu này?');
     if (!confirmed) return;
 
-    if (window.dataSdk) {
+    if (window.dataSdk && typeof window.dataSdk.delete === 'function') {
       const res = await window.dataSdk.delete(req);
       if (res && res.isOk) {
         showToast('Đã xóa yêu cầu');
@@ -1706,7 +1668,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
         return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div>${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div>${(() => {
           // If current request allows inline brand change, render a select control
           try {
-            const canInline = typeof qcagDesktopHasPendingBrandEdit === 'function' && qcagDesktopHasPendingBrandEdit(currentDetailRequest) && !qcagDesktopIsDone(currentDetailRequest);
+            const canInline = !qcagDesktopIsDone(currentDetailRequest);
             if (canInline) {
               const brands = (typeof getBrandsForType === 'function' ? getBrandsForType(item.type || '') : Array.isArray(allBrands) ? allBrands : []) || [];
               const opts = (brands || []).map(b => `<option value="${escapeHtml(b)}"${String(b) === String(item.brand || '') ? ' selected' : ''}>${escapeHtml(b)}</option>`).join('');
@@ -2343,23 +2305,45 @@ async function qcagDesktopMarkProcessed() {
   };
   const persistOk = await qcagDesktopPersistRequest(updated, isPendingEdit ? 'Đã xác nhận chỉnh sửa' : 'Đã hoàn thành');
 
-  // Push notification to Sale Heineken is now handled EXCLUSIVELY by the backend
-  // in the PATCH /api/ks/requests/:id handler (sendKsPush). This avoids duplicate
-  // push notifications that were being sent from both frontend and backend.
-  // The backend already has the correct logic to determine first-MQ vs edit-confirm
-  // and sends push with proper TK code numbering.
-  // Show a brief confirmation toast from the frontend side (best-effort).
+  // Push notification to Sale Heineken — sent from QCAG desktop directly via
+  // /api/ks/push/send (Vercel function). This ensures the same VAPID keys are
+  // used as when the subscription was created, avoiding backend key-mismatch issues.
   if (persistOk) {
     try {
+      let requesterPhone = null;
       let requesterSaleCode = null;
       try {
         const reqObj = typeof updated.requester === 'string' ? JSON.parse(updated.requester) : (updated.requester || {});
+        requesterPhone    = reqObj.phone    || null;
         requesterSaleCode = reqObj.saleCode || null;
       } catch (_) {}
+
+      if (requesterPhone || requesterSaleCode) {
+        const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
+        const pushTitle = isPendingEdit
+          ? 'QCAG — Đã hoàn thành chỉnh sửa'
+          : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+        const pushBody = isPendingEdit
+          ? `Yêu cầu Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
+          : `Yêu cầu Outlet ${outletLabel} đã được QCAG duyệt MQ. Vui lòng mở app để xem.`;
+
+        fetch('/api/ks/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: pushTitle,
+            body:  pushBody,
+            saleCode: requesterSaleCode,
+            phone:    requesterPhone,
+            data: { backendId: updated.__backendId }
+          })
+        }).catch(function(e) { console.warn('[push] notify heineken error:', e); });
+      }
+
       setTimeout(function() {
-        const target = requesterSaleCode || '?';
-        showToast('✓ Đã hoàn thành — thông báo sẽ được gửi tự động đến Sale [' + target + ']', 4000);
-      }, 2800);
+        const target = requesterSaleCode || (requesterPhone ? requesterPhone.slice(-4) : '?');
+        showToast('✓ Đã hoàn thành — thông báo sẽ gửi đến Sale [' + target + ']', 4000);
+      }, 400);
     } catch (e) {
       // non-fatal
     }
