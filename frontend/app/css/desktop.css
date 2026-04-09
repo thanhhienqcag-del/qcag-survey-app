@@ -3,34 +3,6 @@
    Breakpoints: 1024px–1439px (laptop), ≥ 1440px (PC / large screen)
    ==================================================================== */
 
-/* ── Toast: compact pill in bottom-right corner on QCAG desktop ── */
-@media (min-width: 1024px) {
-  #toast {
-    /* detach from top-center and anchor to bottom-right */
-    top: auto !important;
-    bottom: 28px !important;
-    inset-inline: unset !important;
-    left: auto !important;
-    right: 28px !important;
-    justify-content: flex-end !important;
-    align-items: flex-end !important;
-  }
-  #toastInner {
-    min-width: 0 !important;
-    max-width: 320px !important;
-    width: auto !important;
-    padding: 7px 18px !important;
-    font-size: 12.5px !important;
-    border-radius: 999px !important;
-    border-width: 1.5px !important;
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18) !important;
-    letter-spacing: 0.01em;
-  }
-  #toastMessage {
-    white-space: nowrap;
-  }
-}
-
 /* ── Design viewer: mode-image on laptop (1024px–1439px) ── */
 @media (min-width: 1024px) and (max-width: 1439px) {
   .dv-wrap.mode-image .dv-media { flex: 0 0 74% !important; }
