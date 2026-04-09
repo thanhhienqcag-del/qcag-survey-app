@@ -158,6 +158,43 @@
       cursor: not-allowed !important;
     }
     .tba-disabled::placeholder { color: #ef4444 !important; opacity: 1 !important; }
+    /* Mobile push notification bell — positioned in top-user-bar */
+    .mobile-push-bell-btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid #e5e7eb;
+      background: #fff;
+      border-radius: 8px;
+      color: #374151;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background .15s, border-color .15s;
+    }
+    .mobile-push-bell-btn:active { background: #f3f4f6; border-color: #d1d5db; }
+    .mobile-push-bell-dot {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      border: 1.5px solid #fff;
+      background: #9ca3af;
+    }
+    .mobile-push-bell-dot.on     { background: #22c55e; }
+    .mobile-push-bell-dot.denied { background: #ef4444; }
+    [data-theme="dark"] .mobile-push-bell-btn,
+    .theme-dark .mobile-push-bell-btn {
+      background: #1e293b;
+      border-color: rgba(255,255,255,0.1);
+      color: #e2e8f0;
+    }
+    [data-theme="dark"] .mobile-push-bell-dot,
+    .theme-dark .mobile-push-bell-dot { border-color: #1e293b; }
     /* QCAG desktop header layout: keep user name on one line and limit search width */
     .qcag-desktop-header { display: flex; align-items: center; gap: 12px; }
     .qcag-desktop-brand { flex: 0 0 auto; display:flex; align-items:center; gap:10px; }
@@ -524,6 +561,10 @@
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 top-user-bar">
        <div id="sessionInfoBar" class="text-xs text-gray-500 leading-tight flex-1"></div>
        <div class="flex items-center gap-2">
+         <button id="mobilePushBellBtn" onclick="homePushBtnClick()" class="mobile-push-bell-btn" type="button" title="Thông báo" aria-label="Bật/tắt thông báo">
+           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+           <span id="mobilePushBellDot" class="mobile-push-bell-dot"></span>
+         </button>
          <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
            <span class="theme-icon" aria-hidden="true">🌙</span>
            <span class="theme-label">Tối</span>
@@ -586,10 +627,10 @@
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
        Kiểm Tra Bảo Hành
       </button>
-      <!-- Push notification enable button -->
-      <button id="homePushBtn" onclick="homePushBtnClick()" class="w-full py-2.5 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center gap-2 text-sm text-gray-700 transition-colors active:bg-gray-100">
-        <span id="homePushBtnIcon">🔔</span>
-        <span id="homePushBtnText">Bật thông báo</span>
+      <!-- Add to homescreen button (shown when PWA install prompt is available or on iOS) -->
+      <button id="homeInstallBtn" onclick="homeInstallBtnClick()" class="w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 hidden items-center justify-center gap-2 text-sm text-blue-600 transition-colors active:bg-blue-100">
+        <span>📲</span>
+        <span>Thêm vào màn hình chính</span>
       </button>
      </div>
      <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.4.0 · 2026-04-08</p>
@@ -1035,18 +1076,19 @@
       </div>
     </div>
   </div>
-  <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-60 flex items-center justify-center">
-  <div class="bg-gray-50 w-full max-w-md rounded-xl p-6 fade-in max-h-[90vh] overflow-auto">
-     <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
-     <div class="text-center mb-6">
-      <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-       <svg class="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-       </svg>
+  <div id="deleteModal" class="fixed inset-0 hidden z-60 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeDeleteModal()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)">
+  <div class="center-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 fade-in shadow-2xl" onclick="event.stopPropagation()">
+     <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5"></div>
+     <div class="flex flex-col items-center text-center mb-6">
+      <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style="background:rgba(239,68,68,0.1)">
+       <svg class="w-7 h-7" fill="none" stroke="#ef4444" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </div>
-      <h3 class="text-lg font-semibold mb-2">Xác nhận xóa?</h3>
-      <p class="text-gray-500 text-sm">Bạn có chắc muốn xóa yêu cầu này không?</p>
+      <h3 class="text-base font-semibold mb-1">Xóa yêu cầu này?</h3>
+      <p class="text-sm" style="color:#6b7280">Hành động này không thể hoàn tác.</p>
      </div>
-     <div class="space-y-3"><button onclick="confirmDelete()" class="w-full py-4 bg-red-600 text-white font-medium rounded-xl"> Xóa yêu cầu </button> <button onclick="closeDeleteModal()" class="w-full py-4 text-gray-600 font-medium"> Hủy </button>
+     <div class="space-y-2.5">
+      <button onclick="confirmDelete()" class="w-full py-3 rounded-xl font-medium text-sm text-white" style="background:#ef4444">Xóa</button>
+      <button onclick="closeDeleteModal()" class="w-full py-3 rounded-xl font-medium text-sm border border-gray-200" style="background:transparent">Hủy</button>
      </div>
     </div>
    </div><!-- Toast -->
