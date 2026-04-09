@@ -186,8 +186,10 @@ function launchApp() {
           } else {
             console.log('[push] initPush succeeded');
           }
+          try { updateHomePushBtn(); } catch (_) {}
         }).catch(function(err) {
           console.warn('[push] initPush exception:', err);
+          try { updateHomePushBtn(); } catch (_) {}
         });
       }
     }
@@ -197,6 +199,8 @@ function launchApp() {
     return;
   }
   showScreen('homeScreen');
+  // Update push button state now that homeScreen is visible
+  try { updateHomePushBtn(); } catch (_) {}
 }
 
 function updateSessionBar() {
@@ -213,4 +217,91 @@ function updateSessionBar() {
       <div class="font-semibold text-gray-800 text-sm">QCAG Admin</div>
       <div class="text-gray-400 mt-0.5">${currentSession.phone}</div>`;
   }
+}
+
+// ── Push notification button (homeScreen) ─────────────────────────────────────
+
+function updateHomePushBtn() {
+  const btn  = document.getElementById('homePushBtn');
+  const icon = document.getElementById('homePushBtnIcon');
+  const text = document.getElementById('homePushBtnText');
+  if (!btn) return;
+
+  // Hide when push is not supported at all
+  if (typeof Notification === 'undefined' || !('PushManager' in window)) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+
+  const isIos        = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                    || (window.navigator && window.navigator.standalone === true);
+
+  if (isIos && !isStandalone) {
+    // iOS browser (not PWA) — guide user to install
+    if (icon) icon.textContent = '📲';
+    if (text) text.textContent = 'Thêm vào màn hình chính để nhận thông báo';
+    btn.className = 'w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 flex items-center justify-center gap-2 text-sm text-blue-600 transition-colors';
+    btn.disabled  = false;
+    return;
+  }
+
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    if (icon) icon.textContent = '🔔';
+    if (text) text.textContent = 'Thông báo đang bật';
+    btn.className = 'w-full py-2.5 rounded-xl border border-green-200 bg-green-50 flex items-center justify-center gap-2 text-sm text-green-700 transition-colors';
+    btn.disabled  = false;
+  } else if (perm === 'denied') {
+    if (icon) icon.textContent = '🔕';
+    if (text) text.textContent = 'Thông báo bị chặn — vào Cài đặt để bật lại';
+    btn.className = 'w-full py-2.5 rounded-xl border border-red-200 bg-red-50 flex items-center justify-center gap-2 text-sm text-red-400 cursor-not-allowed';
+    btn.disabled  = true;
+  } else {
+    if (icon) icon.textContent = '🔔';
+    if (text) text.textContent = 'Bật thông báo';
+    btn.className = 'w-full py-2.5 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center gap-2 text-sm text-gray-700 transition-colors active:bg-gray-100';
+    btn.disabled  = false;
+  }
+}
+
+async function homePushBtnClick() {
+  const isIos        = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+                    || (window.navigator && window.navigator.standalone === true);
+
+  if (isIos && !isStandalone) {
+    showToast('📲 Để nhận thông báo trên iPhone/iPad: nhấn nút Chia sẻ ↑ → Thêm vào màn hình chính', 6000);
+    return;
+  }
+
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+    showToast('Thông báo đang bị chặn. Vào Cài đặt > Trình duyệt > Cho phép thông báo để bật lại.');
+    return;
+  }
+
+  if (!window.pushHelpers) {
+    showToast('Trình duyệt không hỗ trợ thông báo đẩy');
+    return;
+  }
+
+  const phone    = currentSession && currentSession.phone    ? currentSession.phone    : null;
+  const role     = currentSession && currentSession.role     ? currentSession.role     : null;
+  const saleCode = currentSession && currentSession.saleCode ? currentSession.saleCode : null;
+
+  try {
+    const btnTextEl = document.getElementById('homePushBtnText');
+    if (btnTextEl) btnTextEl.textContent = 'Đang kích hoạt…';
+    const res = await window.pushHelpers.initPush(phone, role, saleCode);
+    if (res && res.ok) {
+      showToast('✅ Thông báo đã được bật thành công!');
+    } else {
+      const errMsg = res && res.error ? res.error : 'Không thể bật thông báo';
+      showToast('Lỗi: ' + errMsg);
+    }
+  } catch (err) {
+    showToast('Lỗi khi bật thông báo: ' + String(err));
+  }
+  updateHomePushBtn();
 }

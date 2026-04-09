@@ -354,7 +354,6 @@
        <div class="mt-8">
         <button onclick="loginQCAGSubmit()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Đăng nhập</button>
        </div>
-       <p class="text-xs text-center text-gray-400 mt-4">Mật khẩu mặc định: <strong>qcag123</strong></p>
       </div>
      </div>
     </div>
@@ -533,18 +532,15 @@
        </div>
       </div>
     <div class="flex-1 flex flex-col items-center justify-start p-4 overflow-y-auto">
-     <!-- Title row: compact inline icon + title -->
-    <div class="flex items-center gap-2.5 mb-4 mt-1 w-full max-w-xs justify-center">
-     <div class="w-9 h-9 border-2 border-gray-900 rounded-xl flex items-center justify-center flex-shrink-0">
-       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-       </svg>
+    <!-- Brand row: Heineken + QCAG -->
+    <div class="mb-4 mt-1 w-full max-w-xs text-center">
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <img src="app/assets/Heineken_Logo.svg" alt="Heineken" class="h-7 w-auto object-contain">
+        <img src="app/assets/qcag-logo.svg" alt="QCAG" class="h-7 w-auto object-contain">
       </div>
-     <div class="text-center">
-      <h1 id="appTitle" class="text-lg font-semibold leading-tight">Quản Lý Yêu Cầu</h1>
-      <p class="text-gray-500 text-xs">Hệ thống quản lý bảng hiệu</p>
-      <p class="text-gray-300 text-[10px] mt-0.5 select-none" title="Phiên bản ứng dụng">v2.4.0 · 2026-04-08</p>
-     </div>
-     </div>
+      <h1 class="text-sm font-semibold tracking-wide leading-tight">QUẢN LÝ BẢNG HIỆU HVN &amp; QCAG</h1>
+      <span id="appTitle" class="hidden" aria-hidden="true">QUẢN LÝ BẢNG HIỆU HVN &amp; QCAG</span>
+    </div>
     <!-- Dashboard stats: compact design-state filters (4 buttons, 2×2) -->
     <div class="w-full max-w-xs mb-3">
     <p class="text-xs text-gray-400 font-medium mb-1 text-center">YÊU CẦU MỚI</p>
@@ -590,7 +586,13 @@
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
        Kiểm Tra Bảo Hành
       </button>
+      <!-- Push notification enable button -->
+      <button id="homePushBtn" onclick="homePushBtnClick()" class="w-full py-2.5 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center gap-2 text-sm text-gray-700 transition-colors active:bg-gray-100">
+        <span id="homePushBtnIcon">🔔</span>
+        <span id="homePushBtnText">Bật thông báo</span>
+      </button>
      </div>
+     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.4.0 · 2026-04-08</p>
     </div>
     <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
 

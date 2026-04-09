@@ -1362,7 +1362,11 @@ function closeDeleteModal() {
 }
 
 async function confirmDelete() {
-  if (!currentDetailRequest || !window.dataSdk || typeof window.dataSdk.delete !== 'function') return;
+  if (!currentDetailRequest || !window.dataSdk || typeof window.dataSdk.delete !== 'function') {
+    showToast('Không thể xóa yêu cầu');
+    closeDeleteModal();
+    return;
+  }
   const result = await window.dataSdk.delete(currentDetailRequest);
   if (result.isOk) {
     showToast('Đã xóa yêu cầu');

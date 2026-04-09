@@ -31,6 +31,8 @@ let _qcagDesktopListPage = 0;
 let _qcagDesktopYearFilter = new Date().getFullYear();
 // Year currently shown in the dropup picker (not yet applied until user clicks)
 let _qcagDesktopYearDropupYear = new Date().getFullYear();
+// Sort mode: 'time' | 'sale' | 'tag'
+let _qcagDesktopSortMode = 'time';
 
 function isDesktopViewport() {
   return (window.innerWidth || 0) >= 1024;
@@ -898,7 +900,23 @@ function getQCAGDesktopVisibleRequests() {
     });
   }
 
-  list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  if (_qcagDesktopSortMode === 'sale') {
+    list.sort((a, b) => {
+      const ra = qcagDesktopParseJson(a.requester, {});
+      const rb = qcagDesktopParseJson(b.requester, {});
+      const na = String(ra.saleName || ra.phone || '').toLowerCase();
+      const nb = String(rb.saleName || rb.phone || '').toLowerCase();
+      return na.localeCompare(nb, 'vi');
+    });
+  } else if (_qcagDesktopSortMode === 'tag') {
+    list.sort((a, b) => {
+      const ta = qcagDesktopStatusBadge(a).label || '';
+      const tb = qcagDesktopStatusBadge(b).label || '';
+      return ta.localeCompare(tb, 'vi');
+    });
+  } else {
+    list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+  }
   // Enrich each request with standardized tags (non-destructive)
   try {
     const enriched = list.map(r => ({ ...r, standardTags: assignStandardTags(r) }));
@@ -1219,22 +1237,39 @@ function _qcagDesktopRenderPagination(currentPage, totalPages, total) {
     pageNavHtml = `<span class="qcag-page-info">${total} yêu cầu</span>`;
   }
 
+  const _sortLabels = { time: 'Thời gian', sale: 'Tên Sale', tag: 'Theo Tag' };
+  const _sortLabel  = _sortLabels[_qcagDesktopSortMode] || 'Thời gian';
+
   el.innerHTML = `
-    <div class="qcag-year-wrap">
-      <button class="qcag-year-btn" id="qcagYearBtn" onclick="qcagDesktopYearBtnToggle()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-        <span id="qcagYearBtnLabel">${escapeHtml(yearLabel)}</span>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-      </button>
-      <div class="qcag-year-dropup hidden" id="qcagYearDropup">
-        <div class="qcag-year-dropup-head">Chọn Năm <span class="qcag-year-sel-ind">${yr !== null ? 'đang chọn ' + yr : 'đang xem tất cả'}</span></div>
-        <button class="qcag-year-all${allActiveCls}" onclick="qcagDesktopSetYearFilter(null)">Hiển thị tất cả</button>
-        <div class="qcag-year-picker">
-          <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(1)">◀</button>
-          <div class="qcag-year-viewport">
-            <div class="qcag-year-disp${dispActiveCls}" id="qcagYearDisp" onclick="qcagDesktopApplyDropupYear()" title="Nhấn để chọn năm này">${dispYear}</div>
+    <div class="qcag-pagination-controls">
+      <div class="qcag-year-wrap">
+        <button class="qcag-year-btn" id="qcagYearBtn" onclick="qcagDesktopYearBtnToggle()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          <span id="qcagYearBtnLabel">${escapeHtml(yearLabel)}</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+        </button>
+        <div class="qcag-year-dropup hidden" id="qcagYearDropup">
+          <div class="qcag-year-dropup-head">Chọn Năm <span class="qcag-year-sel-ind">${yr !== null ? 'đang chọn ' + yr : 'đang xem tất cả'}</span></div>
+          <button class="qcag-year-all${allActiveCls}" onclick="qcagDesktopSetYearFilter(null)">Hiển thị tất cả</button>
+          <div class="qcag-year-picker">
+            <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(1)">◀</button>
+            <div class="qcag-year-viewport">
+              <div class="qcag-year-disp${dispActiveCls}" id="qcagYearDisp" onclick="qcagDesktopApplyDropupYear()" title="Nhấn để chọn năm này">${dispYear}</div>
+            </div>
+            <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(-1)">▶</button>
           </div>
-          <button class="qcag-year-nav" onclick="qcagDesktopYearPickerStep(-1)">▶</button>
+        </div>
+      </div>
+      <div class="qcag-sort-wrap">
+        <button class="qcag-year-btn" id="qcagSortBtn" onclick="qcagDesktopSortBtnToggle()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="9" y2="18"></line></svg>
+          <span id="qcagSortBtnLabel">${escapeHtml(_sortLabel)}</span>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+        </button>
+        <div class="qcag-sort-dropup hidden" id="qcagSortDropup">
+          <button class="qcag-sort-option${_qcagDesktopSortMode === 'time' ? ' active' : ''}" onclick="qcagDesktopSetSort('time')">Theo thời gian</button>
+          <button class="qcag-sort-option${_qcagDesktopSortMode === 'sale' ? ' active' : ''}" onclick="qcagDesktopSetSort('sale')">Tên Sale</button>
+          <button class="qcag-sort-option${_qcagDesktopSortMode === 'tag' ? ' active' : ''}" onclick="qcagDesktopSetSort('tag')">Theo Tag</button>
         </div>
       </div>
     </div>
@@ -1251,6 +1286,14 @@ function _qcagDesktopRenderPagination(currentPage, totalPages, total) {
           !dropupEl.contains(e.target) &&
           !btnEl.contains(e.target)) {
         dropupEl.classList.add('hidden');
+      }
+      const sortDropupEl = document.getElementById('qcagSortDropup');
+      const sortBtnEl    = document.getElementById('qcagSortBtn');
+      if (sortDropupEl && sortBtnEl &&
+          !sortDropupEl.classList.contains('hidden') &&
+          !sortDropupEl.contains(e.target) &&
+          !sortBtnEl.contains(e.target)) {
+        sortDropupEl.classList.add('hidden');
       }
     };
     document.addEventListener('click', el._yearOutsideClick);
@@ -1274,6 +1317,9 @@ function qcagDesktopYearBtnToggle() {
         dispEl.classList.remove('qcag-year-disp--active');
       }
     }
+    // Close sort dropup if open
+    const sortDropup = document.getElementById('qcagSortDropup');
+    if (sortDropup) sortDropup.classList.add('hidden');
     dropup.classList.remove('hidden');
   } else {
     dropup.classList.add('hidden');
@@ -1291,6 +1337,23 @@ function qcagDesktopSetYearFilter(year) {
 
 function qcagDesktopApplyDropupYear() {
   qcagDesktopSetYearFilter(_qcagDesktopYearDropupYear);
+}
+
+function qcagDesktopSortBtnToggle() {
+  const sortDropup = document.getElementById('qcagSortDropup');
+  if (!sortDropup) return;
+  // Close year dropup if open
+  const yearDropup = document.getElementById('qcagYearDropup');
+  if (yearDropup) yearDropup.classList.add('hidden');
+  sortDropup.classList.toggle('hidden');
+}
+
+function qcagDesktopSetSort(mode) {
+  _qcagDesktopSortMode = mode || 'time';
+  const sortDropup = document.getElementById('qcagSortDropup');
+  if (sortDropup) sortDropup.classList.add('hidden');
+  _qcagDesktopListPage = 0;
+  renderQCAGDesktopList();
 }
 
 function qcagDesktopYearPickerStep(dir) {
@@ -1363,6 +1426,7 @@ async function qcagDesktopDeleteRequest(backendId) {
         showToast('Đã xóa yêu cầu');
       } else {
         showToast('Lỗi khi xóa yêu cầu');
+        return;
       }
     } else {
       // local fallback
@@ -1375,11 +1439,18 @@ async function qcagDesktopDeleteRequest(backendId) {
     }
 
     // Update UI
-    try { _qcagRequestsVersion += 1; } catch (e) {}
+    try { _qcagRequestsVersion += 1; _qcagRequestCodeCache.version = 0; } catch (e) {}
+    currentDetailRequest = null;
+    _qcagDesktopCurrentId = null;
     if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
     if (typeof renderRequestList === 'function') renderRequestList();
-    if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
-      currentDetailRequest = null;
+    // Update the detail panel to show the first available request or empty state
+    const remaining = getQCAGDesktopVisibleRequests();
+    if (remaining.length > 0) {
+      openQCAGDesktopRequest(remaining[0].__backendId);
+    } else {
+      const detailEl = document.getElementById('qcagDesktopDetail');
+      if (detailEl) detailEl.innerHTML = '<div class="qcag-detail-empty">Chưa có request phù hợp bộ lọc hiện tại</div>';
     }
   } catch (e) {
     console.warn('qcagDesktopDeleteRequest error', e);
@@ -1949,6 +2020,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
           <div class="qcag-requester-grid">
             <div><span>Tên Sale</span><strong>${escapeHtml(requester.saleName || requester.saleName || requester.phone || '-')}</strong></div>
             <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || '-')}</strong></div>
+            <div><span>SĐT Sale</span><strong>${escapeHtml(requester.phone || '-')}</strong></div>
             <div><span>Khu vực</span><strong>${escapeHtml(requester.region || '-')}</strong></div>
             <div><span>Tên SS/SE</span><strong>${escapeHtml(requester.ssName || requester.ssName || '-')}</strong></div>
           </div>

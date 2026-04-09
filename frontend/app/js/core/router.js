@@ -99,6 +99,8 @@ function showScreen(screenId) {
 function goHome() {
   resetForms();
   showScreen('homeScreen');
+  // Refresh push button status whenever user returns to home
+  try { if (typeof updateHomePushBtn === 'function') updateHomePushBtn(); } catch (_) {}
 }
 
 function startNewRequest() {

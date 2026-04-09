@@ -3,17 +3,11 @@
 // ====================================================================
 'use strict';
 
+// handleOldContentImages is intentionally a no-op — old_content_images DB column
+// was dropped. Images no longer collected for old-content field.
+// The toggle shows/hides the oldContentSection textarea only.
 function handleOldContentImages(input) {
-  const files = Array.from(input.files);
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      oldContentImages.push(e.target.result);
-      renderImagePreviews('oldContentPreview', oldContentImages, 'oldContent');
-    };
-    reader.readAsDataURL(file);
-  });
-  input.value = '';
+  if (input) input.value = '';
 }
 
 function handleStatusImages(input) {
@@ -56,8 +50,8 @@ function renderImagePreviews(containerId, images, type) {
 
 function removeImage(type, idx) {
   if (type === 'oldContent') {
-    oldContentImages.splice(idx, 1);
-    renderImagePreviews('oldContentPreview', oldContentImages, 'oldContent');
+    // old_content_images column dropped — no-op
+    return;
   } else if (type === 'status') {
     try { URL.revokeObjectURL(statusImages[idx]); } catch (e) {}
     statusImages.splice(idx, 1);

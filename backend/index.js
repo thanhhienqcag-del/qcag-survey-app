@@ -2377,8 +2377,11 @@ app.get('/api/ks/requests/:id', async (req, res) => {
     try {
         const id = String(req.params.id || '').trim();
         let rows;
+        const dbPrefixMatch = id.match(/^db_(\d+)$/);
         if (/^\d+$/.test(id)) {
             [rows] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
+        } else if (dbPrefixMatch) {
+            [rows] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(dbPrefixMatch[1])]);
         } else {
             [rows] = await pool.query('SELECT * FROM ks_requests WHERE backend_id = ? LIMIT 1', [id]);
         }
@@ -2523,8 +2526,12 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         const now = new Date();
 
         let rows;
+        const dbPrefixMatch = id.match(/^db_(\d+)$/);
         if (/^\d+$/.test(id)) {
             [rows] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
+        } else if (dbPrefixMatch) {
+            // Fallback ID for rows that had backend_id = NULL: look up by numeric id
+            [rows] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(dbPrefixMatch[1])]);
         } else {
             [rows] = await pool.query('SELECT * FROM ks_requests WHERE backend_id = ? LIMIT 1', [id]);
         }
@@ -2704,8 +2711,12 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
         await ensureDbInitStarted();
         const id = String(req.params.id || '').trim();
         let rows;
+        const dbPrefixMatch = id.match(/^db_(\d+)$/);
         if (/^\d+$/.test(id)) {
             [rows] = await pool.query('SELECT id FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
+        } else if (dbPrefixMatch) {
+            // Fallback ID for rows that had backend_id = NULL: look up by numeric id
+            [rows] = await pool.query('SELECT id FROM ks_requests WHERE id = ? LIMIT 1', [Number(dbPrefixMatch[1])]);
         } else {
             [rows] = await pool.query('SELECT id FROM ks_requests WHERE backend_id = ? LIMIT 1', [id]);
         }
