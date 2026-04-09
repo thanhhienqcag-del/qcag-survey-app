@@ -1390,16 +1390,29 @@ function qcagDesktopYearPickerStep(dir) {
 // Programmatic confirm dialog — works in PWA standalone mode (window.confirm is unreliable).
 function _qcagConfirmDialog(message) {
   return new Promise((resolve) => {
+    const isDark = document.documentElement.classList.contains('theme-dark')
+                || document.documentElement.getAttribute('data-theme') === 'dark';
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center';
+    const cardBg     = isDark ? '#0b1220' : '#ffffff';
+    const cardBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)';
+    const textColor  = isDark ? '#e6eef8' : '#111827';
+    const subColor   = isDark ? '#9ca3af' : '#6b7280';
+    const cancelBg   = isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6';
+    const cancelClr  = isDark ? '#e6eef8' : '#374151';
+    const cancelBdr  = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb';
     overlay.innerHTML =
-      '<div style="background:#fff;border-radius:12px;padding:24px;max-width:320px;width:90%;text-align:center">' +
-        '<p style="margin-bottom:20px;font-size:16px;line-height:1.5">' + message + '</p>' +
-        '<div style="display:flex;gap:8px;justify-content:center">' +
-          '<button id="_qcagCancelBtn" style="flex:1;padding:12px;border-radius:8px;background:#f3f4f6;border:none;cursor:pointer;font-size:15px">Hủy</button>' +
-          '<button id="_qcagConfirmBtn" style="flex:1;padding:12px;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:15px;font-weight:600">Xóa</button>' +
-        '</div>' +
-      '</div>';
+      `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:16px;padding:24px 20px 20px;max-width:300px;width:88%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
+        `<div style="width:48px;height:48px;border-radius:12px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">` +
+          `<svg width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>` +
+        `</div>` +
+        `<p style="margin-bottom:6px;font-size:15px;font-weight:600;color:${textColor};line-height:1.4">${message}</p>` +
+        `<p style="margin-bottom:18px;font-size:12px;color:${subColor}">Hành động này không thể hoàn tác.</p>` +
+        `<div style="display:flex;gap:8px">` +
+          `<button id="_qcagCancelBtn" style="flex:1;padding:11px;border-radius:10px;background:${cancelBg};border:${cancelBdr};cursor:pointer;font-size:14px;font-weight:500;color:${cancelClr}">Hủy</button>` +
+          `<button id="_qcagConfirmBtn" style="flex:1;padding:11px;border-radius:10px;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:600">Xóa</button>` +
+        `</div>` +
+      `</div>`;
     document.body.appendChild(overlay);
     const cleanup = (result) => { document.body.removeChild(overlay); resolve(result); };
     overlay.querySelector('#_qcagConfirmBtn').onclick = () => cleanup(true);
