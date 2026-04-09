@@ -1402,11 +1402,11 @@ function _qcagConfirmDialog(message) {
     const cancelClr  = isDark ? '#e6eef8' : '#374151';
     const cancelBdr  = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb';
     overlay.innerHTML =
-      `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:16px;padding:24px 20px 20px;max-width:300px;width:88%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
+      `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:16px;padding:24px 20px 20px;max-width:440px;width:88%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
         `<div style="width:48px;height:48px;border-radius:12px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">` +
           `<svg width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>` +
         `</div>` +
-        `<p style="margin-bottom:6px;font-size:15px;font-weight:600;color:${textColor};line-height:1.4">${message}</p>` +
+        `<p style="margin-bottom:6px;font-size:15px;font-weight:600;color:${textColor};line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${message}</p>` +
         `<p style="margin-bottom:18px;font-size:12px;color:${subColor}">Hành động này không thể hoàn tác.</p>` +
         `<div style="display:flex;gap:8px">` +
           `<button id="_qcagCancelBtn" style="flex:1;padding:11px;border-radius:10px;background:${cancelBg};border:${cancelBdr};cursor:pointer;font-size:14px;font-weight:500;color:${cancelClr}">Hủy</button>` +
