@@ -44,14 +44,11 @@ Write-Host "Staging all files..."
 
 # Commit
 $date = Get-Date -Format "yyyy-MM-dd HH:mm"
-& $git commit -m "chore: update v2.4.0 - $date
+& $git commit -m "fix: force cache-bust all JS/CSS on all devices - $date
 
-- Fix: delete request now works reliably (removed allowNotOk from SDK delete)
-- Fix: GCS image folder now uses TK code (e.g. TK26.00001) instead of backend ID
-- Fix: push notifications to Heineken mobile now sent via Vercel (same VAPID keys)
-- Fix: QCAG delete uses proper confirm modal instead of window.confirm (PWA safe)
-- Fix: ksRowToApp now returns tkCode field
-- Add: version badge v2.4.0 on mobile home and QCAG desktop sidebar"
+- Fix: add Cache-Control no-cache to all .html and /app/**/*.js|.css in vercel.json
+- Fix: add ?v=20260410 to all local script/link tags in index.html
+- Ensures all users always load latest JS flow code after deploy"
 
 Write-Host ""
 Write-Host "Pushing to $repoUrl ..."
