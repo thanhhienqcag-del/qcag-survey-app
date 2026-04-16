@@ -1,4 +1,4 @@
-<!-- Tập trung phát triển UX và UI của phần công ty Heineken (khách hàng), còn lại không đúng tới và phát triển sau khi hoàn thành phần của khách hàng -->
+﻿<!-- Tập trung phát triển UX và UI của phần công ty Heineken (khách hàng), còn lại không đúng tới và phát triển sau khi hoàn thành phần của khách hàng -->
 <!doctype html>
 <html lang="vi" class="h-full">
  <head>
@@ -54,14 +54,14 @@
       }
     })();
   </script>
-  <script src="app/_sdk/data_sdk.js?v=20260410"></script>
-  <script type="module" src="app/js/push.js?v=20260410"></script>
+  <script src="app/_sdk/data_sdk.js?v=20260416"></script>
+  <script type="module" src="app/js/push.js?v=20260416"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app/css/base.css?v=20260410">
-  <link rel="stylesheet" href="app/css/mobile.css?v=20260410">
-  <link rel="stylesheet" href="app/css/desktop.css?v=20260410">
+  <link rel="stylesheet" href="app/css/base.css?v=20260416">
+  <link rel="stylesheet" href="app/css/mobile.css?v=20260416">
+  <link rel="stylesheet" href="app/css/desktop.css?v=20260416">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     /* Outlet locate button: fixed width on desktop, full-width on small screens, ellipsis */
@@ -445,6 +445,17 @@
           <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý</button>
           <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành</button>
         </div>
+        <div class="qcag-nav-list-filter-bar qcag-nav-region-filter-bar" id="qcagNavListRegionBar">
+          <span class="qcag-nav-filter-label">Khu vực:</span>
+          <button class="qcag-nav-region-pill active" data-region="" onclick="qcagNavListSetRegionFilter('')">Tất cả</button>
+          <button class="qcag-nav-region-pill" data-region="s4" onclick="qcagNavListSetRegionFilter('s4')">S4 Hậu Giang</button>
+          <button class="qcag-nav-region-pill" data-region="s5" onclick="qcagNavListSetRegionFilter('s5')">S5 Cà Mau</button>
+          <button class="qcag-nav-region-pill" data-region="s16" onclick="qcagNavListSetRegionFilter('s16')">S16 An Giang</button>
+          <button class="qcag-nav-region-pill" data-region="s17" onclick="qcagNavListSetRegionFilter('s17')">S17 Kiên Giang</button>
+          <button class="qcag-nav-region-pill" data-region="24" onclick="qcagNavListSetRegionFilter('24')">24 Kiên Giang</button>
+          <button class="qcag-nav-region-pill" data-region="s19" onclick="qcagNavListSetRegionFilter('s19')">S19 Bạc Liêu</button>
+          <button class="qcag-nav-region-pill" data-region="mot8" onclick="qcagNavListSetRegionFilter('mot8')">MOT8 Phú Quốc</button>
+        </div>
         <div class="qcag-nav-panel-body">
           <div class="qcag-nav-table-wrap">
             <table class="qcag-nav-table" id="qcagNavListTable">
@@ -517,6 +528,7 @@
               <span class="theme-icon" aria-hidden="true">🌙</span>
               <span class="theme-label">Tối</span>
             </button>
+            <button onclick="qcagDesktopToggleDVHCLookup()" class="qcag-dvhc-btn" type="button" title="Tra cứu đơn vị hành chính mới">🗺️ Tra cứu ĐVHC</button>
             <button onclick="logout()" class="qcag-user-logout">Đăng xuất</button>
           </div>
         </header>
@@ -1070,7 +1082,14 @@
         </button>
         <h3 class="font-semibold text-base mb-1">Nội dung chỉnh sửa</h3>
         <p id="editSheetCategLabel" class="text-xs text-gray-500 mb-3"></p>
-        <textarea id="editRequestInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-4" placeholder="Mô tả chi tiết nội dung cần chỉnh sửa..."></textarea>
+        <textarea id="editRequestInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-2" placeholder="Mô tả chi tiết nội dung cần chỉnh sửa..."></textarea>
+        <div id="editRequestImgPreview" class="edit-request-img-preview hidden"></div>
+        <label class="edit-request-img-btn">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Thêm ảnh
+          <input type="file" accept="image/*" multiple class="hidden" onchange="handleEditRequestImagePick(this)">
+        </label>
+        <div class="mb-4"></div>
         <button onclick="submitEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">Gửi yêu cầu</button>
         <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">Hủy</button>
       </div>
@@ -1099,19 +1118,71 @@
   </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app/js/core/state.js?v=20260410"></script>
-  <script src="app/js/shared/utils.js?v=20260410"></script>
-  <script src="app/js/shared/ui.js?v=20260410"></script>
-  <script src="app/js/shared/image-utils.js?v=20260410"></script>
-  <script src="app/js/shared/location.js?v=20260410"></script>
-  <script src="app/js/shared/sdk-init.js?v=20260410"></script>
-  <script src="app/js/flows/login-flow.js?v=20260410"></script>
-  <script src="app/js/flows/request-flow.js?v=20260410"></script>
-  <script src="app/js/flows/warranty-flow.js?v=20260410"></script>
-  <script src="app/js/flows/list-flow.js?v=20260410"></script>
-  <script src="app/js/flows/detail-flow.js?v=20260410"></script>
-  <script src="app/js/flows/desktop-qcag-flow.js?v=20260410"></script>
-  <script src="app/js/flows/mobile-nav-flow.js?v=20260410"></script>
-  <script src="app/js/core/router.js?v=20260410"></script>
-  <script src="app/js/app.js?v=20260410"></script>
-<!-- test -->
+  <script src="app/js/core/state.js?v=20260416"></script>
+  <script src="app/js/shared/utils.js?v=20260416"></script>
+  <script src="app/js/shared/ui.js?v=20260416"></script>
+  <script src="app/js/shared/image-utils.js?v=20260416"></script>
+  <script src="app/js/shared/location.js?v=20260416"></script>
+  <script src="app/js/shared/sdk-init.js?v=20260416"></script>
+  <script src="app/js/flows/login-flow.js?v=20260416"></script>
+  <script src="app/js/flows/request-flow.js?v=20260416"></script>
+  <script src="app/js/flows/warranty-flow.js?v=20260416"></script>
+  <script src="app/js/flows/list-flow.js?v=20260416"></script>
+  <script src="app/js/flows/detail-flow.js?v=20260416"></script>
+  <script src="app/js/flows/desktop-qcag-flow.js?v=20260416"></script>
+  <script src="app/js/flows/mobile-nav-flow.js?v=20260416"></script>
+  <script src="app/js/core/router.js?v=20260416"></script>
+  <script src="app/js/app.js?v=20260416"></script>
+  <!-- v2.4.1 | 2026-04-16 -->
+  <script>
+    // ── Service Worker registration + auto-update ───────────────────────────────
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+
+      // Banner HTML injected when a new SW is waiting
+      function showUpdateBanner(reg) {
+        if (document.getElementById('sw-update-banner')) return;
+        var banner = document.createElement('div');
+        banner.id = 'sw-update-banner';
+        banner.style.cssText = [
+          'position:fixed;bottom:0;left:0;right:0;z-index:99999',
+          'background:#1d4ed8;color:#fff;display:flex;align-items:center',
+          'justify-content:space-between;padding:12px 16px',
+          'font-family:sans-serif;font-size:14px;gap:12px'
+        ].join(';');
+        banner.innerHTML = '<span>\uD83C\uDF89 Có phiên bản mới <b>v2.4.1</b> — nhấn để cập nhật!</span>'
+          + '<button id="sw-update-btn" style="background:#fff;color:#1d4ed8;border:none;'
+          + 'border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;flex-shrink:0">Cập nhật</button>';
+        document.body.appendChild(banner);
+        document.getElementById('sw-update-btn').addEventListener('click', function () {
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      }
+
+      navigator.serviceWorker.register('/sw.js').then(function (reg) {
+        // Already a new SW waiting (e.g. hard refresh after deploy)
+        if (reg.waiting) { showUpdateBanner(reg); }
+
+        // New SW found during page lifetime
+        reg.addEventListener('updatefound', function () {
+          var newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', function () {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateBanner(reg);
+            }
+          });
+        });
+
+        // Reload automatically once the new SW has taken control
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          window.location.reload();
+        });
+
+        // Check for updates every 30 minutes while the tab is open
+        setInterval(function () { reg.update(); }, 30 * 60 * 1000);
+      });
+    })();
+  </script>

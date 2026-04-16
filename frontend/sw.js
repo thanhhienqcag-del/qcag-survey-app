@@ -2,16 +2,23 @@
 // Must be served at / for full PWA standalone push support on iOS 16.4+
 'use strict';
 
-const CACHE_NAME = 'qcag-v1';
+const CACHE_NAME = 'qcag-v2.4.1';
 
 // ── Install: immediately activate ──────────────────────────────────────────────
 self.addEventListener('install', function (event) {
   self.skipWaiting();
 });
 
-// ── Activate: take control of all clients immediately ──────────────────────────
+// ── Activate: take control + xóa cache phiên bản cũ ───────────────────────────
 self.addEventListener('activate', function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(
+        keys.filter(function (key) { return key !== CACHE_NAME; })
+            .map(function (key) { return caches.delete(key); })
+      );
+    }).then(function () { return self.clients.claim(); })
+  );
 });
 
 // ── Message: allow client to force SW update ──────────────────────────────────
