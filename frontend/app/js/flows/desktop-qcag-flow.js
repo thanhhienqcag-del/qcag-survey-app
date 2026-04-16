@@ -1865,7 +1865,10 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
 
 // ── In-place MQ section refresh (no scroll jump) ─────────────────────
 function qcagDesktopRefreshMQInPlace(updatedRequest) {
-  const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(updatedRequest.designImages, []));
+  const _isWarrantyRefresh = String((updatedRequest && updatedRequest.type) || '').toLowerCase() === 'warranty';
+  const designImgs = _isWarrantyRefresh
+    ? qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(updatedRequest.acceptanceImages, []))
+    : qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(updatedRequest.designImages, []));
 
   // Rebuild thumb grid in-place
   const previewEl = document.getElementById('qcagMQPreview');
@@ -1874,9 +1877,12 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       ? designImgs.map((img, i) => `
         <div class="qcag-thumb-item">
           <img src="${img}" onclick="showImageFull(this.src,false)">
-          <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">✕</button>
+          ${_isWarrantyRefresh
+            ? `<button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveAcceptanceImage(${i})">✕</button>`
+            : `<button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">✕</button>`
+          }
         </div>`).join('')
-      : '<div class="qcag-detail-muted">Chưa có MQ</div>';
+      : `<div class="qcag-detail-muted">${_isWarrantyRefresh ? 'Chưa có ảnh nghiệm thu' : 'Chưa có MQ'}</div>`;
   }
 
   // Update the complete button state
@@ -2386,6 +2392,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   const items = qcagDesktopParseJson(request.items, []);
   const statusImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(request.statusImages, []));
   const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(request.designImages, []));
+  const acceptImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(request.acceptanceImages, []));
+  const isWarranty = String(request.type || '').toLowerCase() === 'warranty';
+  // For warranty requests, the MQ preview panel shows acceptanceImages
+  const mqPreviewImgs = isWarranty ? acceptImgs : designImgs;
   const comments = qcagDesktopParseJson(request.comments, []);
   const isPendingEditRequest = qcagDesktopIsPendingEditRequest(request);
   const canManageItems = qcagDesktopCanEditItems(request);
@@ -2395,7 +2405,6 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
     : 'Vui lòng upload MQ thiết kế trước';
   const requester = qcagDesktopParseJson(request.requester, {});
   const statusBadge = qcagDesktopStatusBadge(request);
-  const isWarranty = String(request.type || '').toLowerCase() === 'warranty';
 
   detailEl.innerHTML = `
     <div class="qcag-detail-layout${_qcagCommentsCollapsed ? ' qcag-chat-collapsed' : ''}" id="qcagDetailLayout">
@@ -2518,12 +2527,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     <div class="qcag-upload-plus">+</div>
                   </label>
                   <div id="qcagMQPreview" class="qcag-thumb-grid">
-                    ${designImgs.length > 0 ? designImgs.map((img, i) => `
+                    ${mqPreviewImgs.length > 0 ? mqPreviewImgs.map((img, i) => `
                       <div class="qcag-thumb-item">
                         <img src="${img}" onclick="showImageFull(this.src,false)">
-                        <button type="button" class="qcag-thumb-remove" onclick="qcagDesktopRemoveDesignImage(${i})">✕</button>
+                        <button type="button" class="qcag-thumb-remove" onclick="${isWarranty ? `qcagDesktopRemoveAcceptanceImage(${i})` : `qcagDesktopRemoveDesignImage(${i})`}">✕</button>
                       </div>
-                    `).join('') : '<div class="qcag-detail-muted">Chưa có MQ</div>'}
+                    `).join('') : `<div class="qcag-detail-muted">${isWarranty ? 'Chưa có ảnh nghiệm thu' : 'Chưa có MQ'}</div>`}
                   </div>
                 </div>
                 
@@ -2777,6 +2786,23 @@ async function qcagDesktopUploadMQ(input) {
     }
   }
 
+  const isWarrantyReq = String((currentDetailRequest.type || '')).toLowerCase() === 'warranty';
+
+  if (isWarrantyReq) {
+    // Warranty type: append to acceptanceImages (not designImages)
+    const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
+    existingAccept.push(imageUrl);
+    const updated = {
+      ...currentDetailRequest,
+      acceptanceImages: JSON.stringify(existingAccept),
+      updatedAt: new Date().toISOString()
+    };
+    const ok = await qcagDesktopPersistRequest(updated, 'Đã upload ảnh nghiệm thu', true);
+    if (ok) qcagDesktopRefreshMQInPlace(updated);
+    input.value = '';
+    return;
+  }
+
   const currentImgs = [imageUrl];
 
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
@@ -3025,6 +3051,17 @@ async function qcagDesktopRemoveDesignImage(index) {
   const ok = await qcagDesktopPersistRequest(updated, 'Đã xóa ảnh MQ', true);
   if (ok) qcagDesktopRefreshMQInPlace(updated);
 }
+
+async function qcagDesktopRemoveAcceptanceImage(index) {
+  if (!currentDetailRequest) return;
+  const imgs = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
+  if (!Array.isArray(imgs) || index < 0 || index >= imgs.length) return;
+  imgs.splice(index, 1);
+  const updated = { ...currentDetailRequest, acceptanceImages: JSON.stringify(imgs), updatedAt: new Date().toISOString() };
+  const ok = await qcagDesktopPersistRequest(updated, 'Đã xóa ảnh nghiệm thu', true);
+  if (ok) qcagDesktopRefreshMQInPlace(updated);
+}
+
 
 function qcagDesktopRemovePendingCommentImage(index) {
   _qcagDesktopPendingCommentImages.splice(index, 1);

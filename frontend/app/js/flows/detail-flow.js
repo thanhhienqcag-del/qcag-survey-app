@@ -550,21 +550,24 @@ async function showRequestDetail(id) {
   }
 
   if (request.type === 'warranty') {
+    const _isHKRole = currentSession && String(currentSession.role || '').toLowerCase() === 'heineken';
+    // Backward-compat: older records had acceptance images stored in designImages by desktop QCAG
+    const displayAcceptanceImgs = acceptanceImgs.length > 0 ? acceptanceImgs : designImgs;
     html += `
       <div class="bg-gray-50 rounded-xl p-4">
         <h3 class="font-medium mb-3">Ảnh nghiệm thu</h3>
-        ${acceptanceImgs.length > 0 ? `
+        ${displayAcceptanceImgs.length > 0 ? `
           <div class="flex flex-wrap gap-2 mb-3">
-            ${acceptanceImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
+            ${displayAcceptanceImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
           </div>
         ` : '<p class="text-sm text-gray-500 mb-3">Chưa có ảnh nghiệm thu</p>'}
-        <label class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-100">
+        ${_isHKRole ? '' : `<label class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-100">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
           </svg>
           Upload ảnh nghiệm thu
           <input type="file" accept="image/*" multiple class="hidden" onchange="uploadAcceptance(this)">
-        </label>
+        </label>`}
       </div>
     `;
   }
@@ -670,16 +673,20 @@ async function showRequestDetail(id) {
   content.innerHTML = html;
   showScreen('detailScreen');
   _mqHintEligible = !!(currentSession && String(currentSession.role || '').toLowerCase() === 'heineken' && request.type === 'new');
-  // Show edit-request FAB and position it depending on tab (chat-mode => left, detail => right)
+  // Show edit-request FAB only for 'new' type requests (not warranty)
   try {
     const fab = document.getElementById('editRequestFab');
     const detailContent = document.getElementById('detailContent');
     if (fab) {
-      fab.classList.remove('hidden');
-      if (detailContent && detailContent.classList.contains('chat-mode')) {
-        fab.classList.remove('fab-right'); fab.classList.add('fab-left');
+      if (request2.type !== 'new') {
+        fab.classList.add('hidden');
       } else {
-        fab.classList.remove('fab-left'); fab.classList.add('fab-right');
+        fab.classList.remove('hidden');
+        if (detailContent && detailContent.classList.contains('chat-mode')) {
+          fab.classList.remove('fab-right'); fab.classList.add('fab-left');
+        } else {
+          fab.classList.remove('fab-left'); fab.classList.add('fab-right');
+        }
       }
     }
   } catch (e) {}
@@ -794,7 +801,13 @@ function switchDetailMobileTab(tab) {
     // position FAB at bottom-left for comment tab; attach scroll listeners so FAB sits above input
     try {
       const fab = document.getElementById('editRequestFab');
-      if (fab) { fab.classList.remove('fab-right'); fab.classList.add('fab-left'); fab.classList.remove('hidden'); }
+      if (fab) {
+        if (currentDetailRequest && currentDetailRequest.type !== 'new') {
+          fab.classList.add('hidden');
+        } else {
+          fab.classList.remove('fab-right'); fab.classList.add('fab-left'); fab.classList.remove('hidden');
+        }
+      }
       attachFabListeners();
       hideMqJumpHint();
     } catch (e) {}
@@ -923,7 +936,8 @@ async function uploadAcceptance(input) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
       showToast('Đã upload ảnh nghiệm thu');
-      showRequestDetail(currentDetailRequest.__backendId);
+      // Navigate to warranty list filtered by "Đã bảo hành" so item appears in correct category
+      if (typeof showWarrantyListWithFilter === 'function') showWarrantyListWithFilter('warranty_done');
     } else {
       showToast('Lỗi upload ảnh nghiệm thu');
     }
@@ -934,7 +948,7 @@ async function uploadAcceptance(input) {
       currentDetailRequest = allRequests[idx];
       saveAllRequestsToStorage();
       showToast('Đã upload ảnh nghiệm thu (lưu local)');
-      showRequestDetail(currentDetailRequest.__backendId);
+      if (typeof showWarrantyListWithFilter === 'function') showWarrantyListWithFilter('warranty_done');
     } else {
       showToast('Không tìm thấy yêu cầu để lưu');
     }

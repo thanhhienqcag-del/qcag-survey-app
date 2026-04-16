@@ -19,10 +19,23 @@ const DESIGN_FILTER_LABELS = {
 
 // Badge config: label + Tailwind classes
 const DESIGN_STATE_BADGE = {
-  waiting: { label: 'Chờ TK',      cls: 'bg-gray-100 text-gray-500' },
-  has_mq:  { label: 'Có MQ',        cls: 'bg-gray-900 text-white'    },
-  editing: { label: 'Đang cập nhật', cls: 'bg-gray-700 text-white'    }
+  waiting:          { label: 'Chờ TK',       cls: 'bg-gray-100 text-gray-500'   },
+  has_mq:           { label: 'Có MQ',         cls: 'bg-gray-900 text-white'      },
+  editing:          { label: 'Đang cập nhật', cls: 'bg-gray-700 text-white'      },
+  warranty_pending: { label: 'Chờ BH',        cls: 'bg-amber-100 text-amber-700' },
+  warranty_done:    { label: 'Đã BH',         cls: 'bg-green-600 text-white'     }
 };
+
+// Returns: 'warranty_pending' | 'warranty_done'
+function getWarrantyState(req) {
+  let acceptImgs = [];
+  try { acceptImgs = JSON.parse(req.acceptanceImages || '[]'); } catch (e) {}
+  if (acceptImgs && acceptImgs.length > 0 && acceptImgs[0] !== '...') return 'warranty_done';
+  // Backward-compat: older records had acceptance photos uploaded to designImages by mistake
+  let designImgs = [];
+  try { designImgs = JSON.parse(req.designImages || '[]'); } catch (e) {}
+  return (designImgs && designImgs.length > 0 && designImgs[0] !== '...') ? 'warranty_done' : 'warranty_pending';
+}
 
 function showRequestListWithFilter(filter) {
   currentDesignFilter = filter || 'all';
@@ -97,8 +110,11 @@ function updateHomeStats() {
     else if (state === 'editing') editing++;
   });
   ownedRequests.filter(r => r.type === 'warranty').forEach(req => {
-    let imgs = [];
-    try { imgs = JSON.parse(req.acceptanceImages || '[]'); } catch (e) {}
+    let imgs = []; try { imgs = JSON.parse(req.acceptanceImages || '[]'); } catch (e) {}
+    // Backward-compat: older records had acceptance images in designImages
+    if (!imgs || imgs.length === 0 || imgs[0] === '...') {
+      try { const di = JSON.parse(req.designImages || '[]'); if (di.length > 0 && di[0] !== '...') imgs = di; } catch (e) {}
+    }
     if (!imgs || imgs.length === 0) warrantyPending++; else warrantyDone++;
   });
 
@@ -152,12 +168,18 @@ function renderRequestList() {
   if (currentDesignFilter === 'warranty_pending') {
     filtered = filtered.filter(r => {
       let imgs = []; try { imgs = JSON.parse(r.acceptanceImages || '[]'); } catch (e) {}
-      return !imgs || imgs.length === 0;
+      if (imgs && imgs.length > 0 && imgs[0] !== '...') return false;
+      // Backward-compat: check designImages too
+      try { const di = JSON.parse(r.designImages || '[]'); if (di.length > 0 && di[0] !== '...') return false; } catch (e) {}
+      return true;
     });
   } else if (currentDesignFilter === 'warranty_done') {
     filtered = filtered.filter(r => {
       let imgs = []; try { imgs = JSON.parse(r.acceptanceImages || '[]'); } catch (e) {}
-      return imgs && imgs.length > 0;
+      if (imgs && imgs.length > 0 && imgs[0] !== '...') return true;
+      // Backward-compat: check designImages too
+      try { const di = JSON.parse(r.designImages || '[]'); if (di.length > 0 && di[0] !== '...') return true; } catch (e) {}
+      return false;
     });
   } else if (currentDesignFilter !== 'all') {
     filtered = filtered.filter(r => getRequestDesignState(r) === currentDesignFilter);
@@ -208,7 +230,7 @@ function renderRequestList() {
   container.innerHTML = filtered.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
-    const dsState = getRequestDesignState(req);
+    const dsState = req.type === 'warranty' ? getWarrantyState(req) : getRequestDesignState(req);
     const badge = DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.waiting;
     let preview = '';
     let hasDesignPlaceholder = false;
@@ -221,6 +243,18 @@ function renderRequestList() {
           lazyLoadIds.push(req.__backendId);
         } else {
           preview = imgs[0];
+        }
+      }
+      // For warranty requests: if designImages is empty, fall back to acceptanceImages
+      if (!preview && !hasDesignPlaceholder && req.type === 'warranty') {
+        const aImgs = JSON.parse(req.acceptanceImages || '[]');
+        if (aImgs && aImgs.length > 0) {
+          if (aImgs[0] === '...') {
+            hasDesignPlaceholder = true;
+            lazyLoadIds.push(req.__backendId);
+          } else {
+            preview = aImgs[0];
+          }
         }
       }
     } catch (e) { preview = ''; }
@@ -312,7 +346,13 @@ function renderRequestList() {
         try {
           const r = await window.dataSdk.getOne(backendId);
           if (!r || !r.isOk || !r.data) continue;
-          const imgs = JSON.parse(r.data.designImages || '[]').filter(u => u && u !== '...');
+          // For warranty requests, prefer acceptanceImages as the thumbnail source
+          const reqEntry = allRequests.find(x => x.__backendId === backendId);
+          const isWarrantyEntry = reqEntry && reqEntry.type === 'warranty';
+          let imgs = JSON.parse(r.data.designImages || '[]').filter(u => u && u !== '...');
+          if (isWarrantyEntry && imgs.length === 0) {
+            imgs = JSON.parse(r.data.acceptanceImages || '[]').filter(u => u && u !== '...');
+          }
           if (!imgs.length) continue;
           // Update local store
           const idx = allRequests.findIndex(x => x.__backendId === backendId);
