@@ -55,6 +55,13 @@ function getBackendCandidates(req) {
     ...getLocalDevCandidates(req),
     // Known production backends in this project.
     'https://qcag-backend-493469512136.asia-southeast1.run.app',
+    'https://qcag-backend-k7disoxmcq-as.a.run.app',
+    'https://qcag-backend-bgrkahehra-as.a.run.app'
+  ]);
+}
+
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
     if (req.body != null) {
       if (Buffer.isBuffer(req.body)) return resolve(req.body);
       if (typeof req.body === 'string') return resolve(Buffer.from(req.body, 'utf8'));
