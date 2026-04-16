@@ -1030,7 +1030,20 @@
     background: rgba(16,185,129,0.06);
   }
 
-  /* Left-column request tags */
+  /* Ngoài phạm vi bảo hành */
+  .qcag-status-badge.warranty-out-of-scope {
+    border: 2px solid #f97316;
+    padding: 1px 8px;
+    background: rgba(249,115,22,0.05);
+    background-clip: padding-box;
+    color: #92400e;
+  }
+  .theme-dark .qcag-status-badge.warranty-out-of-scope,
+  [data-theme="dark"] .qcag-status-badge.warranty-out-of-scope {
+    border-color: #fb923c;
+    color: #ffd8bf;
+    background: rgba(249,115,22,0.07);
+  }
   .qcag-request-tags {
     margin-top: 4px; /* reduced gap to pull tags closer */
     display: flex;
@@ -1138,13 +1151,21 @@
 
   .qcag-detail-layout {
     height: 100%;
-    display: grid;
-    /* left content 70% / right comments 30% */
-    grid-template-columns: 70% 30%;
-    gap: 0;
+    display: flex;
+    position: relative;
+  }
+
+  .qcag-detail-layout.qcag-chat-collapsed .qcag-detail-right {
+    width: 32px !important;
+    padding: 0 !important;
+  }
+
+  .qcag-detail-layout.qcag-chat-collapsed .qcag-chat-card {
+    display: none;
   }
 
   .qcag-detail-left {
+    flex: 1;
     min-width: 0;
     overflow: auto;
     padding: 14px;
@@ -1436,10 +1457,53 @@
   .qcag-upload-square:hover { transform: translateY(-3px); transition: transform 120ms ease; }
 
   .qcag-detail-right {
+    width: 30%;
+    flex-shrink: 0;
     min-width: 0;
     overflow: hidden;
     padding: 14px;
     box-sizing: border-box;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: width;
+  }
+
+  .qcag-expand-comments-tab {
+    position: absolute;
+    top: 220px;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 7px;
+    background: #1e293b;
+    color: #f8fafc;
+    border: none;
+    border-radius: 10px 0 0 10px;
+    cursor: pointer;
+    box-shadow: -2px 2px 8px rgba(0,0,0,0.18);
+    z-index: 10;
+    transition: background 0.15s;
+  }
+
+  .qcag-expand-comments-tab-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  .qcag-expand-comments-tab:hover {
+    background: #334155;
+  }
+
+  .qcag-expand-comments-tab .qcag-comments-count-badge {
+    writing-mode: horizontal-tb;
+    min-width: 18px;
+    height: 18px;
+    font-size: 11px;
   }
 
   .qcag-detail-empty,
@@ -1823,7 +1887,7 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #3b82f6; /* blue */
+    background: #3b82f6; /* blue — hạng mục thêm mới */
     display: inline-block;
     box-shadow: 0 0 0 2px rgba(59,130,246,0.12);
   }
@@ -1832,9 +1896,18 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #10b981; /* green */
+    background: #10b981; /* green — brand đổi */
     display: inline-block;
     box-shadow: 0 0 0 2px rgba(16,185,129,0.12);
+  }
+
+  .qcag-edited-badge {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #f97316; /* orange — hạng mục được sửa */
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(249,115,22,0.15);
   }
 
   .qcag-stt-badges {
@@ -1944,12 +2017,65 @@
     overflow: hidden;
   }
 
+  .qcag-chat-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .qcag-chat-head {
     padding: 10px 12px;
     border-bottom: 1px solid #f3f4f6;
     font-size: 13px;
     font-weight: 600;
     color: #111827;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .qcag-comments-toggle-btn {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    background: transparent;
+    color: #6b7280;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: background .15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .qcag-comments-toggle-btn:hover {
+    background: #f3f4f6;
+    color: #111827;
+  }
+
+  .qcag-comments-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 2px;
+  }
+
+  .qcag-sale-name-highlight {
+    color: #0369a1;
+    font-weight: 600;
   }
 
   .qcag-comment-timeline {
@@ -2060,16 +2186,36 @@
   .qcag-chat-input-wrap textarea {
     width: 100%;
     resize: none;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
+    border: none;
     padding: 8px 10px;
     font-size: 13px;
     min-height: 72px;
     outline: none;
+    background: transparent;
   }
 
   .qcag-chat-input-wrap textarea:focus {
+    border-color: transparent;
+  }
+
+  /* Visual input box wrapping textarea + image preview */
+  .qcag-comment-input-box {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+  }
+  .qcag-comment-input-box:focus-within {
     border-color: #9ca3af;
+  }
+  .qcag-comment-input-box .qcag-upload-preview:not(.hidden) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px 4px;
+    border-top: 1px solid #f3f4f6;
   }
 
   .qcag-chat-actions {
@@ -2508,9 +2654,33 @@
   border-color: var(--border-1);
 }
 
+.theme-dark .qcag-expand-comments-tab {
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: -2px 2px 8px rgba(0,0,0,0.4);
+}
+
+.theme-dark .qcag-expand-comments-tab:hover {
+  background: #1e293b;
+}
+
 .theme-dark .qcag-chat-head {
   color: var(--text-main);
   border-bottom-color: var(--border-1);
+}
+
+.theme-dark .qcag-comments-toggle-btn {
+  border-color: rgba(255,255,255,0.12);
+  color: #9ca3af;
+}
+
+.theme-dark .qcag-comments-toggle-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: #f3f4f6;
+}
+
+.theme-dark .qcag-sale-name-highlight {
+  color: #38bdf8;
 }
 
 .theme-dark .qcag-comment-timeline {
@@ -2553,8 +2723,8 @@
 }
 
 .theme-dark .qcag-chat-input-wrap textarea {
-  background: var(--surface-2);
-  border-color: var(--border-2);
+  background: transparent;
+  border-color: transparent;
   color: var(--text-main);
 }
 
@@ -2563,7 +2733,18 @@
 }
 
 .theme-dark .qcag-chat-input-wrap textarea:focus {
+  border-color: transparent;
+}
+
+.theme-dark .qcag-comment-input-box {
   border-color: var(--border-2);
+  background: var(--surface-2);
+}
+.theme-dark .qcag-comment-input-box:focus-within {
+  border-color: var(--border-2);
+}
+.theme-dark .qcag-comment-input-box .qcag-upload-preview:not(.hidden) {
+  border-top-color: var(--border-1);
 }
 
 .theme-dark .qcag-comment-upload {
@@ -2631,6 +2812,36 @@
 }
 .qcag-mq-footer-left { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .qcag-mq-footer-right { flex:0 0 auto; }
+
+/* Warranty confirmation buttons */
+.qcag-warranty-btns { display:flex; flex-direction:column; gap:6px; }
+.qcag-warranty-btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity .15s;
+}
+.qcag-warranty-btn:hover { opacity: 0.88; }
+.qcag-warranty-btn--out  { background: #f97316; color: #fff; }
+.qcag-warranty-btn--done { background: #059669; color: #fff; }
+
+/* Out-of-scope note displayed next to status images */
+.qcag-warranty-scope-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(249,115,22,0.08);
+  border: 1px solid rgba(249,115,22,0.25);
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.4;
+}
+.qcag-warranty-scope-label { font-weight: 700; margin-right: 4px; }
+.theme-dark .qcag-warranty-scope-note { background: rgba(249,115,22,0.1); border-color: rgba(249,115,22,0.3); color: #ffd8bf; }
 .qcag-mq-created,
 .qcag-mq-edited {
   font-size: 12px;
@@ -3192,6 +3403,27 @@
 .theme-dark .qcag-nav-filter-pill.active[data-status="pending-confirm"] { background: rgba(16,185,129,0.15); border-color: #10b981; color: #bbf7d0; }
 .theme-dark .qcag-nav-filter-pill.active[data-status="survey"]         { background: rgba(250,204,21,0.12); border-color: #facc15; color: #fef08a; }
 
+/* Region filter row in nav list panel */
+.qcag-nav-region-filter-bar { margin-top: 0; border-top: none; }
+.qcag-nav-region-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  border: 1px solid #e5e7eb;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.qcag-nav-region-pill:hover { background: #f3f4f6; color: #111827; }
+.qcag-nav-region-pill.active { border-color: #7c3aed; background: #f5f3ff; color: #5b21b6; font-weight: 600; }
+.theme-dark .qcag-nav-region-pill { border-color: rgba(255,255,255,0.1); color: #9ca3af; }
+.theme-dark .qcag-nav-region-pill:hover { background: rgba(255,255,255,0.06); color: #f3f4f6; }
+.theme-dark .qcag-nav-region-pill.active { background: rgba(124,58,237,0.2); border-color: #8b5cf6; color: #c4b5fd; }
+
 /* Badge - match desktop .qcag-status-badge exactly */
 .qcag-nav-status-badge {
   display: inline-flex;
@@ -3424,4 +3656,341 @@
   border-color: rgba(255,255,255,0.06);
 }
 .theme-dark .qcag-nav-table tr:hover td { background: rgba(255,255,255,0.05); }
+
+/* ── Status image section: same height as MQ upload square ──────── */
+.qcag-status-upload-square {
+  width: 120px !important;
+  height: 120px !important;
+  margin-right: 0 !important;
+  flex-shrink: 0;
+}
+.qcag-status-upload-square .qcag-upload-plus {
+  font-size: 40px;
+}
+/* Thumbs in the status section: representative image matching square height */
+#qcagStatusThumbGrid {
+  display: flex;
+  align-items: flex-start;
+}
+#qcagStatusThumbGrid .qcag-gallery-rep img {
+  width: auto;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.theme-dark #qcagStatusThumbGrid img {
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* ── SVG icon in outlet/item edit buttons ────────────────────────── */
+.qcag-icon-pencil { display: inline-block; vertical-align: middle; margin-top: -2px; }
+.qcag-edit-outlet-btn svg,
+.qcag-item-edit-btn svg { display: inline-block; vertical-align: middle; margin-top: -1px; }
+.qcag-edit-outlet-btn {
+  border: 1px solid #6b7280;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.5;
+  transition: background 0.15s;
+}
+.qcag-edit-outlet-btn:hover { background: #e5e7eb; }
+.theme-dark .qcag-edit-outlet-btn {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #d1fae5;
+}
+.theme-dark .qcag-edit-outlet-btn:hover { background: #374151; }
+
+/* ── QCAG Edit: per-item edit button ──────────────────────────────── */
+.qcag-item-actions-cell {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+}
+.qcag-item-edit-btn {
+  border: 1px solid #6b7280;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1;
+  min-width: 26px;
+  text-align: center;
+}
+.qcag-item-edit-btn:hover { background: #e5e7eb; }
+.theme-dark .qcag-item-edit-btn {
+  border-color: #4b5563;
+  background: #1f2937;
+  color: #e5e7eb;
+}
+
+/* ── QCAG Status: "Thêm ảnh" upload label in hiện trạng ──────────── */
+.qcag-status-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.qcag-status-upload-btn:hover { background: #dbeafe; }
+.qcag-status-upload-btn input[type="file"] { display: none; }
+.theme-dark .qcag-status-upload-btn {
+  border-color: #3b82f6;
+  background: rgba(59,130,246,0.12);
+  color: #93c5fd;
+}
+
+/* ── Edit outlet modal — textarea style ─────────────────────────────── */
+.qcag-edit-items-body textarea {
+  margin-top: 3px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+  background: #fff;
+  color: #111827;
+}
+.theme-dark .qcag-edit-items-body textarea {
+  background: #1f2937;
+  color: #f9fafb;
+  border-color: #374151;
+}
+
+/* ── Tra cứu ĐVHC ──────────────────────────────────────────────── */
+.qcag-dvhc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4f46e5;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.qcag-dvhc-btn:hover { background: #e0e7ff; }
+
+.qcag-dvhc-panel {
+  /* Dropdown-like fixed panel */
+  position: fixed;
+  right: 20px;
+  top: calc(var(--app-header-height, 56px) + 8px);
+  background: #ffffff;
+  border: 1px solid #e6edf7;
+  border-radius: 10px;
+  width: 520px;
+  max-width: calc(100vw - 40px);
+  max-height: 420px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(2,6,23,0.12);
+  z-index: 10050;
+  overflow: hidden;
+}
+
+.qcag-dvhc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  font-size: 15px;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.qcag-dvhc-close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #6b7280;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.qcag-dvhc-close-btn:hover { color: #111; }
+
+.qcag-dvhc-search-input {
+  margin: 10px 14px 0;
+  padding: 9px 12px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  flex-shrink: 0;
+}
+.qcag-dvhc-search-input:focus { border-color: #6366f1; }
+
+.qcag-dvhc-status {
+  padding: 6px 16px 4px;
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.qcag-dvhc-results {
+  overflow-y: auto;
+  padding: 6px 12px 12px;
+  flex: 1 1 auto;
+}
+
+/* Make internal lists scroll smoothly on modern browsers */
+.qcag-dvhc-results::-webkit-scrollbar { width: 10px; }
+.qcag-dvhc-results::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 6px; }
+
+/* Allow interacting with page while DVHC panel is open: make modal wrapper pass pointer events through
+  but keep panel itself interactive. This prevents the invisible full-screen wrapper from blocking clicks. */
+#qcagDVHCModal { pointer-events: none; z-index: 10100; } /* above dvZoomOverlay (5000) */
+#qcagDVHCModal .qcag-dvhc-panel { pointer-events: auto; z-index: 10100; }
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.qcag-dvhc-province-title {
+  padding: 8px 12px;
+  background: #f0f4ff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3730a3;
+  line-height: 1.4;
+}
+.qcag-dvhc-province-title mark {
+  background: transparent;
+  color: #0b60ff; /* brighter accent color for matched text */
+  font-weight: 700;
+  border-radius: 0;
+  padding: 0;
+}
+
+/* New: style old-province text to be italic and thinner than the new province name */
+.qcag-dvhc-province-title .qcag-dvhc-new-province { font-weight: 700; }
+.qcag-dvhc-province-title .qcag-dvhc-old-provinces {
+  font-style: italic;
+  font-weight: 300;
+  font-size: 12.5px;
+  color: rgba(55, 65, 81, 0.9); /* slightly muted */
+}
+
+.qcag-dvhc-ward-list {
+  padding: 4px 10px 6px;
+}
+
+.qcag-dvhc-ward-item {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+.qcag-dvhc-ward-item:last-child { border-bottom: none; }
+
+.qcag-dvhc-ward-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+}
+.qcag-dvhc-ward-name mark {
+  background: transparent;
+  color: #0b60ff;
+  font-weight: 600;
+  border-radius: 0;
+  padding: 0;
+}
+
+.qcag-dvhc-ward-sources {
+  font-size: 11.5px;
+  color: #6b7280;
+  padding-left: 14px;
+  line-height: 1.5;
+}
+.qcag-dvhc-ward-sources mark {
+  background: transparent;
+  color: #0b60ff;
+  font-weight: 600;
+  border-radius: 0;
+  padding: 0;
+}
+
+.qcag-dvhc-empty,
+.qcag-dvhc-more {
+  text-align: center;
+  color: #6b7280;
+  font-size: 13px;
+  padding: 16px 0;
+}
+
+/* Dark theme */
+.theme-dark .qcag-dvhc-btn {
+  background: #312e81;
+  color: #a5b4fc;
+  border-color: #4338ca;
+}
+.theme-dark .qcag-dvhc-btn:hover { background: #3730a3; }
+
+.theme-dark .qcag-dvhc-panel {
+  background: #1f2937;
+  color: #f9fafb;
+}
+.theme-dark .qcag-dvhc-header { border-bottom-color: #374151; }
+.theme-dark .qcag-dvhc-close-btn { color: #9ca3af; }
+.theme-dark .qcag-dvhc-close-btn:hover { color: #f9fafb; }
+.theme-dark .qcag-dvhc-search-input {
+  background: #111827;
+  border-color: #374151;
+  color: #f9fafb;
+}
+.theme-dark .qcag-dvhc-search-input:focus { border-color: #818cf8; }
+.theme-dark .qcag-dvhc-status { color: #9ca3af; }
+.theme-dark .qcag-dvhc-province-group { border-color: #374151; }
+.theme-dark .qcag-dvhc-province-title { background: #1e2a42; color: #a5b4fc; }
+.theme-dark .qcag-dvhc-province-title mark {
+  background: transparent;
+  color: #fde68a;
+  font-weight: 700;
+}
+/* Dark theme: keep old provinces italic but muted */
+.theme-dark .qcag-dvhc-province-title .qcag-dvhc-old-provinces {
+  font-style: italic;
+  font-weight: 300;
+  color: rgba(165, 180, 252, 0.9);
+}
+.theme-dark .qcag-dvhc-ward-item { border-bottom-color: #2d3748; }
+.theme-dark .qcag-dvhc-ward-name { color: #f3f4f6; }
+.theme-dark .qcag-dvhc-ward-name mark {
+  background: transparent;
+  color: #fde68a;
+  font-weight: 600;
+}
+.theme-dark .qcag-dvhc-ward-sources { color: #9ca3af; }
+.theme-dark .qcag-dvhc-ward-sources mark {
+  background: transparent;
+  color: #fde68a;
+  font-weight: 600;
+}
 

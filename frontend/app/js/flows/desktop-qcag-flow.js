@@ -10,6 +10,7 @@ let _qcagDesktopRegionFilter = 'all';
 let _qcagDesktopSearchQuery = '';
 let _qcagDesktopCurrentId = null;
 let _qcagDesktopPendingCommentImages = [];
+let _qcagCommentsCollapsed = false; // collapsible comment panel state
 let _qcagDesktopSearchDebounce = null;
 let _qcagDesktopFullRequestCache = {};
 let _qcagDesktopFullRequestPending = {};
@@ -347,15 +348,12 @@ function assignStandardTags(req) {
 
   // Processing / Bảo hành (warranty)
   if (String(req.type || '').toLowerCase() === 'warranty') {
-    if (!Array.isArray(statusImgs) || statusImgs.length === 0) {
-      tags.push('Đang chờ kiểm tra bảo hành');
-    }
-    // Possible rejection / expired indicators (best-effort detection)
-    if (req.rejected === true || req.rejectedAt || String(req.status || '').toLowerCase() === 'rejected') {
-      tags.push('Yêu cầu bị từ chối');
-    }
-    if (req.warrantyExpired === true || req.warrantyExpiredAt || String(req.status || '').toLowerCase() === 'expired') {
-      tags.push('Đã hết hạn bảo hành');
+    const _wstat = String(req.status || 'pending').toLowerCase();
+    if (_wstat === 'done' || _wstat === 'processed') {
+      if (req.warrantyOutOfScope) tags.push('Ngoài phạm vi BH');
+      else tags.push('Đã Bảo hành');
+    } else {
+      tags.push('Chờ kiểm tra');
     }
   }
 
@@ -368,9 +366,7 @@ function assignStandardTags(req) {
     }
   }
 
-  if (String(req.type || '').toLowerCase() === 'warranty' && (status === 'done' || status === 'processed')) {
-    tags.push('Đã Bảo hành');
-  }
+  // warranty done tags are handled above in the warranty block
 
   // remove duplicates and preserve order
   return Array.from(new Set(tags));
@@ -418,6 +414,307 @@ function qcagDesktopIsDone(req) {
   const s = String((req.status || '')).toLowerCase();
   return s === 'done' || s === 'processed';
 }
+
+// ── Edit Outlet Info Modal ────────────────────────────────────────────
+
+function qcagEnsureEditOutletModal() {
+  if (document.getElementById('qcagEditOutletModal')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'qcagEditOutletModal';
+  wrap.className = 'qcag-edit-items-modal hidden';
+  wrap.innerHTML = `
+    <div class="qcag-edit-items-backdrop" onclick="qcagCloseEditOutletModal()"></div>
+    <div class="qcag-edit-items-panel">
+      <div class="qcag-edit-items-header">Chỉnh sửa thông tin Outlet</div>
+      <div class="qcag-edit-items-body">
+        <label>Outlet Code
+          <input id="qcagEditOutletCode" type="text" maxlength="20" placeholder="Outlet Code"/>
+        </label>
+        <label>Tên Outlet
+          <input id="qcagEditOutletName" type="text" placeholder="Tên Outlet"/>
+        </label>
+        <label>Số điện thoại Outlet
+          <input id="qcagEditOutletPhone" type="tel" inputmode="numeric" placeholder="SĐT Outlet" oninput="this.value=this.value.replace(/[^0-9+]/g,'')"/>
+        </label>
+        <label>Địa chỉ Outlet
+          <input id="qcagEditOutletAddress" type="text" placeholder="Địa chỉ Outlet"/>
+        </label>
+        <label>Ghi chú (tuỳ chọn)
+          <textarea id="qcagEditOutletNote" rows="2" placeholder="Ghi chú chỉnh sửa (không bắt buộc)"></textarea>
+        </label>
+      </div>
+      <div class="qcag-edit-items-actions">
+        <button onclick="qcagCloseEditOutletModal()" class="btn">Hủy</button>
+        <button onclick="qcagDesktopConfirmEditOutletModal()" class="btn primary">Xác nhận</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+}
+
+function qcagDesktopOpenEditOutletModal() {
+  if (!currentDetailRequest) return;
+  qcagEnsureEditOutletModal();
+  document.getElementById('qcagEditOutletCode').value = currentDetailRequest.outletCode || '';
+  document.getElementById('qcagEditOutletName').value = currentDetailRequest.outletName || '';
+  document.getElementById('qcagEditOutletPhone').value = currentDetailRequest.phone || '';
+  document.getElementById('qcagEditOutletAddress').value = currentDetailRequest.address || '';
+  document.getElementById('qcagEditOutletNote').value = '';
+  const modal = document.getElementById('qcagEditOutletModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function qcagCloseEditOutletModal() {
+  const modal = document.getElementById('qcagEditOutletModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function qcagDesktopConfirmEditOutletModal() {
+  if (!currentDetailRequest) return;
+  const newCode = (document.getElementById('qcagEditOutletCode').value || '').trim();
+  const newName = (document.getElementById('qcagEditOutletName').value || '').trim();
+  const newPhone = (document.getElementById('qcagEditOutletPhone').value || '').trim();
+  const newAddress = (document.getElementById('qcagEditOutletAddress').value || '').trim();
+  const note = (document.getElementById('qcagEditOutletNote').value || '').trim();
+
+  if (!newCode || !newName) {
+    showToast('Outlet Code và Tên Outlet không được để trống');
+    return;
+  }
+
+  qcagCloseEditOutletModal();
+
+  const now = new Date().toISOString();
+  const editor = (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG';
+  const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
+
+  const changes = [];
+  if (newCode !== (currentDetailRequest.outletCode || '')) changes.push(`Outlet Code: ${currentDetailRequest.outletCode || '-'} → ${newCode}`);
+  if (newName !== (currentDetailRequest.outletName || '')) changes.push(`Tên Outlet: ${currentDetailRequest.outletName || '-'} → ${newName}`);
+  if (newPhone !== (currentDetailRequest.phone || '')) changes.push(`SĐT: ${currentDetailRequest.phone || '-'} → ${newPhone}`);
+  if (newAddress !== (currentDetailRequest.address || '')) changes.push(`Địa chỉ: ${currentDetailRequest.address || '-'} → ${newAddress}`);
+  if (note) changes.push(`Ghi chú: ${note}`);
+
+  if (changes.length === 0) { showToast('Không có thay đổi nào'); return; }
+
+  comments.push({
+    authorRole: 'system',
+    authorName: 'Hệ thống',
+    text: `QCAG (${editor}) chỉnh sửa thông tin Outlet — ${changes.join('; ')}`,
+    createdAt: now
+  });
+
+  const updated = {
+    ...currentDetailRequest,
+    outletCode: newCode,
+    outletName: newName,
+    phone: newPhone,
+    address: newAddress,
+    comments: JSON.stringify(comments),
+    updatedAt: now
+  };
+
+  await qcagDesktopPersistRequest(updated, 'Đã cập nhật thông tin Outlet');
+}
+
+// ── Edit Item Modal (edit existing item) ────────────────────────────────
+
+let _qcagEditItemIndex = null;
+
+function qcagEnsureEditSingleItemModal() {
+  if (document.getElementById('qcagEditSingleItemModal')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'qcagEditSingleItemModal';
+  wrap.className = 'qcag-edit-items-modal hidden';
+  wrap.innerHTML = `
+    <div class="qcag-edit-items-backdrop" onclick="qcagCloseEditSingleItemModal()"></div>
+    <div class="qcag-edit-items-panel">
+      <div class="qcag-edit-items-header">Sửa hạng mục</div>
+      <div class="qcag-edit-items-body">
+        <label>Loại bảng hiệu
+          <select id="qcagEditSingleItemType" onchange="qcagEditSingleItemOnTypeChange()">
+            <option value="">Chọn hạng mục</option>
+            ${signTypes.map(type => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join('')}
+          </select>
+        </label>
+        <div class="qcag-edit-after-type">
+          <div class="qcag-edit-grid">
+            <label>Hình thức
+              <select id="qcagEditSingleItemAction">
+                <option value="">Chọn hình thức</option>
+                <option value="Làm mới">Làm mới</option>
+                <option value="Thay bạt">Thay bạt</option>
+              </select>
+            </label>
+            <label>Brand
+              <select id="qcagEditSingleItemBrand">
+                <option value="">Chọn brand</option>
+                ${allBrands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <label>Ghi chú / Yêu cầu
+            <input id="qcagEditSingleItemNote" type="text" placeholder="Ghi chú"/>
+          </label>
+          <div class="qcag-edit-grid-3" style="margin-top:8px">
+            <label>Chiều ngang (m)
+              <input id="qcagEditSingleItemWidth" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this)"/>
+            </label>
+            <label>Chiều cao (m)
+              <input id="qcagEditSingleItemHeight" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this)"/>
+            </label>
+            <label>Số trụ
+              <input id="qcagEditSingleItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this)"/>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="qcag-edit-items-actions">
+        <button onclick="qcagCloseEditSingleItemModal()" class="btn">Hủy</button>
+        <button onclick="qcagDesktopConfirmEditSingleItemModal()" class="btn primary">Xác nhận</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrap);
+}
+
+function qcagEditSingleItemOnTypeChange() {
+  const typeEl = document.getElementById('qcagEditSingleItemType');
+  const brandEl = document.getElementById('qcagEditSingleItemBrand');
+  const actionEl = document.getElementById('qcagEditSingleItemAction');
+  if (!typeEl || !brandEl) return;
+  const selectedType = typeEl.value || '';
+  if (!selectedType) return;
+
+  const brands = getBrandsForType(selectedType);
+  if (Array.isArray(brands) && brands.length > 0) {
+    brandEl.innerHTML = `<option value="">Chọn brand</option>${brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
+    if (brands.length === 1) brandEl.value = brands[0];
+  } else {
+    brandEl.innerHTML = '<option value="">Chọn brand</option>';
+  }
+  try {
+    if (actionEl) {
+      const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
+      if (isLogoType) {
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
+      } else {
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
+      }
+    }
+  } catch (e) {}
+}
+
+function qcagDesktopOpenEditItemModal(index) {
+  if (!currentDetailRequest) return;
+  qcagEnsureEditSingleItemModal();
+  _qcagEditItemIndex = index;
+
+  const items = qcagDesktopParseJson(currentDetailRequest.items, []);
+  const item = items[index] || {};
+
+  // Pre-fill type
+  const typeEl = document.getElementById('qcagEditSingleItemType');
+  typeEl.value = item.type || '';
+  // Populate brands/action UI according to type
+  qcagEditSingleItemOnTypeChange();
+  const brandEl = document.getElementById('qcagEditSingleItemBrand');
+  if (brandEl) brandEl.value = item.brand || '';
+
+  // Pre-fill action & note
+  document.getElementById('qcagEditSingleItemAction').value = item.action || '';
+  document.getElementById('qcagEditSingleItemNote').value = item.note || item.otherContent || '';
+
+  // Pre-fill size fields
+  const widthEl  = document.getElementById('qcagEditSingleItemWidth');
+  const heightEl = document.getElementById('qcagEditSingleItemHeight');
+  const polesEl  = document.getElementById('qcagEditSingleItemPoles');
+  if (widthEl)  widthEl.value  = (item.surveySize && item.surveySize.width)  || item.width  || '';
+  if (heightEl) heightEl.value = (item.surveySize && item.surveySize.height) || item.height || '';
+  if (polesEl)  polesEl.value  = item.poles || 0;
+
+  const modal = document.getElementById('qcagEditSingleItemModal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function qcagCloseEditSingleItemModal() {
+  const modal = document.getElementById('qcagEditSingleItemModal');
+  if (modal) modal.classList.add('hidden');
+  _qcagEditItemIndex = null;
+}
+
+async function qcagDesktopConfirmEditSingleItemModal() {
+  if (_qcagEditItemIndex === null || !currentDetailRequest) return;
+  const idx = _qcagEditItemIndex;
+
+  const newType   = (document.getElementById('qcagEditSingleItemType').value   || '').trim();
+  const newAction = (document.getElementById('qcagEditSingleItemAction').value  || '').trim();
+  const newBrand  = (document.getElementById('qcagEditSingleItemBrand').value   || '').trim();
+  const newNote   = (document.getElementById('qcagEditSingleItemNote').value    || '').trim();
+  const newWidth  = parseFloat((document.getElementById('qcagEditSingleItemWidth')  || {}).value)  || 0;
+  const newHeight = parseFloat((document.getElementById('qcagEditSingleItemHeight') || {}).value) || 0;
+  const newPoles  = parseInt((document.getElementById('qcagEditSingleItemPoles')   || {}).value, 10) || 0;
+
+  if (!newType) { showToast('Vui lòng chọn loại hạng mục'); return; }
+
+  qcagCloseEditSingleItemModal();
+
+  const items = qcagDesktopParseJson(currentDetailRequest.items, []);
+  if (!items[idx]) { showToast('Không tìm thấy hạng mục'); return; }
+
+  const oldItem = items[idx];
+  const now = new Date().toISOString();
+  const editor = (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG';
+
+  const changes = [];
+  if (newType   !== (oldItem.type   || '')) changes.push(`Loại: ${oldItem.type   || '-'} → ${newType}`);
+  if (newBrand  !== (oldItem.brand  || '')) changes.push(`Brand: ${oldItem.brand  || '-'} → ${newBrand}`);
+  if (newAction !== (oldItem.action || '')) changes.push(`Hình thức: ${oldItem.action || '-'} → ${newAction}`);
+  const oldNote = oldItem.note || oldItem.otherContent || '';
+  if (newNote !== oldNote) changes.push(`Ghi chú: ${oldNote || '-'} → ${newNote || '-'}`);
+  const oldWidth  = oldItem.width  || 0;
+  const oldHeight = oldItem.height || 0;
+  const oldPoles  = oldItem.poles  || 0;
+  if (newWidth  !== oldWidth)  changes.push(`Chiều ngang: ${oldWidth}m → ${newWidth}m`);
+  if (newHeight !== oldHeight) changes.push(`Chiều cao: ${oldHeight}m → ${newHeight}m`);
+  if (newPoles  !== oldPoles)  changes.push(`Số trụ: ${oldPoles} → ${newPoles}`);
+
+  items[idx] = {
+    ...oldItem,
+    type:         newType,
+    brand:        newBrand,
+    action:       newAction,
+    note:         newNote,
+    width:        newWidth  || oldItem.width  || undefined,
+    height:       newHeight || oldItem.height || undefined,
+    poles:        newPoles,
+    otherContent: newType === 'Hạng mục khác' ? newNote : (oldItem.otherContent || ''),
+    editedByQCAG:   true,
+    editedByQCAGBy: editor,
+    editedByQCAGAt: now
+  };
+
+  const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
+  if (changes.length > 0) {
+    comments.push({
+      authorRole: 'system',
+      authorName: 'Hệ thống',
+      text: `QCAG (${editor}) sửa hạng mục #${idx + 1} — ${changes.join('; ')}`,
+      createdAt: now
+    });
+  }
+
+  const updated = {
+    ...currentDetailRequest,
+    items: JSON.stringify(items),
+    comments: JSON.stringify(comments),
+    updatedAt: now
+  };
+
+  await qcagDesktopPersistRequest(updated, 'Đã cập nhật hạng mục');
+}
+
+// ── Add Item Modal (existing) ─────────────────────────────────────────
 
 function qcagEnsureEditItemsModal() {
   if (document.getElementById('qcagEditItemsModal')) return;
@@ -473,8 +770,12 @@ function qcagEnsureEditItemsModal() {
             </label>
           </div>
 
-          <label>Hạng mục khác (nội dung)
-            <input id="qcagEditItemOtherContent" type="text" placeholder="Chỉ với Hạng mục khác"/>
+          </label>
+        </div>
+
+        <div class="qcag-edit-other hidden">
+          <label>Nội dung yêu cầu
+            <textarea id="qcagEditItemOtherContent" rows="3" placeholder="Mô tả chi tiết yêu cầu" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm resize-none"></textarea>
           </label>
         </div>
       </div>
@@ -506,7 +807,9 @@ function qcagDesktopOpenEditItemsModal() {
   if (modal) {
     // hide deferred fields until user selects Type
     const after = modal.querySelector('.qcag-edit-after-type');
+    const other = modal.querySelector('.qcag-edit-other');
     if (after) after.classList.add('hidden');
+    if (other) other.classList.add('hidden');
     const btn = modal.querySelector('#qcagEditItemConfirmBtn');
     if (btn) btn.disabled = true;
     modal.classList.remove('hidden');
@@ -529,7 +832,17 @@ function qcagDesktopEditItemsOnTypeChange() {
     return;
   }
 
-  // show deferred input fields and enable confirm (final validation will enforce required fields)
+  // If user selected "Hạng mục khác" → show only the other-content textarea and return early
+  const otherBlock = modal ? modal.querySelector('.qcag-edit-other') : null;
+  if (String(selectedType || '') === 'Hạng mục khác') {
+    if (after) { after.classList.add('hidden'); }
+    if (otherBlock) { otherBlock.classList.remove('hidden'); }
+    if (confirmBtn) confirmBtn.disabled = false;
+    return; // skip brands / validate — not needed for "Hạng mục khác"
+  }
+
+  // show deferred input fields for all other types
+  if (otherBlock) { otherBlock.classList.add('hidden'); }
   if (after) { after.classList.remove('hidden'); after.style.display = ''; }
   if (confirmBtn) confirmBtn.disabled = false;
 
@@ -547,12 +860,16 @@ function qcagDesktopEditItemsOnTypeChange() {
 
   // Hide action for Logo types (logos don't require an action)
   try {
-    const actionLabel = document.getElementById('qcagEditItemAction') ? document.getElementById('qcagEditItemAction').parentElement : null;
-    if (actionLabel) {
-      if (String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd')) {
-        actionLabel.style.display = 'none';
+    const actionEl = document.getElementById('qcagEditItemAction');
+    const actionLabel = actionEl ? actionEl.parentElement : null;
+    if (actionEl) {
+      const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
+      if (isLogoType) {
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
+        if (actionLabel) actionLabel.style.display = '';
       } else {
-        actionLabel.style.display = '';
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
+        if (actionLabel) actionLabel.style.display = '';
       }
     }
   } catch (e) {}
@@ -580,13 +897,16 @@ function qcagEditItemsMaybeValidate() {
   const typeVal = (typeEl || {}).value || '';
   if (!typeVal) { confirmBtn.disabled = true; return false; }
 
-  // If logo type, action not required
-  const isLogo = String(typeVal || '').toLowerCase().includes('logo') || String(typeVal || '').toLowerCase().includes('emblemd');
-
-  if (!isLogo) {
-    const actionVal = (actionEl || {}).value || '';
-    if (!actionVal) { confirmBtn.disabled = true; return false; }
+  // "Hạng mục khác" only needs its textarea — skip action/brand checks
+  if (typeVal === 'Hạng mục khác') {
+    confirmBtn.disabled = false;
+    return true;
   }
+
+  // If logo type, action not required
+  // Action is required for all specific item types (except "Hạng mục khác")
+  const actionVal = (actionEl || {}).value || '';
+  if (!actionVal) { confirmBtn.disabled = true; return false; }
 
   // Brand required if options present
   const brandVal = (brandEl || {}).value || '';
@@ -649,15 +969,20 @@ async function qcagDesktopConfirmEditItemsModal() {
   });
 }
 
-function qcagDesktopRemoveItem(index) {
+async function qcagDesktopRemoveItem(index) {
   if (!currentDetailRequest || !qcagDesktopCanEditItems(currentDetailRequest)) return;
   const items = qcagDesktopParseJson(currentDetailRequest.items, []);
   if (!Array.isArray(items) || index < 0 || index >= items.length) return;
 
+  // Show confirmation modal before deleting
+  const itemLabel = items[index] && items[index].type ? items[index].type : `hạng mục số ${index + 1}`;
+  const confirmed = await _qcagConfirmDialog(`Xóa hạng mục: ${itemLabel}?`);
+  if (!confirmed) return;
+
   items.splice(index, 1);
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   const now = new Date().toISOString();
-  comments.push({authorRole: 'system', authorName: 'Hệ thống', text: `Đã xóa hạng mục số ${index + 1}`, createdAt: now});
+  comments.push({authorRole: 'system', authorName: 'Hệ thống', text: `Đã xóa hạng mục số ${index + 1} (${itemLabel})`, createdAt: now});
 
   const updated = {
     ...currentDetailRequest,
@@ -793,6 +1118,17 @@ function qcagDesktopComputeRequestCodes() {
 }
 
 function qcagDesktopStatusBadge(req) {
+  // Warranty type has its own independent badge logic
+  const _reqType = String(req && req.type || '').toLowerCase();
+  if (_reqType === 'warranty') {
+    const _ws = String(req && req.status || 'pending').toLowerCase();
+    if (_ws === 'done' || _ws === 'processed') {
+      if (req.warrantyOutOfScope) return { label: 'Ngoài phạm vi BH', cls: 'warranty-out-of-scope' };
+      return { label: 'Đã Bảo hành', cls: 'done' };
+    }
+    return { label: 'Chờ kiểm tra', cls: 'processing' };
+  }
+
   // Edit request takes highest priority — move back to processing regardless of done state
   if (qcagDesktopIsPendingEditRequest(req)) {
     // mark explicitly as an edit-request badge so we can style it differently
@@ -824,11 +1160,14 @@ function getQCAGDesktopVisibleRequests() {
     list = list.filter(r => {
       const status = String(r.status || 'pending').toLowerCase();
       const isDone = status === 'done' || status === 'processed';
+      if (!isDone) return false;
+      // Warranty type doesn't need MQ to be considered done
+      if (String(r.type || '').toLowerCase() === 'warranty') return true;
       // Only treat as done if it has MQ and is explicitly done; edits pull back to processing
       const designImgs = qcagDesktopParseJson(r.designImages, []);
       const hasMq = Array.isArray(designImgs) && designImgs.length > 0;
       const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
-      return isDone && hasMq && !hasEditRequest;
+      return hasMq && !hasEditRequest;
     });
   }
 
@@ -854,12 +1193,8 @@ function getQCAGDesktopVisibleRequests() {
       if (_qcagDesktopStatusFilter === 'done') return true;
       const status = String(r.status || 'pending').toLowerCase();
       const isDone = status === 'done' || status === 'processed';
-      const statusImgs = qcagDesktopParseJson(r.statusImages, []);
-      const needsAccept = statusImgs.length === 0;
-      const needsEdit = qcagDesktopIsPendingEditRequest(r);
-      const designImgs = qcagDesktopParseJson(r.designImages, []);
-      const hasDesignAwaitingConfirm = Array.isArray(designImgs) && designImgs.length > 0 && !isDone;
-      return needsEdit || needsAccept || hasDesignAwaitingConfirm;
+      // Show all non-done warranty requests in the processing tab
+      return !isDone;
     });
   }
 
@@ -1086,10 +1421,8 @@ function qcagDesktopUpdateFilterCounts() {
         return needsEdit || needsMq || hasDesignAwaitingConfirm;
       }
       if (t === 'warranty') {
-        const statusImgs = qcagDesktopParseJson(r.statusImages, []);
-        const needsAccept = statusImgs.length === 0;
-        const needsEdit = qcagDesktopIsPendingEditRequest(r);
-        return needsEdit || needsAccept;
+        // Show all non-done warranty requests in processing tab count
+        return !isDone;
       }
       return !isDone;
     }
@@ -1195,7 +1528,7 @@ function renderQCAGDesktopList() {
           <div class="qcag-request-name">${escapeHtml(req.outletName || '-')} • ${escapeHtml(req.outletCode || '-')}</div>
           <span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>
         </div>
-        <div class="qcag-request-code">${escapeHtml(saleName)} • ${escapeHtml(region)}</div>
+        <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(saleName)}</span> • ${escapeHtml(region)}</div>
         <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(ss) : '<span class="qcag-ss-tba">Chức vụ TBA</span>'; })()}</div>
         <div class="qcag-request-footer">
           <div class="qcag-request-footer-left">
@@ -1741,26 +2074,20 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
         }
         const poles = (item.type !== 'Hạng mục khác') ? ((item.poles || 0) + ' trụ') : '-';
         const sizeHtml = typeof size === 'string' ? size : escapeHtml(String(size));
-        const actionCell = canManageItems ? `<div><button class="qcag-item-delete-btn" onclick="qcagDesktopRemoveItem(${idx})" title="Xóa hạng mục">✕</button></div>` : '';
+        const actionCell = canManageItems
+          ? `<div class="qcag-item-actions-cell"><button class="qcag-item-edit-btn" onclick="qcagDesktopOpenEditItemModal(${idx})" title="Sửa hạng mục"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="qcag-item-delete-btn" onclick="qcagDesktopRemoveItem(${idx})" title="Xóa hạng mục">✕</button></div>`
+          : '';
         const brandBadge = item && item.brandChangedByQCAG
           ? `<span class="qcag-brand-changed-badge" title="${escapeHtml('Brand được ' + (item.brandChangedBy || 'QCAG') + ' QCAG đổi theo yêu cầu của sale')}"></span>`
           : '';
         const addedBadgeHtml = item && item.addedByQCAG
           ? `<span class="qcag-added-badge" title="${escapeHtml('Hạng mục được thêm bởi ' + (item.addedByQCAGBy || 'QCAG') + ' theo yêu cầu chỉnh sửa' + (item.type ? ': ' + item.type : ''))}"></span>`
           : '';
-        const badgesHtml = `${brandBadge}${addedBadgeHtml}`;
-        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div>${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div>${(() => {
-          // If current request allows inline brand change, render a select control
-          try {
-            const canInline = !qcagDesktopIsDone(currentDetailRequest);
-            if (canInline) {
-              const brands = (typeof getBrandsForType === 'function' ? getBrandsForType(item.type || '') : Array.isArray(allBrands) ? allBrands : []) || [];
-              const opts = (brands || []).map(b => `<option value="${escapeHtml(b)}"${String(b) === String(item.brand || '') ? ' selected' : ''}>${escapeHtml(b)}</option>`).join('');
-              return `<div style="display:flex;align-items:center;gap:8px;"><select id="qcagInlineBrandSelect_${idx}" class="qcag-inline-brand-select" onchange="qcagDesktopInlineChangeBrand(${idx}, this.value)"><option value="">Chọn brand</option>${opts}</select></div>`;
-            }
-          } catch (e) {}
-          return `<div>${escapeHtml(item.brand || '-')}</div>`;
-        })()}<div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
+        const editedBadgeHtml = item && item.editedByQCAG
+          ? `<span class="qcag-edited-badge" title="${escapeHtml('Hạng mục được sửa bởi ' + (item.editedByQCAGBy || 'QCAG') + (item.editedByQCAGAt ? ' lúc ' + new Date(item.editedByQCAGAt).toLocaleString('vi-VN') : ''))}"></span>`
+          : '';
+        const badgesHtml = `${brandBadge}${addedBadgeHtml}${editedBadgeHtml}`;
+        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div>${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div>${escapeHtml(item.brand || '-')}</div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
       }).join('')}
     </div>
   `;
@@ -1868,10 +2195,53 @@ async function qcagReopenSurveyForItem() {
   if (ok) qcagCloseSurveySizeModal();
 }
 
+function qcagToggleComments() {
+  _qcagCommentsCollapsed = !_qcagCommentsCollapsed;
+  const layout = document.getElementById('qcagDetailLayout');
+  const expandTab = document.getElementById('qcagExpandCommentsTab');
+  const toggleBtn = document.getElementById('qcagCommentsToggleBtn');
+  if (layout) {
+    layout.classList.toggle('qcag-chat-collapsed', _qcagCommentsCollapsed);
+  }
+  if (expandTab) {
+    expandTab.style.display = _qcagCommentsCollapsed ? '' : 'none';
+  }
+  if (!_qcagCommentsCollapsed) {
+    setTimeout(() => {
+      const timeline = document.getElementById('qcagCommentTimeline');
+      if (timeline) timeline.scrollTop = timeline.scrollHeight;
+    }, 40);
+  }
+}
+
+function qcagDesktopAttachCommentPaste() {
+  const ta = document.getElementById('qcagCommentInput');
+  if (!ta || ta._pasteAttached) return;
+  ta._pasteAttached = true;
+  ta.addEventListener('paste', (e) => {
+    const items = (e.clipboardData || {}).items;
+    if (!items) return;
+    let hasImage = false;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        hasImage = true;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          _qcagDesktopPendingCommentImages.push(ev.target.result);
+          qcagDesktopRenderCommentPreview();
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+    // Don't prevent default so text paste still works
+  });
+}
+
 function qcagDesktopRenderCommentPreview() {
   const wrap = document.getElementById('qcagCommentUploadPreview');
-  if (!wrap) return;
-  if (_qcagDesktopPendingCommentImages.length === 0) {
+  if (!wrap) return;  if (_qcagDesktopPendingCommentImages.length === 0) {
     wrap.innerHTML = '';
     wrap.classList.add('hidden');
     return;
@@ -1894,10 +2264,14 @@ function qcagDesktopRenderCommentPreview() {
 function ksGetOldDesignsForOutlet(currentReq) {
   if (!currentReq || !currentReq.outletCode) return [];
   const outletCode = String(currentReq.outletCode).trim().toLowerCase();
+  // New Outlet requests have no real outlet code — never show old designs for them
+  if (outletCode === 'new outlet') return [];
   const currentId = currentReq.__backendId;
   return (allRequests || [])
     .filter(r => {
       if (r.__backendId === currentId) return false;
+      // Exclude 'New Outlet' entries from appearing as past designs
+      if (String(r.outletCode || '').trim().toLowerCase() === 'new outlet') return false;
       if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return false;
       const status = String(r.status || '').toLowerCase();
       if (status !== 'done' && status !== 'processed') return false;
@@ -2021,9 +2395,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
     : 'Vui lòng upload MQ thiết kế trước';
   const requester = qcagDesktopParseJson(request.requester, {});
   const statusBadge = qcagDesktopStatusBadge(request);
+  const isWarranty = String(request.type || '').toLowerCase() === 'warranty';
 
   detailEl.innerHTML = `
-    <div class="qcag-detail-layout">
+    <div class="qcag-detail-layout${_qcagCommentsCollapsed ? ' qcag-chat-collapsed' : ''}" id="qcagDetailLayout">
       <div class="qcag-detail-left">
         <div class="qcag-card">
           <div class="qcag-card-header">
@@ -2040,7 +2415,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         </div>
 
         <div class="qcag-card">
-          <div class="qcag-card-title">Thông tin Outlet</div>
+          <div class="qcag-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>Thông tin Outlet</span>
+            <button type="button" class="qcag-edit-outlet-btn" onclick="qcagDesktopOpenEditOutletModal()" title="Chỉnh sửa thông tin Outlet"><svg class="qcag-icon-pencil" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Sửa thông tin</button>
+          </div>
             <div class="qcag-outlet-grid">
             <div class="ot-first"><span>Tên Outlet:</span><strong>${escapeHtml(request.outletName || '-')}</strong></div>
             <div class="ot-first"><span>Outlet Code:</span><strong class="qcag-outlet-code">${escapeHtml(request.outletCode || '-')}</strong>
@@ -2057,18 +2435,18 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
           </div>
         </div>
 
-        <div class="qcag-card">
+        ${isWarranty ? '' : `<div class="qcag-card">
           <div class="qcag-card-title">
             <span>Hạng mục yêu cầu</span>
             ${canManageItems ? '<button type="button" class="qcag-add-item-btn" onclick="qcagDesktopOpenEditItemsModal()">+ Thêm hạng mục</button>' : ''}
           </div>
           <div id="qcagItemsSection">${qcagDesktopBuildItemsHtml(items, canManageItems)}</div>
-        </div>
+        </div>`}
 
         <div class="qcag-card qcag-card--no-frame">
           <div class="qcag-content-split">
               <div class="qcag-subcard">
-                <div class="qcag-card-title">Nội dung bảng hiệu</div>
+                <div class="qcag-card-title">${isWarranty ? 'Nội dung kiểm tra bảo hành' : 'Nội dung bảng hiệu'}</div>
                 <div class="qcag-subcard-body">
                   ${(() => {
                     try {
@@ -2103,15 +2481,27 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
             <div class="qcag-subcard">
               <div class="qcag-card-title">Hiện trạng Outlet</div>
               <div class="qcag-subcard-body qcag-content-images">
-                ${statusImgs.length > 0 ? (() => {
-                  const enc = encodeURIComponent(JSON.stringify(statusImgs));
-                  const first = statusImgs[0];
-                  const moreCount = statusImgs.length > 1 ? (statusImgs.length - 1) : 0;
-                  if (statusImgs.length === 1) {
-                    return `<div class="qcag-gallery-rep" onclick="showImageFull(this.querySelector('img').src,false)"><img src="${first}" alt="hiện trạng"></div>`;
-                  }
-                  return `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng"><div class="qcag-img-more">${moreCount > 0 ? '+' + moreCount : ''}</div></div>`;
-                })() : '<div class="qcag-detail-muted">Chưa có ảnh nội dung</div>'}
+                <div class="qcag-action-block">
+                  <label class="qcag-upload-square qcag-status-upload-square" title="Thêm ảnh hiện trạng">
+                    <input type="file" accept="image/*" multiple onchange="qcagDesktopUploadStatusImage(this)">
+                    <div class="qcag-upload-plus">+</div>
+                  </label>
+                  <div id="qcagStatusThumbGrid">
+                    ${(() => {
+                      if (statusImgs.length === 0) return '<span class="qcag-detail-muted">Đang trống</span>';
+                      const enc = encodeURIComponent(JSON.stringify(statusImgs));
+                      const first = statusImgs[0];
+                      const more = statusImgs.length - 1;
+                      if (statusImgs.length === 1) {
+                        return `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng"></div>`;
+                      }
+                      return `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng"><div class="qcag-img-more">+${more}</div></div>`;
+                    })()}
+                  </div>
+                  ${isWarranty && request.warrantyOutOfScope && request.warrantyOutOfScopeNote
+                    ? `<div class="qcag-warranty-scope-note"><span class="qcag-warranty-scope-label">Ngoài phạm vi:</span> ${escapeHtml(request.warrantyOutOfScopeNote)}</div>`
+                    : ''}
+                </div>
               </div>
             </div>
           </div>
@@ -2120,10 +2510,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         <div class="qcag-card">
           <div class="qcag-actions qcag-split-cards">
             <div class="qcag-subcard">
-              <div class="qcag-card-title">Upload MQ thiết kế</div>
+              <div class="qcag-card-title">${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}</div>
               <div class="qcag-subcard-body">
                 <div class="qcag-action-block">
-                  <label class="qcag-upload-square" title="Upload MQ thiết kế">
+                  <label class="qcag-upload-square" title="${isWarranty ? 'Upload ảnh nghiệm thu' : 'Upload MQ thiết kế'}">
                     <input type="file" accept="image/*" multiple onchange="qcagDesktopUploadMQ(this)">
                     <div class="qcag-upload-plus">+</div>
                   </label>
@@ -2139,6 +2529,22 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                 
                 <div class="qcag-mq-footer">
                   ${(() => {
+                    // ── Warranty type: dedicated footer ──────────────────────
+                    if (isWarranty) {
+                      const wPerson = request.warrantyPersonName || '';
+                      const wTime   = request.processedAt || '';
+                      const personLine = wPerson
+                        ? `Ng\u01b0\u1eddi b\u1ea3o h\u00e0nh: ${escapeHtml(wPerson)}${wTime ? ' \u2022 ' + escapeHtml(new Date(wTime).toLocaleString('vi-VN')) : ''}`
+                        : 'Ng\u01b0\u1eddi b\u1ea3o h\u00e0nh: Ch\u01b0a c\u00f3 th\u00f4ng tin';
+                      const personClass = wPerson ? 'qcag-mq-created' : 'qcag-mq-created qcag-mq-empty';
+                      const showBtns = _qcagDesktopStatusFilter !== 'done';
+                      const btns = showBtns
+                        ? `<button onclick="qcagDesktopMarkWarrantyResult(true)" class="qcag-warranty-btn qcag-warranty-btn--out">Ngo\u00e0i ph\u1ea1m vi BH</button><button onclick="qcagDesktopMarkWarrantyResult(false)" class="qcag-warranty-btn qcag-warranty-btn--done">\u0110\u00e3 b\u1ea3o h\u00e0nh</button>`
+                        : '';
+                      return `<div class="qcag-mq-footer-left"><div class="${personClass}">${personLine}</div></div><div class="qcag-mq-footer-right qcag-warranty-btns">${btns}</div>`;
+                    }
+
+                    // ── Normal type: design creator / edited info + complete btn ──
                     const createdBy = request.designCreatedBy || '';
                     const createdAt = request.designCreatedAt || '';
                     const lastEditedBy = request.designLastEditedBy || '';
@@ -2161,12 +2567,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     }
 
                     const creatorLine = displayCreator
-                      ? `Thiết Kế: ${escapeHtml(displayCreator)}${displayCreatorTime ? ' • ' + escapeHtml(new Date(displayCreatorTime).toLocaleString('vi-VN')) : ''}`
-                      : 'Thiết Kế: Chưa có người thiết kế';
+                      ? `Thi\u1ebft K\u1ebf: ${escapeHtml(displayCreator)}${displayCreatorTime ? ' \u2022 ' + escapeHtml(new Date(displayCreatorTime).toLocaleString('vi-VN')) : ''}`
+                      : 'Thi\u1ebft K\u1ebf: Ch\u01b0a c\u00f3 ng\u01b0\u1eddi thi\u1ebft k\u1ebf';
 
                     const editedLine = showEdited
-                      ? `Chỉnh sửa: ${escapeHtml(lastEditedBy)}${lastEditedAt ? ' • ' + escapeHtml(new Date(lastEditedAt).toLocaleString('vi-VN')) : ''}`
-                      : 'Chỉnh sửa: chưa có chỉnh sửa nào';
+                      ? `Ch\u1ec9nh s\u1eeda: ${escapeHtml(lastEditedBy)}${lastEditedAt ? ' \u2022 ' + escapeHtml(new Date(lastEditedAt).toLocaleString('vi-VN')) : ''}`
+                      : 'Ch\u1ec9nh s\u1eeda: ch\u01b0a c\u00f3 ch\u1ec9nh s\u1eeda n\u00e0o';
 
                     const creatorClass = displayCreator ? 'qcag-mq-created' : 'qcag-mq-created qcag-mq-empty';
                     const editedClass = showEdited ? 'qcag-mq-edited' : 'qcag-mq-edited qcag-mq-empty';
@@ -2175,11 +2581,11 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     const showCompleteBtn = _qcagDesktopStatusFilter !== 'done';
                     const completeDisabled = designImgs.length === 0 || isSurveySizeIncomplete;
                     const completeTitle = isSurveySizeIncomplete
-                      ? 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành'
+                      ? 'Vui l\u00f2ng x\u00e1c nh\u1eadn k\u00edch th\u01b0\u1edbc kh\u1ea3o s\u00e1t tr\u01b0\u1edbc khi ho\u00e0n th\u00e0nh'
                       : (designImgs.length === 0 ? escapeHtml(completeBtnDisabledTitle) : '');
 
                     const warning = isSurveySizeIncomplete
-                      ? '<div class="qcag-survey-warning">Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành.</div>'
+                      ? '<div class="qcag-survey-warning">Vui l\u00f2ng x\u00e1c nh\u1eadn k\u00edch th\u01b0\u1edbc kh\u1ea3o s\u00e1t tr\u01b0\u1edbc khi ho\u00e0n th\u00e0nh.</div>'
                       : '';
 
                     const btn = showCompleteBtn
@@ -2208,20 +2614,33 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         </div>
       </div>
 
+      <button id="qcagExpandCommentsTab" class="qcag-expand-comments-tab" onclick="qcagToggleComments()" type="button" ${_qcagCommentsCollapsed ? '' : 'style="display:none"'}>
+        ${comments.length > 0 ? `<span class="qcag-comments-count-badge">${comments.length}</span>` : ''}
+        <span class="qcag-expand-comments-tab-label">Bình luận ▸</span>
+      </button>
       <div class="qcag-detail-right">
         <div class="qcag-chat-card">
-          <div class="qcag-chat-head">Trao đổi QCAG ↔ Sale Heineken</div>
-          <div id="qcagCommentTimeline" class="qcag-comment-timeline">
-            ${comments.length > 0 ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('') : '<div class="qcag-detail-muted">Chưa có bình luận</div>'}
+          <div class="qcag-chat-head">
+            <span>Trao đổi QCAG ↔ Sale Heineken</span>
+            <button id="qcagCommentsToggleBtn" class="qcag-comments-toggle-btn" onclick="qcagToggleComments()" type="button">
+              Đóng ▶
+            </button>
           </div>
-          <div class="qcag-chat-input-wrap">
-            <textarea id="qcagCommentInput" rows="3" placeholder="Nhập bình luận..."></textarea>
-            <div id="qcagCommentUploadPreview" class="qcag-upload-preview hidden"></div>
-            <div class="qcag-chat-actions">
-              <label class="qcag-comment-upload">Upload hình
-                <input type="file" accept="image/*" multiple onchange="qcagDesktopPickCommentImages(this)">
-              </label>
-              <button onclick="qcagDesktopSendComment()" class="qcag-send-btn">Gửi</button>
+          <div id="qcagChatBody" class="qcag-chat-body">
+            <div id="qcagCommentTimeline" class="qcag-comment-timeline">
+              ${comments.length > 0 ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('') : '<div class="qcag-detail-muted">Chưa có bình luận</div>'}
+            </div>
+            <div class="qcag-chat-input-wrap">
+              <div class="qcag-comment-input-box">
+                <textarea id="qcagCommentInput" rows="3" placeholder="Nhập bình luận..."></textarea>
+                <div id="qcagCommentUploadPreview" class="qcag-upload-preview hidden"></div>
+              </div>
+              <div class="qcag-chat-actions">
+                <label class="qcag-comment-upload">Upload hình
+                  <input type="file" accept="image/*" multiple onchange="qcagDesktopPickCommentImages(this)">
+                </label>
+                <button onclick="qcagDesktopSendComment()" class="qcag-send-btn">Gửi</button>
+              </div>
             </div>
           </div>
         </div>
@@ -2230,16 +2649,19 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   `;
 
   qcagDesktopRenderCommentPreview();
+  qcagDesktopAttachCommentPaste();
 
   if (prevLeftScroll > 0) {
     const newLeft = detailEl.querySelector('.qcag-detail-left');
     if (newLeft) newLeft.scrollTop = prevLeftScroll;
   }
 
-  setTimeout(() => {
-    const timeline = document.getElementById('qcagCommentTimeline');
-    if (timeline) timeline.scrollTop = timeline.scrollHeight;
-  }, 40);
+  if (!_qcagCommentsCollapsed) {
+    setTimeout(() => {
+      const timeline = document.getElementById('qcagCommentTimeline');
+      if (timeline) timeline.scrollTop = timeline.scrollHeight;
+    }, 40);
+  }
 
   qcagDesktopSyncReadStatus(request);
 
@@ -2267,6 +2689,58 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
       }
     }
   })().catch(() => {});
+}
+
+async function qcagDesktopUploadStatusImage(input) {
+  if (!currentDetailRequest || !input) return;
+  const files = Array.from(input.files || []);
+  if (files.length === 0) return;
+  input.value = '';
+
+  const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(currentDetailRequest.statusImages, [])).slice();
+
+  for (const file of files) {
+    const reader = new FileReader();
+    let dataUrl = null;
+    await new Promise(resolve => {
+      reader.onload = (e) => { dataUrl = e.target.result; resolve(); };
+      reader.readAsDataURL(file);
+    });
+    let imageUrl = dataUrl;
+    if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
+      try {
+        const uploaded = await window.dataSdk.uploadImage(
+          dataUrl, file.name || 'status.jpg', currentDetailRequest.__backendId, 'hien-trang'
+        );
+        if (typeof uploaded === 'string' && uploaded.trim()) {
+          imageUrl = uploaded.trim();
+        }
+      } catch (e) { /* keep base64 fallback */ }
+    }
+    currentImgs.push(imageUrl);
+  }
+
+  const updated = { ...currentDetailRequest, statusImages: JSON.stringify(currentImgs), updatedAt: new Date().toISOString() };
+  const ok = await qcagDesktopPersistRequest(updated, 'Đã thêm ảnh hiện trạng', true);
+  if (ok) {
+    // Refresh the status image section in-place
+    const thumbGrid = document.getElementById('qcagStatusThumbGrid');
+    if (thumbGrid) {
+      const newImgs = qcagDesktopPrepareRenderImageList(currentImgs);
+      if (newImgs.length === 0) {
+        thumbGrid.innerHTML = '<span class="qcag-detail-muted">Đang trống</span>';
+      } else {
+        const enc = encodeURIComponent(JSON.stringify(newImgs));
+        const first = newImgs[0];
+        const more = newImgs.length - 1;
+        if (newImgs.length === 1) {
+          thumbGrid.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng"></div>`;
+        } else {
+          thumbGrid.innerHTML = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng"><div class="qcag-img-more">+${more}</div></div>`;
+        }
+      }
+    }
+  }
 }
 
 async function qcagDesktopUploadMQ(input) {
@@ -2412,6 +2886,7 @@ async function qcagDesktopMarkProcessed() {
           ? `Yêu cầu Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
           : `Yêu cầu Outlet ${outletLabel} đã được QCAG duyệt MQ. Vui lòng mở app để xem.`;
 
+        const target = requesterSaleCode || (requesterPhone ? requesterPhone.slice(-4) : '?');
         fetch('/api/ks/push/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2422,17 +2897,106 @@ async function qcagDesktopMarkProcessed() {
             phone:    requesterPhone,
             data: { backendId: updated.__backendId }
           })
-        }).catch(function(e) { console.warn('[push] notify heineken error:', e); });
+        }).then(function(r) {
+          return r.ok ? r.json() : Promise.reject(r.status);
+        }).then(function(result) {
+          if (result && result.sent > 0) {
+            showToast('✓ Đã hoàn thành — đã gửi thông báo đến Sale [' + target + ']', 4000);
+          } else {
+            showToast('✓ Đã hoàn thành — Sale [' + target + '] chưa bật thông báo trên thiết bị', 5000);
+            console.warn('[push] no active subscription for', target, result);
+          }
+        }).catch(function(e) {
+          console.warn('[push] notify heineken error:', e);
+          showToast('✓ Đã hoàn thành (không gửi được thông báo)', 4000);
+        });
+      } else {
+        showToast('✓ Đã hoàn thành', 3000);
       }
-
-      setTimeout(function() {
-        const target = requesterSaleCode || (requesterPhone ? requesterPhone.slice(-4) : '?');
-        showToast('✓ Đã hoàn thành — thông báo sẽ gửi đến Sale [' + target + ']', 4000);
-      }, 400);
     } catch (e) {
       // non-fatal
     }
   }
+}
+
+async function qcagDesktopMarkWarrantyResult(outOfScope) {
+  if (!currentDetailRequest) return;
+  const isDark = document.documentElement.classList.contains('theme-dark')
+              || document.documentElement.getAttribute('data-theme') === 'dark';
+  const cardBg    = isDark ? '#0b1220' : '#ffffff';
+  const cardBdr   = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)';
+  const textColor = isDark ? '#e6eef8' : '#111827';
+  const subColor  = isDark ? '#9ca3af' : '#6b7280';
+  const inputBg   = isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb';
+  const inputBdr  = isDark ? 'rgba(255,255,255,0.12)' : '#d1d5db';
+  const cancelBg  = isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6';
+  const cancelClr = isDark ? '#e6eef8' : '#374151';
+  const confirmColor = outOfScope ? '#f97316' : '#059669';
+
+  const title      = outOfScope ? 'Xác nhận: Ngoài phạm vi BH' : 'Xác nhận: Đã bảo hành';
+  const btnLabel   = outOfScope ? 'Ngoài phạm vi BH' : 'Đã bảo hành';
+  const inputLabel = outOfScope ? 'Lý do ngoài phạm vi (sẽ hiển thị cạnh ảnh):' : 'Tên người bảo hành:';
+  const inputPlaceholder = outOfScope ? 'Nhập lý do...' : 'Nhập tên người bảo hành...';
+  const inputTag         = outOfScope ? 'textarea' : 'input type="text"';
+  const inputClose       = outOfScope ? '</textarea>' : '';
+  const inputExtra       = outOfScope ? ' rows="3" style="resize:vertical"' : '';
+
+  const result = await new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center';
+    const inputHtml = outOfScope
+      ? `<textarea id="_qcagWarrantyInput" rows="3" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid ${inputBdr};background:${inputBg};color:${textColor};font-size:13px;resize:vertical;outline:none" placeholder="${inputPlaceholder}"></textarea>`
+      : `<input id="_qcagWarrantyInput" type="text" style="width:100%;box-sizing:border-box;padding:10px;border-radius:8px;border:1px solid ${inputBdr};background:${inputBg};color:${textColor};font-size:13px;outline:none" placeholder="${inputPlaceholder}">`;
+    overlay.innerHTML =
+      `<div style="background:${cardBg};border:1px solid ${cardBdr};border-radius:16px;padding:24px 20px 20px;max-width:440px;width:88%;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
+        `<p style="margin-bottom:4px;font-size:15px;font-weight:700;color:${textColor}">${title}</p>` +
+        `<p style="margin-bottom:14px;font-size:12px;color:${subColor}">${inputLabel}</p>` +
+        inputHtml +
+        `<div style="display:flex;gap:8px;margin-top:14px">` +
+          `<button id="_wCancelBtn" style="flex:1;padding:11px;border-radius:10px;background:${cancelBg};border:1px solid ${inputBdr};cursor:pointer;font-size:14px;font-weight:500;color:${cancelClr}">Hủy</button>` +
+          `<button id="_wConfirmBtn" style="flex:1;padding:11px;border-radius:10px;background:${confirmColor};color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:600">${btnLabel}</button>` +
+        `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+    const cleanup = (val) => { document.body.removeChild(overlay); resolve(val); };
+    overlay.querySelector('#_wConfirmBtn').onclick = () => {
+      const v = (overlay.querySelector('#_qcagWarrantyInput').value || '').trim();
+      cleanup({ confirmed: true, note: v });
+    };
+    overlay.querySelector('#_wCancelBtn').onclick = () => cleanup(null);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+    requestAnimationFrame(() => { const inp = overlay.querySelector('#_qcagWarrantyInput'); if (inp) inp.focus(); });
+  });
+
+  if (!result || !result.confirmed) return;
+
+  const now = new Date().toISOString();
+  const actorName = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
+  const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
+  comments.push({
+    authorRole: 'qcag',
+    authorName: 'Hệ thống',
+    commentType: 'system',
+    text: outOfScope
+      ? `QCAG xác nhận ngoài phạm vi bảo hành${result.note ? ': ' + result.note : '.'}`
+      : `QCAG xác nhận đã bảo hành xong. Người thực hiện: ${result.note || actorName}.`,
+    readBy: [],
+    createdAt: now
+  });
+
+  const updated = {
+    ...currentDetailRequest,
+    status: 'done',
+    processedAt: now,
+    updatedAt: now,
+    warrantyOutOfScope: !!outOfScope,
+    warrantyOutOfScopeNote: outOfScope ? (result.note || '') : '',
+    warrantyPersonName: outOfScope ? '' : (result.note || actorName),
+    comments: JSON.stringify(comments)
+  };
+
+  const label = outOfScope ? 'Ngoài phạm vi BH' : 'Đã bảo hành';
+  await qcagDesktopPersistRequest(updated, label);
 }
 
 async function qcagDesktopPickCommentImages(input) {
@@ -2489,12 +3053,14 @@ async function qcagDesktopSendComment() {
   });
 
   const updated = { ...currentDetailRequest, comments: JSON.stringify(comments), updatedAt: new Date().toISOString() };
+
+  // Clear immediately so the textarea appears empty right after user hits send
+  ta.value = '';
+  _qcagDesktopPendingCommentImages = [];
+  qcagDesktopRenderCommentPreview();
+
   const ok = await qcagDesktopPersistRequest(updated, 'Đã gửi bình luận');
   if (!ok) return;
-
-  _qcagDesktopPendingCommentImages = [];
-  ta.value = '';
-  qcagDesktopRenderCommentPreview();
 
   setTimeout(() => {
     const timeline = document.getElementById('qcagCommentTimeline');
@@ -2716,6 +3282,7 @@ function qcagNavClosePanel() {
 const _QCAG_LIST_PAGE_SIZE = 25;
 let _qcagNavListSearchQ = '';
 let _qcagNavListStatusFilter = ''; // empty = all
+let _qcagNavListRegionFilter = ''; // empty = all regions
 let _qcagNavListCurrentPage = 1;
 let _qcagNavListFiltered = []; // filtered rows cache
 let _qcagNavListSelected = new Set(); // selected __backendId or indices
@@ -2729,6 +3296,16 @@ function qcagNavListSetStatusFilter(btn, statusCls) {
   // update pill active states
   const bar = document.getElementById('qcagNavListFilterBar');
   if (bar) bar.querySelectorAll('.qcag-nav-filter-pill').forEach(b => b.classList.toggle('active', b.dataset.status === statusCls));
+  qcagNavRenderList();
+}
+
+function qcagNavListSetRegionFilter(region) {
+  _qcagNavListRegionFilter = region || '';
+  _qcagNavListCurrentPage = 1;
+  _qcagNavListSelected.clear();
+  // Update region button active states
+  const bar = document.getElementById('qcagNavListRegionBar');
+  if (bar) bar.querySelectorAll('.qcag-nav-region-pill').forEach(b => b.classList.toggle('active', b.dataset.region === _qcagNavListRegionFilter));
   qcagNavRenderList();
 }
 
@@ -2791,7 +3368,18 @@ function qcagNavRenderList() {
   const q = _qcagNavListSearchQ;
 
   const sf = _qcagNavListStatusFilter;
+  const rf = _qcagNavListRegionFilter;
   const yf = _qcagNavListYearFilter;
+
+  const regionPatterns = {
+    's4':  /south\s*4|\bs4\b/i,
+    's5':  /south\s*5|\bs5\b/i,
+    's16': /south\s*16|\bs16\b/i,
+    's17': /south\s*17|\bs17\b/i,
+    '24':  /south\s*24|\b24\b/i,
+    's19': /south\s*19|\bs19\b/i,
+    'mot8': /mon?dern\W*on\W*team\W*8|\bmot8\b|modern\W*team\W*8/i
+  };
 
   _qcagNavListFiltered = reqs
     .map((r, originalIdx) => ({ r, idx: originalIdx }))
@@ -2800,6 +3388,13 @@ function qcagNavRenderList() {
       if (yf !== null) {
         try { if (new Date(r.createdAt || 0).getFullYear() !== yf) return false; }
         catch(e) { return false; }
+      }
+      // region filter
+      if (rf) {
+        const requester = qcagDesktopParseJson(r.requester, {});
+        const regionRaw = String(requester.region || r.region || '');
+        const pattern = regionPatterns[rf.toLowerCase()] || new RegExp(rf.replace(/[^a-z0-9]/gi, ''), 'i');
+        if (!pattern.test(regionRaw)) return false;
       }
       // text search
       if (q) {
@@ -3199,4 +3794,297 @@ function _qcagNavSyncTooltipBtn() {
   if (!btn) return;
   btn.classList.toggle('is-active', _qcagNavTooltipsVisible);
   btn.title = _qcagNavTooltipsVisible ? 'Ẩn thẻ thông tin' : 'Hiện thẻ thông tin';
+}
+
+// ── Tra cứu ĐVHC 2 cấp (34 tỉnh mới + lịch sử sáp nhập) ─────────────
+let _dvhcNewWards  = null; // Map<newCode, {wardName, provinceName}>
+let _dvhcOldWards  = null; // Map<oldCode, {wardName, districtName, provinceName}>
+let _dvhcMappings  = null; // Map<newCode, oldCode[]>
+let _dvhcIndex     = null; // [{newProvinceName, oldProvinceList[], pSearchable, wards:[...]}]
+let _dvhcSearchTmr = null;
+const _DVHC_BASE = 'https://cdn.jsdelivr.net/gh/trongthanh/wx-tra-cuu-dvhcvn@main/public/data/';
+
+function qcagDesktopOpenDVHCLookup() {
+  let modal = document.getElementById('qcagDVHCModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'qcagDVHCModal';
+    modal.className = 'qcag-edit-items-modal hidden';
+    modal.innerHTML = `
+      <div class="qcag-dvhc-panel">
+        <div class="qcag-dvhc-header">
+          <span>🗺️ Tra cứu ĐVHC sau sáp nhập (34 tỉnh/thành)</span>
+          <button onclick="qcagDesktopCloseDVHCLookup()" class="qcag-dvhc-close-btn" title="Đóng">✕</button>
+        </div>
+        <input id="qcagDVHCSearch" type="search" class="qcag-dvhc-search-input"
+          placeholder="Nhập tên xã/phường mới, cũ hoặc tên tỉnh... (Nhấn Enter để tìm)" autocomplete="off"
+          onkeydown="if(event.key==='Enter') qcagDVHCOnSearch(this.value)" />
+        <div id="qcagDVHCStatus" class="qcag-dvhc-status">Đang tải dữ liệu...</div>
+        <div id="qcagDVHCResults" class="qcag-dvhc-results"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  modal.classList.remove('hidden');
+  if (!_dvhcIndex) {
+    _qcagDVHCLoadData();
+  } else {
+    const total = _dvhcIndex.reduce((s, p) => s + p.wards.length, 0);
+    const statusEl = document.getElementById('qcagDVHCStatus');
+    if (statusEl) statusEl.textContent = `${total} đơn vị hành chính. Nhập để tìm.`;
+  }
+  setTimeout(() => {
+    const inp = document.getElementById('qcagDVHCSearch');
+    if (inp) { inp.value = ''; inp.focus(); }
+    const res = document.getElementById('qcagDVHCResults');
+    if (res) res.innerHTML = '';
+  }, 50);
+}
+
+function qcagDesktopCloseDVHCLookup() {
+  const modal = document.getElementById('qcagDVHCModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function qcagDesktopToggleDVHCLookup() {
+  const modal = document.getElementById('qcagDVHCModal');
+  if (modal && !modal.classList.contains('hidden')) {
+    qcagDesktopCloseDVHCLookup();
+  } else {
+    qcagDesktopOpenDVHCLookup();
+  }
+}
+
+// Minimal RFC-4180 CSV parser that handles quoted fields with embedded newlines/commas
+function _dvhcParseCsv(text) {
+  const rows = [];
+  let headers = null;
+  let pos = 0;
+  const len = text.length;
+
+  function parseField() {
+    if (pos < len && text[pos] === '"') {
+      pos++; // skip opening quote
+      let val = '';
+      while (pos < len) {
+        if (text[pos] === '"') {
+          pos++;
+          if (pos < len && text[pos] === '"') { val += '"'; pos++; } // escaped ""
+          else break; // closing quote
+        } else {
+          val += text[pos++];
+        }
+      }
+      return val;
+    } else {
+      let val = '';
+      while (pos < len && text[pos] !== ',' && text[pos] !== '\n' && text[pos] !== '\r') {
+        val += text[pos++];
+      }
+      return val;
+    }
+  }
+
+  while (pos < len) {
+    // skip leading CR
+    while (pos < len && text[pos] === '\r') pos++;
+    if (pos >= len) break;
+    if (text[pos] === '\n') { pos++; continue; } // blank line
+
+    // parse one row's fields
+    const row = [];
+    while (pos < len && text[pos] !== '\n' && text[pos] !== '\r') {
+      row.push(parseField());
+      if (pos < len && text[pos] === ',') pos++;
+      else break;
+    }
+    // consume line ending
+    while (pos < len && (text[pos] === '\r' || text[pos] === '\n')) {
+      if (text[pos] === '\n') { pos++; break; }
+      pos++;
+    }
+    if (!headers) {
+      headers = row;
+    } else if (row.length > 0) {
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = (row[i] || '').replace(/\n/g, ' ').trim(); });
+      rows.push(obj);
+    }
+  }
+  return rows;
+}
+
+async function _qcagDVHCLoadData() {
+  const statusEl = document.getElementById('qcagDVHCStatus');
+  if (statusEl) statusEl.textContent = 'Đang tải dữ liệu (3 tệp CSV)...';
+  try {
+    const [r1, r2, r3] = await Promise.all([
+      fetch(_DVHC_BASE + 'new_wards.csv'),
+      fetch(_DVHC_BASE + 'old_wards.csv'),
+      fetch(_DVHC_BASE + 'ward_mappings.csv'),
+    ]);
+    if (!r1.ok || !r2.ok || !r3.ok) throw new Error(`HTTP ${[r1,r2,r3].find(r=>!r.ok).status}`);
+    const [t1, t2, t3] = await Promise.all([r1.text(), r2.text(), r3.text()]);
+
+    // Build maps
+    _dvhcNewWards = new Map();
+    for (const row of _dvhcParseCsv(t1)) {
+      _dvhcNewWards.set(row.ward_code, {
+        wardName: row.ward_name,
+        provinceName: row.province_name,
+      });
+    }
+
+    _dvhcOldWards = new Map();
+    for (const row of _dvhcParseCsv(t2)) {
+      _dvhcOldWards.set(row.ward_code, {
+        wardName: row.ward_name,
+        districtName: row.district_name,
+        provinceName: row.province_name,
+      });
+    }
+
+    _dvhcMappings = new Map();
+    for (const row of _dvhcParseCsv(t3)) {
+      const nc = row.new_ward_code, oc = row.old_ward_code;
+      if (!_dvhcMappings.has(nc)) _dvhcMappings.set(nc, []);
+      _dvhcMappings.get(nc).push(oc);
+    }
+
+    // Build 2-level index grouped by new province
+    const provinceMap = new Map(); // newProvinceName → {oldProvinces:Set, wards:[]}
+    for (const [newCode, newInfo] of _dvhcNewWards) {
+      const pName = newInfo.provinceName;
+      if (!provinceMap.has(pName)) provinceMap.set(pName, { oldProvinces: new Set(), wards: [] });
+      const pEntry = provinceMap.get(pName);
+
+      const oldCodes  = _dvhcMappings.get(newCode) || [];
+      const oldWards  = oldCodes.map(oc => _dvhcOldWards.get(oc)).filter(Boolean);
+
+      // Track old provinces for this province group
+      for (const ow of oldWards) pEntry.oldProvinces.add(ow.provinceName);
+
+      // Build old ward labels with optional disambiguation
+      const nameCounts = {};
+      for (const ow of oldWards) nameCounts[ow.wardName] = (nameCounts[ow.wardName] || 0) + 1;
+      const nameDistCounts = {};
+      for (const ow of oldWards) {
+        const k = ow.wardName + '|' + ow.districtName;
+        nameDistCounts[k] = (nameDistCounts[k] || 0) + 1;
+      }
+      const oldWardLabels = oldWards.length === 0
+        ? ['(không có thông tin)']
+        : oldWards.map(ow => {
+            if (nameCounts[ow.wardName] > 1) {
+              const k = ow.wardName + '|' + ow.districtName;
+              if (nameDistCounts[k] > 1) return `${ow.wardName} - ${ow.provinceName}`;
+              return `${ow.wardName} - ${ow.districtName}`;
+            }
+            return ow.wardName;
+          });
+
+      // Build searchable string (newline-stripped values joined)
+      const wardSearchable = [
+        newInfo.wardName.toLowerCase(),
+        ...oldWards.map(ow => ow.wardName.toLowerCase()),
+        ...oldWards.map(ow => ow.districtName.toLowerCase()),
+        ...oldWards.map(ow => ow.provinceName.toLowerCase()),
+      ].join(' ');
+
+      pEntry.wards.push({ newWardName: newInfo.wardName, oldWardLabels, wardSearchable });
+    }
+
+    // Flatten to sorted array
+    _dvhcIndex = [];
+    for (const [pName, pData] of provinceMap) {
+      const oldProvinceList = [...pData.oldProvinces];
+      const pSearchable = [pName.toLowerCase(), ...oldProvinceList.map(p => p.toLowerCase())].join(' ');
+      pData.wards.sort((a, b) => a.newWardName.localeCompare(b.newWardName, 'vi'));
+      _dvhcIndex.push({ newProvinceName: pName, oldProvinceList, pSearchable, wards: pData.wards });
+    }
+    _dvhcIndex.sort((a, b) => a.newProvinceName.localeCompare(b.newProvinceName, 'vi'));
+
+    const total = _dvhcIndex.reduce((s, p) => s + p.wards.length, 0);
+    if (statusEl) statusEl.textContent = `✅ ${total} đơn vị hành chính. Nhập để tìm.`;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '❌ Không tải được dữ liệu: ' + e.message;
+  }
+}
+
+function qcagDVHCOnSearch(val) {
+  // Search only when user confirms (Enter). Use whole-phrase matching, not incremental token matching.
+  _qcagDVHCDoSearch(val.trim());
+}
+
+function _qcagDVHCDoSearch(q) {
+  const resultsEl = document.getElementById('qcagDVHCResults');
+  const statusEl  = document.getElementById('qcagDVHCStatus');
+  if (!resultsEl) return;
+  if (!q) { resultsEl.innerHTML = ''; return; }
+  if (!_dvhcIndex) {
+    resultsEl.innerHTML = '<div class="qcag-dvhc-empty">Dữ liệu đang tải, vui lòng chờ...</div>';
+    return;
+  }
+  const ql = q.toLowerCase();
+
+  const html = [];
+  let totalWards = 0;
+
+  for (const pEntry of _dvhcIndex) {
+    // Province matches if the whole phrase appears in province searchable text
+    const pMatches = pEntry.pSearchable.includes(ql);
+    // A ward matches if the whole phrase appears in its searchable OR in the province searchable
+    const matchedWards = pEntry.wards.filter(w => w.wardSearchable.includes(ql) || pEntry.pSearchable.includes(ql));
+    if (!pMatches && matchedWards.length === 0) continue;
+
+    // If province matched by name only (not by ward), show up to 30 wards
+    const wardsToShow = matchedWards.length > 0
+      ? matchedWards
+      : (pMatches ? pEntry.wards.slice(0, 30) : []);
+    if (wardsToShow.length === 0) continue;
+
+    totalWards += wardsToShow.length;
+    if (totalWards > 300) break; // safety cap
+
+    const newProvHL  = _dvhcHighlight(pEntry.newProvinceName, q);
+    const oldProvHL  = pEntry.oldProvinceList.map(p => _dvhcHighlight(p, q)).join(', ');
+    const truncNote  = pMatches && matchedWards.length === 0 && pEntry.wards.length > 30
+      ? `<div class="qcag-dvhc-more">Hiển thị 30/${pEntry.wards.length} xã/phường. Nhập tên xã để lọc.</div>`
+      : '';
+
+    const wardHtml = wardsToShow.map(w => {
+      const newWardHL    = _dvhcHighlight(w.newWardName, q);
+      const oldLabelsHL  = w.oldWardLabels.map(l => _dvhcHighlight(l, q)).join(', ');
+      return `<div class="qcag-dvhc-ward-item">
+        <span class="qcag-dvhc-ward-name">• ${newWardHL}</span>
+        <span class="qcag-dvhc-ward-sources">Sáp nhập từ: ${oldLabelsHL}</span>
+      </div>`;
+    }).join('');
+
+    html.push(`<div class="qcag-dvhc-province-group">
+      <div class="qcag-dvhc-province-title">🏙️ <span class="qcag-dvhc-new-province">${newProvHL}</span>: <span class="qcag-dvhc-old-provinces">Sáp nhập từ (${oldProvHL})</span></div>
+      <div class="qcag-dvhc-ward-list">${wardHtml}${truncNote}</div>
+    </div>`);
+  }
+
+  if (html.length === 0) {
+    resultsEl.innerHTML = '<div class="qcag-dvhc-empty">Không tìm thấy kết quả nào.</div>';
+  } else {
+    resultsEl.innerHTML = html.join('');
+    if (totalWards > 300) {
+      resultsEl.innerHTML += '<div class="qcag-dvhc-more">Quá nhiều kết quả. Hãy nhập cụ thể hơn.</div>';
+    }
+  }
+  if (statusEl) statusEl.textContent = `${totalWards} xã/phường trong ${html.length} tỉnh`;
+}
+
+function _dvhcHighlight(text, query) {
+  if (!text) return '';
+  const safe = text.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  if (!query) return safe;
+  const ql = query.toLowerCase().trim();
+  if (!ql) return safe;
+  const esc = ql.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re = new RegExp(esc, 'gi');
+  return safe.replace(re, m => `<mark>${m}</mark>`);
 }

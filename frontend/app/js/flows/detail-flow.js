@@ -14,16 +14,64 @@ function isRequestOwnedByCurrentSession(request) {
   } catch (e) { return false; }
 }
 
+// ── Pending comment images (Sale Heineken) ────────────────────────────
+let _detailCommentPendingImages = [];
+
+function _renderDetailCommentPreview() {
+  const previewEl = document.getElementById('detailCommentImgPreview');
+  if (!previewEl) return;
+  if (_detailCommentPendingImages.length === 0) {
+    previewEl.innerHTML = '';
+    previewEl.classList.add('hidden');
+    setTimeout(updateEditFabPosition, 30);
+    return;
+  }
+  previewEl.classList.remove('hidden');
+  previewEl.innerHTML = _detailCommentPendingImages.map((src, i) =>
+    `<div style="position:relative;display:inline-block;margin:2px">`+
+    `<img src="${src}" style="width:52px;height:52px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb">`+
+    `<button type="button" onclick="_removeDetailCommentImage(${i})" style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:#ef4444;color:#fff;border-radius:50%;border:none;font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>`+
+    `</div>`
+  ).join('');
+  setTimeout(updateEditFabPosition, 30);
+}
+
+function _removeDetailCommentImage(index) {
+  _detailCommentPendingImages.splice(index, 1);
+  _renderDetailCommentPreview();
+}
+
+async function handleDetailCommentImagePick(input) {
+  if (!input || !input.files) return;
+  const files = Array.from(input.files);
+  for (const file of files) {
+    const dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+    _detailCommentPendingImages.push(dataUrl);
+  }
+  input.value = '';
+  _renderDetailCommentPreview();
+}
+
 // ── Design modal comments ─────────────────────────────────────────────
 
 async function addDesignComment(backendId) {
   const textarea = document.getElementById('designCommentInput');
   if (!textarea) return;
   const text = textarea.value.trim();
-  if (!text) { showToast('Vui lòng nhập nội dung bình luận'); return; }
+  const imgs = _detailCommentPendingImages.slice();
+  if (!text && imgs.length === 0) { showToast('Vui lòng nhập nội dung bình luận'); return; }
 
   const reqIdx = allRequests.findIndex(r => r.__backendId === backendId);
   if (reqIdx === -1) { showToast('Không tìm thấy yêu cầu'); return; }
+
+  // Clear input immediately
+  textarea.value = '';
+  _detailCommentPendingImages = [];
+  _renderDetailCommentPreview();
 
   const request = allRequests[reqIdx];
   let comments = [];
@@ -31,12 +79,24 @@ async function addDesignComment(backendId) {
 
   const authorRole = (currentSession && currentSession.role) || 'unknown';
   const authorName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Người dùng';
-  const comment = { authorRole, authorName, text, createdAt: new Date().toISOString() };
+
+  // Upload images if any
+  let uploadedImgs = [];
+  if (imgs.length > 0 && window.dataSdk && window.dataSdk.uploadImage && backendId) {
+    for (const imgData of imgs) {
+      try {
+        const url = await window.dataSdk.uploadImage(imgData, null, backendId, 'comments');
+        uploadedImgs.push(url || imgData);
+      } catch (e) { uploadedImgs.push(imgData); }
+    }
+  } else {
+    uploadedImgs = imgs;
+  }
+
+  const comment = { authorRole, authorName, text, images: uploadedImgs, createdAt: new Date().toISOString() };
   comments.push(comment);
 
   // Heineken comment on a request that has MQ → clear design images (request edit)
-  // Only clear images the first time Sale requests an edit; do not auto-delete
-  // images repeatedly on subsequent edit requests.
   let extraFields = {};
   if (authorRole === 'heineken') {
     let existingDesignImgs = [];
@@ -63,7 +123,6 @@ async function addDesignComment(backendId) {
   } else {
     allRequests[reqIdx] = updated;
     saveAllRequestsToStorage();
-    textarea.value = '';
     showToast('Đã gửi bình luận (lưu local)');
     viewDesign(backendId);
   }
@@ -75,10 +134,16 @@ async function addDetailComment(backendId) {
   const textarea = document.getElementById('detailCommentInput');
   if (!textarea) return;
   const text = textarea.value.trim();
-  if (!text) { showToast('Vui lòng nhập nội dung bình luận'); return; }
+  const imgs = _detailCommentPendingImages.slice();
+  if (!text && imgs.length === 0) { showToast('Vui lòng nhập nội dung bình luận'); return; }
 
   const reqIdx = allRequests.findIndex(r => r.__backendId === backendId);
   if (reqIdx === -1) { showToast('Không tìm thấy yêu cầu'); return; }
+
+  // Clear inputs immediately
+  textarea.value = '';
+  _detailCommentPendingImages = [];
+  _renderDetailCommentPreview();
 
   const request = allRequests[reqIdx];
   let comments = [];
@@ -86,7 +151,21 @@ async function addDetailComment(backendId) {
 
   const authorRole = (currentSession && currentSession.role) || 'unknown';
   const authorName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Người dùng';
-  const comment = { authorRole, authorName, text, createdAt: new Date().toISOString() };
+
+  // Upload images if any
+  let uploadedImgs = [];
+  if (imgs.length > 0 && window.dataSdk && window.dataSdk.uploadImage && backendId) {
+    for (const imgData of imgs) {
+      try {
+        const url = await window.dataSdk.uploadImage(imgData, null, backendId, 'comments');
+        uploadedImgs.push(url || imgData);
+      } catch (e) { uploadedImgs.push(imgData); }
+    }
+  } else {
+    uploadedImgs = imgs;
+  }
+
+  const comment = { authorRole, authorName, text, images: uploadedImgs, createdAt: new Date().toISOString() };
   comments.push(comment);
 
   // Heineken comment on a request that has MQ → clear design images (request edit)
@@ -547,9 +626,12 @@ async function showRequestDetail(id) {
         // keep sender name on top (meta)
         '<div class="comment-meta"><strong>' + authorStr + '</strong>' +
         '<span class="comment-role">' + roleStr + '</span></div>' +
-        // message bubble contains body + small time at bottom
+        // message bubble contains body + images + small time at bottom
         '<div class="comment-bubble' + shortClass + '">' +
-          '<div class="comment-body">' + textStr + '</div>' +
+          (rawText ? '<div class="comment-body">' + textStr + '</div>' : '') +
+          (Array.isArray(c.images) && c.images.length > 0
+            ? '<div class="comment-imgs">' + c.images.map(img => `<img src="${escapeHtml(img)}" class="comment-img-thumb" onclick="showImageFull(this.src,false)">`).join('') + '</div>'
+            : '') +
           '<div class="comment-time-inbubble">' + timeStr + '</div>' +
         '</div>' +
       '</div>';
@@ -566,9 +648,17 @@ async function showRequestDetail(id) {
           ${commentsListHtml}
         </div>
         <div class="mt-3">
-          <textarea id="detailCommentInput" rows="1" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm resize-none" placeholder="Viết bình luận..." oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
-          <div class="flex justify-end mt-2">
-            <button onclick="addDetailComment('${request.__backendId}')" class="px-4 py-2 bg-gray-900 text-white rounded-lg">Gửi</button>
+          <div class="detail-comment-input-box">
+            <textarea id="detailCommentInput" rows="1" class="w-full px-3 py-2.5 text-sm resize-none" style="border:none;outline:none;background:transparent;" placeholder="Viết bình luận..." oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px';if(typeof updateEditFabPosition==='function')updateEditFabPosition();"></textarea>
+            <div id="detailCommentImgPreview" class="hidden flex flex-wrap gap-1 px-2 pb-2"></div>
+          </div>
+          <div class="flex items-center justify-between mt-2">
+            <label class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 cursor-pointer hover:bg-gray-50">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              Ảnh
+              <input type="file" accept="image/*" multiple class="hidden" onchange="handleDetailCommentImagePick(this)">
+            </label>
+            <button onclick="addDetailComment('${request.__backendId}')" class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm">Gửi</button>
           </div>
         </div>
       </div>
@@ -633,8 +723,10 @@ function updateEditFabPosition() {
     const detailContent = document.getElementById('detailContent');
     if (!fab || !input || !detailContent) return;
 
-    // Get input rect relative to viewport
-    const rect = input.getBoundingClientRect();
+    // Measure the whole input bar (textarea + image preview + action row),
+    // not just the textarea, so the FAB stays above images too.
+    const inputBar = input.closest('.mt-3') || input.parentElement || input;
+    const rect = inputBar.getBoundingClientRect();
     const viewportH = window.innerHeight || document.documentElement.clientHeight;
 
     // If input area is visible near bottom, place FAB just above it
@@ -722,6 +814,8 @@ function backToList() {
   // Clear chat-mode so it doesn't bleed into next detail open
   const detailContent = document.getElementById('detailContent');
   if (detailContent) detailContent.classList.remove('chat-mode');
+  // Reset pending comment images
+  _detailCommentPendingImages = [];
   // Hide FAB and close bottom sheet
   try {
     const fab = document.getElementById('editRequestFab');
@@ -969,7 +1063,14 @@ async function viewDesign(id) {
         </div>
         <!-- Sticky comment footer – fixed at bottom of info panel -->
         <div class="design-comment-footer">
-          <textarea id="designCommentInput" rows="2" class="design-comment-input" placeholder="Viết bình luận..."></textarea>
+          <div class="design-comment-input-outer">
+            <div id="designCommentImgPreview" class="hidden design-comment-img-preview"></div>
+            <textarea id="designCommentInput" rows="2" class="design-comment-input" placeholder="Viết bình luận..."></textarea>
+          </div>
+          <label class="design-comment-img-btn" title="Đính kèm ảnh">
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <input type="file" accept="image/*" multiple class="hidden" onchange="handleDetailCommentImagePick(this)">
+          </label>
           <button onclick="addDesignComment('${request.__backendId}')" class="design-comment-send">Gửi</button>
         </div>
       </div>
@@ -1192,6 +1293,7 @@ function showImageFull(src, showContent = true) {
   overlay.innerHTML = `
     <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false" style="opacity:0;transition:opacity .18s ease" decoding="async">
     <button class="dv-zoom-close">✕</button>
+    <button class="dv-zoom-dvhc-btn" onclick="(function(e){e.stopPropagation();if(typeof qcagDesktopToggleDVHCLookup==='function')qcagDesktopToggleDVHCLookup();})(event)" title="Tra cứu ĐVHC">🗺️</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>`;
   if (showContent) {
     const showContentBar = document.createElement('div');
@@ -1381,8 +1483,47 @@ async function confirmDelete() {
 
 let _editRequestCategories = [];
 
+// ── Edit-request pending images ─────────────────────────────────────
+let _editRequestPendingImages = [];
+
+function _renderEditRequestImgPreview() {
+  const wrap = document.getElementById('editRequestImgPreview');
+  if (!wrap) return;
+  if (_editRequestPendingImages.length === 0) {
+    wrap.innerHTML = ''; wrap.classList.add('hidden'); return;
+  }
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = _editRequestPendingImages.map((src, i) =>
+    `<div class="edit-req-img-thumb">`+
+    `<img src="${src}">`+
+    `<button type="button" onclick="_removeEditRequestImage(${i})">✕</button>`+
+    `</div>`
+  ).join('');
+}
+
+function _removeEditRequestImage(idx) {
+  _editRequestPendingImages.splice(idx, 1);
+  _renderEditRequestImgPreview();
+}
+
+async function handleEditRequestImagePick(input) {
+  if (!input || !input.files) return;
+  for (const file of Array.from(input.files)) {
+    const dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+    _editRequestPendingImages.push(dataUrl);
+  }
+  input.value = '';
+  _renderEditRequestImgPreview();
+}
+
 function openEditRequestSheet() {
   _editRequestCategories = [];
+  _editRequestPendingImages = [];
+  _renderEditRequestImgPreview();
   // reset checkboxes
   ['editCat_noiDung', 'editCat_hangMuc', 'editCat_brand'].forEach(id => {
     const el = document.getElementById(id);
@@ -1463,8 +1604,10 @@ async function submitEditRequest() {
     text,
     commentType: 'edit-request',
     editCategories: [..._editRequestCategories],
+    ...(_editRequestPendingImages.length > 0 ? { images: [..._editRequestPendingImages] } : {}),
     createdAt: new Date().toISOString()
   };
+  _editRequestPendingImages = [];
   comments.push(comment);
 
   // Heineken edit-request must pull request back to processing and clear MQ

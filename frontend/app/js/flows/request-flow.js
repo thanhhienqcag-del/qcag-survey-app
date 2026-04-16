@@ -144,7 +144,7 @@ function renderRequestItems() {
           </div>
 
           ${item.type && !isOther ? `
-            ${(item.type && (item.type.includes('Bảng') || item.type.includes('Hộp đèn'))) ? `
+            ${(item.type && (item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo'))) ? `
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Brand</label>
@@ -166,7 +166,7 @@ function renderRequestItems() {
                     <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
                     <div class="cs-options hidden">
                       <div class="cs-option" data-value="Làm mới">Làm mới</div>
-                      <div class="cs-option" data-value="Thay bạt">Thay bạt</div>
+                      ${((item.type||'').includes('Logo') || (item.type||'').toLowerCase().includes('emblemd')) ? `<div class="cs-option" data-value="Sửa chữa">Sửa chữa</div>` : `<div class="cs-option" data-value="Thay bạt">Thay bạt</div>`}
                     </div>
                   </div>
                 </div>
@@ -491,8 +491,8 @@ function validateTab2() {
         markItemCustomSelectError(item.id, 'brand');
         hasError = true;
       }
-      // Hình thức (Làm mới / Thay bạt) là bắt buộc cho Bảng và Hộp đèn
-      if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn')) && !item.action) {
+      // Hình thức (Làm mới / Thay bạt / Sửa chữa) là bắt buộc cho Bảng, Hộp đèn và Logo
+      if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo')) && !item.action) {
         markItemCustomSelectError(item.id, 'action');
         hasError = true;
       }
