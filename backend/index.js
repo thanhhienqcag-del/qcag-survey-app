@@ -2456,7 +2456,29 @@ app.post('/api/ks/requests', async (req, res) => {
             console.warn('[ks/create] tk_code compute failed (non-fatal):', tkErr && tkErr.message ? tkErr.message : tkErr);
         }
 
-        // Step 3: Upload any base64 images to GCS in PARALLEL (fastest path).
+        // Step 3: Fire wsInvalidate + push IMMEDIATELY (before slow image upload)
+        // so QCAG gets notified within seconds of the request being created.
+        // A second wsInvalidate fires after images are uploaded with the final state.
+        try {
+            const [[earlyRow]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
+            wsInvalidate('ks_requests', { action: 'create', id: tkCode, data: ksRowToApp(earlyRow) });
+            // Non-blocking push — do NOT await; image upload must not delay the notification
+            const reqObj = (() => { try { return JSON.parse(earlyRow.requester || '{}'); } catch (_) { return {}; } })();
+            const senderName = reqObj.saleName || reqObj.phone || 'Sale Heineken';
+            const outletLabel = earlyRow.outlet_name || earlyRow.outlet_code || 'Outlet';
+            sendKsPush({
+                title: 'QCAG — Yêu cầu mới từ Heineken',
+                body: `${senderName} vừa gửi yêu cầu mới cho Outlet ${outletLabel}.`,
+                data: { backendId: earlyRow.backend_id },
+                targetPhone: null,
+                targetSaleCode: null,
+                targetRole: 'qcag',
+            }).catch(e => console.warn('[push] new-request notify error (non-fatal):', e && e.message ? e.message : e));
+        } catch (earlyNotifyErr) {
+            console.warn('[ks/create] early notify error (non-fatal):', earlyNotifyErr && earlyNotifyErr.message ? earlyNotifyErr.message : earlyNotifyErr);
+        }
+
+        // Step 4: Upload any base64 images to GCS in PARALLEL (fastest path).
         // When frontend sends '[]' (new default), these resolve instantly.
         const [statusImgsJson, designImgsJson, acceptanceImgsJson] = await Promise.all([
             ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang'),
@@ -2464,31 +2486,15 @@ app.post('/api/ks/requests', async (req, res) => {
             ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages) || '[]', tkCode, 'mq'),
         ]);
 
-        // Step 4: Update row with GCS URLs + tk_code
+        // Step 5: Update row with GCS URLs + tk_code, then notify clients of final state
         await pool.query(
             `UPDATE ks_requests SET tk_code=?, status_images=?, design_images=?, acceptance_images=?, updated_at=? WHERE id=?`,
             [tkCode, statusImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
         );
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
-        wsInvalidate('ks_requests', { action: 'create', id: tkCode, data: ksRowToApp(row) });
-
-        // Fire push to all QCAG staff (best-effort, never blocks response)
-        try {
-            const reqObj = (() => { try { return JSON.parse(row.requester || '{}'); } catch (_) { return {}; } })();
-            const senderName = reqObj.saleName || reqObj.phone || 'Sale Heineken';
-            const outletLabel = row.outlet_name || row.outlet_code || 'Outlet';
-            await sendKsPush({
-                title: 'QCAG — Yêu cầu mới từ Heineken',
-                body: `${senderName} vừa gửi yêu cầu mới cho Outlet ${outletLabel}.`,
-                data: { backendId: row.backend_id },
-                targetPhone: null,
-                targetSaleCode: null,
-                targetRole: 'qcag',
-            });
-        } catch (pushErr) {
-            console.warn('[push] new-request notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
-        }
+        // Second invalidate: push final row (with uploaded image URLs) to all clients
+        wsInvalidate('ks_requests');
 
         return res.status(201).json({ ok: true, data: ksRowToApp(row) });
     } catch (err) {
