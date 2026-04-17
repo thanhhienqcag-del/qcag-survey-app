@@ -44,15 +44,22 @@ function _removeDetailCommentImage(index) {
 async function handleDetailCommentImagePick(input) {
   if (!input || !input.files) return;
   const files = Array.from(input.files);
-  for (const file of files) {
-    const dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
-    _detailCommentPendingImages.push(dataUrl);
-  }
   input.value = '';
+  for (const file of files) {
+    // Compress immediately on pick (WebP preferred)
+    try {
+      const dataUrl = await _compressImageFile(file, 1600, 0.82);
+      _detailCommentPendingImages.push(dataUrl);
+    } catch (_) {
+      // Fallback to raw base64
+      const dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+      _detailCommentPendingImages.push(dataUrl);
+    }
+  }
   _renderDetailCommentPreview();
 }
 
@@ -842,12 +849,18 @@ async function uploadDesign(input) {
     ('mq-' + String(currentDetailRequest.outletCode || 'NEWOUTLET').replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g,'-').replace(/^-|-$/g,'').slice(0,32));
 
   for (const file of files) {
-    const dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
-    // Upload to GCS if dataSdk available; fall back to base64
+    // Compress immediately (WebP preferred) — much faster upload
+    let dataUrl;
+    try {
+      dataUrl = await _compressImageFile(file, 1600, 0.82);
+    } catch (_) {
+      dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    // Upload compressed image to GCS
     if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
       try {
         const url = await window.dataSdk.uploadImage(dataUrl, null, currentDetailRequest.__backendId, mqSubfolder);
@@ -892,11 +905,17 @@ async function uploadAcceptance(input) {
   const currentImgs = JSON.parse(currentDetailRequest.acceptanceImages || '[]');
 
   for (const file of files) {
-    const dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
+    // Compress immediately (WebP preferred) — much faster upload
+    let dataUrl;
+    try {
+      dataUrl = await _compressImageFile(file, 1600, 0.82);
+    } catch (_) {
+      dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+    }
     // Upload to GCS (nghiem-thu folder) if dataSdk available
     if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
       try {
@@ -1502,15 +1521,22 @@ function _removeEditRequestImage(idx) {
 
 async function handleEditRequestImagePick(input) {
   if (!input || !input.files) return;
-  for (const file of Array.from(input.files)) {
-    const dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
-    _editRequestPendingImages.push(dataUrl);
-  }
+  const files = Array.from(input.files);
   input.value = '';
+  for (const file of files) {
+    // Compress immediately (WebP preferred)
+    try {
+      const dataUrl = await _compressImageFile(file, 1600, 0.82);
+      _editRequestPendingImages.push(dataUrl);
+    } catch (_) {
+      const dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+      _editRequestPendingImages.push(dataUrl);
+    }
+  }
   _renderEditRequestImgPreview();
 }
 

@@ -3,47 +3,49 @@
 // ====================================================================
 'use strict';
 
-// ── Compress a File/Blob to a smaller JPEG data URL ─────────────────────
-// Returns a Promise<string> (data:image/jpeg;base64,...).
-// Default: max 1600px on longest side, JPEG quality 0.82 (~200-400KB per image).
-// This prevents 5-15MB raw camera photos from bloating the upload payload.
+// ── Compress a File/Blob to a smaller data URL (WebP preferred, JPEG fallback) ──
+// Default: max 1600px on longest side, quality 0.82 (~100-300KB per image).
+// WebP is 30-50% smaller than JPEG at similar quality.
 function _compressImageFile(file, maxDim, quality) {
   maxDim  = maxDim  || 1600;
   quality = quality || 0.82;
   return new Promise(function (resolve, reject) {
-    var reader = new FileReader();
-    reader.onerror = function () { reject(new Error('FileReader error')); };
-    reader.onload = function (evt) {
-      var img = new Image();
-      img.onerror = function () { reject(new Error('Image decode error')); };
-      img.onload = function () {
-        try {
-          var w = img.naturalWidth  || img.width;
-          var h = img.naturalHeight || img.height;
-          // Downscale if either dimension exceeds maxDim
-          if (w > maxDim || h > maxDim) {
-            var ratio = Math.min(maxDim / w, maxDim / h);
-            w = Math.round(w * ratio);
-            h = Math.round(h * ratio);
-          }
-          var canvas = document.createElement('canvas');
-          canvas.width  = w;
-          canvas.height = h;
-          var ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, w, h);
-          var dataUrl = canvas.toDataURL('image/jpeg', quality);
-          resolve(dataUrl);
-        } catch (e) {
-          reject(e);
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Image decode error')); };
+    img.onload = function () {
+      try {
+        URL.revokeObjectURL(url);
+        var w = img.naturalWidth  || img.width;
+        var h = img.naturalHeight || img.height;
+        if (w > maxDim || h > maxDim) {
+          var ratio = Math.min(maxDim / w, maxDim / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
         }
-      };
-      img.src = evt.target.result;
+        var canvas = document.createElement('canvas');
+        canvas.width  = w;
+        canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // Prefer WebP if browser supports it
+        var dataUrl = '';
+        try {
+          dataUrl = canvas.toDataURL('image/webp', quality);
+          if (!dataUrl || dataUrl.indexOf('data:image/webp') !== 0) throw new Error('webp unsupported');
+        } catch (_e) {
+          dataUrl = canvas.toDataURL('image/jpeg', quality);
+        }
+        resolve(dataUrl);
+      } catch (e) {
+        reject(e);
+      }
     };
-    reader.readAsDataURL(file);
+    img.src = url;
   });
 }
 
-// Compress an array of File objects → array of base64 data URLs (JPEG).
+// Compress an array of File objects → array of data URLs.
 // Skips files that fail to compress (logs warning).
 async function _compressImageFiles(files, maxDim, quality) {
   var results = [];
@@ -67,26 +69,46 @@ function handleOldContentImages(input) {
 
 function handleStatusImages(input) {
   const files = Array.from(input.files);
+  input.value = '';
   files.forEach(file => {
+    // Show instant preview from blob URL while compressing in background
     const blobUrl = URL.createObjectURL(file);
+    const idx = statusImages.length;
     statusImages.push(blobUrl);
     _statusImageFiles.push(file);
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
+    // Compress in background — replace blob preview with compressed data URL
+    _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
+      URL.revokeObjectURL(blobUrl);
+      statusImages[idx] = dataUrl;
+      // Replace File with a pre-compressed sentinel so submit doesn't re-compress
+      _statusImageFiles[idx] = dataUrl;
+      renderImagePreviews('statusImagesPreview', statusImages, 'status');
+    }).catch(function () { /* keep blob URL as fallback */ });
   });
-  input.value = '';
 }
 
 function handleWarrantyImages(input) {
   const files = Array.from(input.files);
-  files.forEach(file => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      warrantyImages.push(e.target.result);
-      renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
-    };
-    reader.readAsDataURL(file);
-  });
   input.value = '';
+  files.forEach(file => {
+    // Show instant preview from blob URL while compressing in background
+    const blobUrl = URL.createObjectURL(file);
+    const idx = warrantyImages.length;
+    warrantyImages.push(blobUrl);
+    renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
+    // Compress in background
+    _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
+      URL.revokeObjectURL(blobUrl);
+      warrantyImages[idx] = dataUrl;
+      renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
+    }).catch(function () {
+      // Fallback: read raw if compression fails
+      const reader = new FileReader();
+      reader.onload = function (e) { warrantyImages[idx] = e.target.result; };
+      reader.readAsDataURL(file);
+    });
+  });
 }
 
 function renderImagePreviews(containerId, images, type) {
@@ -113,6 +135,7 @@ function removeImage(type, idx) {
     _statusImageFiles.splice(idx, 1);
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
   } else if (type === 'warranty') {
+    try { URL.revokeObjectURL(warrantyImages[idx]); } catch (e) {}
     warrantyImages.splice(idx, 1);
     renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
   }

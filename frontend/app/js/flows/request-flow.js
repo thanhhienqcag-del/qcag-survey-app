@@ -556,36 +556,37 @@ async function submitNewRequest() {
   const btn = document.getElementById('submitNewBtn');
   _isNewRequestSubmitting = true;
   btn.disabled = true;
-  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang nén ảnh...';
+  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang gửi yêu cầu...';
 
   // Pre-generate __backendId so GCS folder name is consistent between create and patch
   const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
-  // ── CRITICAL FIX: compress and include images SYNCHRONOUSLY in POST ──
-  // Previously images were uploaded in a fire-and-forget background PATCH,
-  // which caused permanent image loss when network dropped, tab closed, or
-  // retries exhausted.  Now we compress → base64 → include in POST body so
-  // the backend uploads to GCS atomically with the INSERT.
+  // ── Use pre-compressed images (compressed on pick, not on submit) ──
+  // handleStatusImages now compresses immediately when user selects photos.
+  // _statusImageFiles contains either pre-compressed data URLs or File objects.
   let _compressedStatusDataUrls = [];
-  try {
-    _compressedStatusDataUrls = await _compressImageFiles(_statusImageFiles, 1600, 0.82);
-  } catch (compressErr) {
-    console.warn('[submit] image compression error — falling back to raw read:', compressErr);
-    // Fallback: read raw base64 (larger but still works)
-    for (const file of _statusImageFiles) {
+  for (const item of _statusImageFiles) {
+    if (typeof item === 'string' && item.startsWith('data:')) {
+      // Already compressed on pick
+      _compressedStatusDataUrls.push(item);
+    } else if (item instanceof File || item instanceof Blob) {
+      // Fallback: compress now (shouldn't happen normally)
       try {
-        const raw = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = (e) => resolve(e.target.result);
-          r.onerror = reject;
-          r.readAsDataURL(file);
-        });
-        if (raw) _compressedStatusDataUrls.push(raw);
-      } catch (e) { console.warn('[submit] raw read failed:', e); }
+        const dataUrl = await _compressImageFile(item, 1600, 0.82);
+        if (dataUrl) _compressedStatusDataUrls.push(dataUrl);
+      } catch (e) {
+        console.warn('[submit] compress fallback failed:', e);
+        try {
+          const raw = await new Promise((resolve, reject) => {
+            const r = new FileReader(); r.onload = (ev) => resolve(ev.target.result); r.onerror = reject; r.readAsDataURL(item);
+          });
+          if (raw) _compressedStatusDataUrls.push(raw);
+        } catch (_) {}
+      }
     }
   }
 
-  // Safety: if compression lost all images but user had selected some, abort
+  // Safety: if all images lost, abort
   if (_statusImageFiles.length > 0 && _compressedStatusDataUrls.length === 0) {
     showToast('Lỗi xử lý ảnh — vui lòng thử lại');
     btn.disabled = false;
@@ -593,8 +594,6 @@ async function submitNewRequest() {
     _isNewRequestSubmitting = false;
     return;
   }
-
-  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang gửi yêu cầu...';
 
   const request = {
     type: 'new',

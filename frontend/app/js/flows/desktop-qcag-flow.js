@@ -2744,12 +2744,17 @@ async function qcagDesktopUploadStatusImage(input) {
   const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(currentDetailRequest.statusImages, [])).slice();
 
   for (const file of files) {
-    const reader = new FileReader();
-    let dataUrl = null;
-    await new Promise(resolve => {
-      reader.onload = (e) => { dataUrl = e.target.result; resolve(); };
-      reader.readAsDataURL(file);
-    });
+    // Compress immediately (WebP preferred) — much faster upload
+    let dataUrl;
+    try {
+      dataUrl = await _compressImageFile(file, 1600, 0.82);
+    } catch (_) {
+      dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => { dataUrl = e.target.result; resolve(); };
+        reader.readAsDataURL(file);
+      });
+    }
     let imageUrl = dataUrl;
     if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
       try {
@@ -2794,12 +2799,18 @@ async function qcagDesktopUploadMQ(input) {
 
   // Only keep a single MQ image: the most recently added file replaces any existing images
   const file = files[files.length - 1];
-  const reader = new FileReader();
-  let dataUrl = null;
-  await new Promise(resolve => {
-    reader.onload = (e) => { dataUrl = e.target.result; resolve(); };
-    reader.readAsDataURL(file);
-  });
+
+  // Compress immediately (WebP preferred) — much faster upload
+  let dataUrl;
+  try {
+    dataUrl = await _compressImageFile(file, 1600, 0.82);
+  } catch (_) {
+    dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  }
 
   // Upload to GCS so Sale Heineken can also receive the image URL
   let imageUrl = dataUrl;
@@ -3035,18 +3046,25 @@ async function qcagDesktopMarkWarrantyResult(outOfScope) {
 async function qcagDesktopPickCommentImages(input) {
   if (!input) return;
   const files = Array.from(input.files || []);
+  input.value = '';
   for (const file of files) {
-    const reader = new FileReader();
-    await new Promise(resolve => {
-      reader.onload = (e) => {
-        _qcagDesktopPendingCommentImages.push(e.target.result);
-        resolve();
-      };
-      reader.readAsDataURL(file);
-    });
+    // Compress immediately (WebP preferred)
+    try {
+      const dataUrl = await _compressImageFile(file, 1600, 0.82);
+      _qcagDesktopPendingCommentImages.push(dataUrl);
+    } catch (_) {
+      // Fallback to raw base64
+      await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          _qcagDesktopPendingCommentImages.push(e.target.result);
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
   }
   qcagDesktopRenderCommentPreview();
-  input.value = '';
 }
 
 async function qcagDesktopRemoveDesignImage(index) {
