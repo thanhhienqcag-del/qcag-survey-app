@@ -24,6 +24,9 @@ let _qcagRequestCodeCache = { version: 0, codes: {} };
 // Index of the currently shown old design entry in the carousel
 let _qcagOldDesignIdx = 0;
 
+// Guard to prevent double-click on the confirm-complete button
+let _qcagMarkProcessedInFlight = false;
+
 // Pagination for left-column request list
 const _QCAG_PAGE_SIZE = 10;
 let _qcagDesktopListPage = 0;
@@ -2838,6 +2841,14 @@ async function qcagDesktopUpdateStatus(status) {
 
 async function qcagDesktopMarkProcessed() {
   if (!currentDetailRequest) return;
+  // Prevent double-click / concurrent calls
+  if (_qcagMarkProcessedInFlight) return;
+  _qcagMarkProcessedInFlight = true;
+  // Disable button immediately so user gets instant visual feedback
+  const _completeBtnEl = document.querySelector('.qcag-complete-btn');
+  if (_completeBtnEl) { _completeBtnEl.disabled = true; _completeBtnEl.classList.add('qcag-complete-btn--disabled'); }
+
+  try {
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
   // Must have MQ before marking done
   const designImgs = qcagDesktopParseJson(currentDetailRequest.designImages, []);
@@ -2845,11 +2856,13 @@ async function qcagDesktopMarkProcessed() {
     showToast(isPendingEdit
       ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
       : 'Vui lòng upload MQ thiết kế trước khi hoàn thành');
+    qcagDesktopRefreshMQInPlace(currentDetailRequest);
     return;
   }
   const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
   if (isSurveySizeIncomplete) {
     showToast('Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành');
+    qcagDesktopRefreshMQInPlace(currentDetailRequest);
     return;
   }
 
@@ -2888,13 +2901,18 @@ async function qcagDesktopMarkProcessed() {
     comments: JSON.stringify(comments),
     ...extraFields
   };
-  const persistOk = await qcagDesktopPersistRequest(updated, isPendingEdit ? 'Đã xác nhận chỉnh sửa' : 'Đã hoàn thành');
+  // Pass empty successMsg — a single definitive toast is shown after push result below
+  const persistOk = await qcagDesktopPersistRequest(updated, '');
+  if (!persistOk) {
+    // Re-enable button so QCAG can retry
+    qcagDesktopRefreshMQInPlace(currentDetailRequest);
+    return;
+  }
 
   // Push notification to Sale Heineken — sent from QCAG desktop directly via
   // /api/ks/push/send (Vercel function). This ensures the same VAPID keys are
   // used as when the subscription was created, avoiding backend key-mismatch issues.
-  if (persistOk) {
-    try {
+  try {
       let requesterPhone = null;
       let requesterSaleCode = null;
       try {
@@ -2934,14 +2952,18 @@ async function qcagDesktopMarkProcessed() {
           }
         }).catch(function(e) {
           console.warn('[push] notify heineken error:', e);
-          showToast('✓ Đã hoàn thành (không gửi được thông báo)', 4000);
+          showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 4000);
         });
       } else {
-        showToast('✓ Đã hoàn thành', 3000);
+        showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
       }
-    } catch (e) {
-      // non-fatal
-    }
+  } catch (e) {
+    // non-fatal — persist already succeeded
+    showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
+  }
+
+  } finally {
+    _qcagMarkProcessedInFlight = false;
   }
 }
 

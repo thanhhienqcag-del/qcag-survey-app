@@ -822,7 +822,7 @@ async function initKsDB() {
 // ======================== END KS MOBILE DB INIT ========================
 
 // ── Push notification helper ──────────────────────────────────────────
-async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSaleCode = null }) {
+async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSaleCode = null, targetRole = null }) {
     const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
     const VAPID_SUBJECT = process.env.VAPID_SUBJECT     || 'mailto:admin@qcag.vn';
@@ -849,14 +849,16 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSa
             }
         } else if (targetPhone) {
             [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+        } else if (targetRole) {
+            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE role = ?', [String(targetRole)]);
         } else {
             [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions', []);
         }
         if (!rows || rows.length === 0) {
-            console.warn('[push] sendKsPush: no subscriptions found for saleCode:', targetSaleCode, 'phone:', targetPhone);
+            console.warn('[push] sendKsPush: no subscriptions found for saleCode:', targetSaleCode, 'phone:', targetPhone, 'role:', targetRole);
             return;
         }
-        console.log('[push] sendKsPush: sending to', rows.length, 'subscription(s), saleCode:', targetSaleCode, 'phone:', targetPhone);
+        console.log('[push] sendKsPush: sending to', rows.length, 'subscription(s), saleCode:', targetSaleCode, 'phone:', targetPhone, 'role:', targetRole);
         const payload = JSON.stringify({ title, body, data });
         // TTL = 86400s (24h): push is queued if device offline, not dropped
         const pushOptions = { TTL: 86400 };
@@ -2469,7 +2471,25 @@ app.post('/api/ks/requests', async (req, res) => {
         );
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'create', id: tkCode, data: ksRowToApp(row) });
+
+        // Fire push to all QCAG staff (best-effort, never blocks response)
+        try {
+            const reqObj = (() => { try { return JSON.parse(row.requester || '{}'); } catch (_) { return {}; } })();
+            const senderName = reqObj.saleName || reqObj.phone || 'Sale Heineken';
+            const outletLabel = row.outlet_name || row.outlet_code || 'Outlet';
+            await sendKsPush({
+                title: 'QCAG — Yêu cầu mới từ Heineken',
+                body: `${senderName} vừa gửi yêu cầu mới cho Outlet ${outletLabel}.`,
+                data: { backendId: row.backend_id },
+                targetPhone: null,
+                targetSaleCode: null,
+                targetRole: 'qcag',
+            });
+        } catch (pushErr) {
+            console.warn('[push] new-request notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
+        }
+
         return res.status(201).json({ ok: true, data: ksRowToApp(row) });
     } catch (err) {
         console.error('POST /api/ks/requests error:', err && err.message ? err.message : err);
@@ -2645,11 +2665,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         // ── Fire push notification: khi QCAG hoàn thành MQ hoặc xác nhận chỉnh sửa ──
         try {
-            const becomingDone = b.status === 'done' && current.status !== 'done';
             // isPendingEdit: the request had an active edit request at time of PATCH
             const isPendingEdit = !!(current.editing_requested_at);
             // isNewMQ: first time a MQ is being confirmed (no prior designCreatedBy on DB row)
             const isNewMQ = !current.design_created_by;
+            // Send push when:
+            //   1. Status first becomes 'done' (new MQ completed), OR
+            //   2. Status stays/becomes 'done' while resolving a pending edit request
+            const becomingDone = b.status === 'done' && (current.status !== 'done' || isPendingEdit);
 
             if (becomingDone) {
                 // Lấy thông tin của Sale Heineken từ requester field

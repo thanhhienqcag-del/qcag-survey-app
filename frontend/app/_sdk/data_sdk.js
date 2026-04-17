@@ -10,6 +10,96 @@
   var _lastEtag = null;
   var _activeBase = null;
 
+  // SSE reconnect state
+  var _esRetryMs = 1000;
+  var _esRetryTimer = null;
+  var _esEverConnected = false;
+
+  function _clearEsRetry() {
+    try { if (_esRetryTimer) { clearTimeout(_esRetryTimer); _esRetryTimer = null; } } catch (e) {}
+  }
+
+  function _closeEs() {
+    try { if (_es) { _es.close(); } } catch (e) {}
+    _es = null;
+  }
+
+  function _openSse() {
+    _closeEs();
+    if (typeof EventSource === 'undefined') return;
+    var url = _buildUrl(_activeBase || '', '/events');
+    try {
+      _es = new EventSource(url);
+
+      _es.onopen = function () {
+        _esRetryMs = 1000; // reset backoff
+        _clearEsRetry();
+        if (_esEverConnected) {
+          // Reconnect after a gap — fetch fresh data to catch any missed events
+          window.dataSdk.refresh().catch(function (e) {
+            console.warn('[dataSdk] refresh after SSE reconnect failed', e);
+          });
+        }
+        _esEverConnected = true;
+      };
+
+      _es.addEventListener('invalidate', function (ev) {
+        try {
+          var payload = ev && ev.data ? JSON.parse(ev.data) : null;
+          if (!payload) return;
+          if (String(payload.resource || '').toLowerCase() === 'ks_requests') {
+            _esRetryMs = 1000; // successful message → reset backoff
+            window.dataSdk.refresh().catch(function (e) {
+              console.error('[dataSdk] refresh after invalidate failed', e);
+            });
+          }
+        } catch (e) {}
+      });
+
+      _es.onerror = function () {
+        _closeEs();
+        _clearEsRetry();
+        var ms = _esRetryMs;
+        _esRetryMs = Math.min(30000, Math.floor(_esRetryMs * 1.7));
+        _esRetryTimer = setTimeout(function () {
+          _esRetryTimer = null;
+          _openSse();
+        }, ms);
+      };
+
+      try {
+        window.addEventListener && window.addEventListener('beforeunload', function () {
+          _closeEs();
+          _clearEsRetry();
+        });
+      } catch (_) {}
+
+      // Refresh data when tab becomes visible again (mobile background → foreground)
+      try {
+        if (!window.__dataSdkVisibilityBound) {
+          window.__dataSdkVisibilityBound = true;
+          document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') {
+              // Re-open SSE if it died while in background
+              if (!_es || _es.readyState === 2 /* CLOSED */) {
+                _openSse();
+              }
+              // Always fetch fresh data on tab focus to catch any missed events
+              window.dataSdk.refresh().catch(function () {});
+            }
+          });
+        }
+      } catch (_) {}
+    } catch (e) {
+      // Schedule a reconnect if EventSource constructor threw
+      _clearEsRetry();
+      _esRetryTimer = setTimeout(function () {
+        _esRetryTimer = null;
+        _openSse();
+      }, _esRetryMs);
+    }
+  }
+
   function _normalizeBase(url) {
     return String(url || '').trim().replace(/\/+$/, '');
   }
@@ -213,28 +303,8 @@
         _store = await _fetchStore();
         if (_onDataChanged) _onDataChanged(_cloneStoreRows());
 
-        // Setup SSE listener for realtime invalidation events.
-        try {
-          if (!_es && typeof EventSource !== 'undefined') {
-            _es = new EventSource(_buildUrl(_activeBase || '', '/events'));
-            _es.addEventListener('invalidate', function (ev) {
-              try {
-                var payload = ev && ev.data ? JSON.parse(ev.data) : null;
-                if (!payload) return;
-                if (String(payload.resource || '').toLowerCase() === 'ks_requests') {
-                  window.dataSdk.refresh().catch(function (e) {
-                    console.error('[dataSdk] refresh after invalidate failed', e);
-                  });
-                }
-              } catch (e) {}
-            });
-            try {
-              window.addEventListener && window.addEventListener('beforeunload', function () {
-                try { _es && _es.close(); } catch (_) {}
-              });
-            } catch (_) {}
-          }
-        } catch (e) {}
+        // Setup SSE listener for realtime invalidation events (with reconnect).
+        try { _openSse(); } catch (e) {}
 
         return { isOk: true };
       } catch (e) {

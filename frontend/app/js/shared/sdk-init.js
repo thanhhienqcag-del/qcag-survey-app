@@ -90,6 +90,11 @@ async function initApp() {
                   if (typeof qcagDesktopGetFullRequest === 'function' && typeof _qcagDesktopInPlaceRefresh === 'function') {
                     qcagDesktopGetFullRequest(updated.__backendId).then(full => {
                       if (full) {
+                        // Don't downgrade status: if a confirm-complete PATCH arrived after
+                        // this fetch was issued (upload-SSE race), skip the stale update.
+                        const statRank = s => (s === 'done' || s === 'processed') ? 2 : s === 'processing' ? 1 : 0;
+                        const currS = String((currentDetailRequest && currentDetailRequest.__backendId === full.__backendId ? currentDetailRequest.status : '') || '').toLowerCase();
+                        if (statRank(currS) > statRank(String(full.status || '').toLowerCase())) return;
                         currentDetailRequest = full;
                         if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(full);
                         _qcagDesktopInPlaceRefresh(full);
@@ -113,6 +118,25 @@ async function initApp() {
         const notifyEl = document.getElementById('notificationsScreen');
         if (notifyEl && notifyEl.classList.contains('flex') && typeof renderNotifications === 'function') {
           renderNotifications();
+        }
+        // Update Heineken mobile detail view if it's open and data changed
+        if (!(typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop())) {
+          try {
+            const detailEl = document.getElementById('detailScreen');
+            if (detailEl && detailEl.classList.contains('flex') &&
+                typeof currentDetailRequest !== 'undefined' && currentDetailRequest && currentDetailRequest.__backendId) {
+              const detailUpdated = (allRequests || []).find(r => r.__backendId === currentDetailRequest.__backendId);
+              if (detailUpdated) {
+                const oldTs = currentDetailRequest.updatedAt ? new Date(currentDetailRequest.updatedAt).getTime() : 0;
+                const newTs = detailUpdated.updatedAt ? new Date(detailUpdated.updatedAt).getTime() : 0;
+                if (newTs !== oldTs && typeof showRequestDetail === 'function') {
+                  showRequestDetail(detailUpdated.__backendId);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('mobile detail in-place refresh failed', e);
+          }
         }
       }
     });
