@@ -96,18 +96,9 @@ async function addDesignComment(backendId) {
   const comment = { authorRole, authorName, text, images: uploadedImgs, createdAt: new Date().toISOString() };
   comments.push(comment);
 
-  // Heineken comment on a request that has MQ → clear design images (request edit)
-  let extraFields = {};
-  if (authorRole === 'heineken') {
-    let existingDesignImgs = [];
-    try { existingDesignImgs = JSON.parse(request.designImages || '[]'); } catch (e) {}
-    if (existingDesignImgs.length > 0 && !request.editingRequestedAt) {
-      extraFields.designImages = '[]';
-      extraFields.editingRequestedAt = new Date().toISOString();
-    }
-  }
-
-  const updated = { ...request, comments: JSON.stringify(comments), ...extraFields };
+  // NOTE: Generic comments do NOT auto-clear design images.
+  // Only the dedicated "Yêu cầu chỉnh sửa" flow (submitEditRequest) clears MQ images.
+  const updated = { ...request, comments: JSON.stringify(comments) };
 
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
@@ -168,20 +159,9 @@ async function addDetailComment(backendId) {
   const comment = { authorRole, authorName, text, images: uploadedImgs, createdAt: new Date().toISOString() };
   comments.push(comment);
 
-  // Heineken comment on a request that has MQ → clear design images (request edit)
-  // Only clear images the first time Sale requests an edit; do not auto-delete
-  // images repeatedly on subsequent edit requests.
-  let extraFields = {};
-  if (authorRole === 'heineken') {
-    let existingDesignImgs = [];
-    try { existingDesignImgs = JSON.parse(request.designImages || '[]'); } catch (e) {}
-    if (existingDesignImgs.length > 0 && !request.editingRequestedAt) {
-      extraFields.designImages = '[]';
-      extraFields.editingRequestedAt = new Date().toISOString();
-    }
-  }
-
-  const updated = { ...request, comments: JSON.stringify(comments), ...extraFields };
+  // NOTE: Generic comments do NOT auto-clear design images.
+  // Only the dedicated "Yêu cầu chỉnh sửa" flow (submitEditRequest) clears MQ images.
+  const updated = { ...request, comments: JSON.stringify(comments) };
 
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);

@@ -1065,10 +1065,6 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
   if (candidates.length === 0) return;
 
   for (const req of candidates) {
-    // Only clear design images if there were any at time of the request.
-    const designImgs = qcagDesktopParseJson(req.designImages, []);
-    const shouldClearMq = Array.isArray(designImgs) && designImgs.length > 0;
-
     const updated = {
       ...req,
       editingRequestedAt: req.editingRequestedAt || new Date().toISOString(),
@@ -1076,9 +1072,8 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
       updatedAt: new Date().toISOString()
     };
 
-    if (shouldClearMq) {
-      updated.designImages = '[]';
-    }
+    // NOTE: Do NOT clear designImages here. QCAG will upload new MQ images
+    // when they complete the edit. Keeping old images allows reference.
 
     if (window.dataSdk) {
       const result = await window.dataSdk.update(updated);
