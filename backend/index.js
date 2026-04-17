@@ -840,15 +840,18 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null, targetSa
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
     try {
         let rows;
-        if (targetSaleCode) {
+        // TARGETING STRATEGY (priority: phone > saleCode > role > broadcast)
+        // Phone-based lookup is more reliable because QCAG staff confirmed it works.
+        if (targetPhone) {
+            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
+            // Fallback to sale_code if phone lookup returns nothing
+            if ((!rows || rows.length === 0) && targetSaleCode) {
+                const sc = String(targetSaleCode).trim();
+                [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE sale_code = ?', [sc]);
+            }
+        } else if (targetSaleCode) {
             const sc = String(targetSaleCode).trim();
             [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE sale_code = ?', [sc]);
-            // Fallback to phone if sale_code lookup returns nothing
-            if ((!rows || rows.length === 0) && targetPhone) {
-                [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
-            }
-        } else if (targetPhone) {
-            [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE phone = ?', [targetPhone]);
         } else if (targetRole) {
             [rows] = await pool.query('SELECT id, subscription FROM push_subscriptions WHERE role = ?', [String(targetRole)]);
         } else {
@@ -2495,7 +2498,7 @@ app.post('/api/ks/requests', async (req, res) => {
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
         // Second invalidate: push final row (with uploaded image URLs) to all clients
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'update', id: row.backend_id, data: ksRowToApp(row) });
 
         return res.status(201).json({ ok: true, data: ksRowToApp(row) });
     } catch (err) {
@@ -2680,9 +2683,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
-        wsInvalidate('ks_requests');
+        // Include full data in SSE payload for instant client-side patching
+        wsInvalidate('ks_requests', { action: 'update', id: updated.backend_id, data: ksRowToApp(updated) });
 
-        // ── Fire push notification: khi QCAG hoàn thành MQ hoặc xác nhận chỉnh sửa ──
+        // ── Fire push notification ──
+        // Covers: QCAG hoàn thành MQ, QCAG chỉnh sửa xong, Sale yêu cầu chỉnh sửa, bảo hành
         try {
             // isPendingEdit: the request had an active edit request at time of PATCH
             const isPendingEdit = !!(current.editing_requested_at);
@@ -2734,6 +2739,25 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     targetPhone: requesterPhone,
                     targetSaleCode: requesterSaleCode,
                 });
+            }
+
+            // ── Push for editing request: Sale Heineken yêu cầu chỉnh sửa → notify QCAG ──
+            const editingJustRequested = !!b.editingRequestedAt && !current.editing_requested_at;
+            if (editingJustRequested) {
+                let requesterName = 'Sale Heineken';
+                try {
+                    const reqObj2 = JSON.parse(updated.requester || '{}') || {};
+                    requesterName = reqObj2.saleName || reqObj2.phone || 'Sale Heineken';
+                } catch (_) {}
+                const outletLabel2 = updated.outlet_name || updated.outlet_code || 'Outlet';
+                sendKsPush({
+                    title: 'QCAG — Yêu cầu chỉnh sửa MQ',
+                    body: `${requesterName} yêu cầu chỉnh sửa MQ cho Outlet ${outletLabel2}.`,
+                    data: { backendId: updated.backend_id },
+                    targetPhone: null,
+                    targetSaleCode: null,
+                    targetRole: 'qcag',
+                }).catch(e => console.warn('[push] editing-request notify error (non-fatal):', e && e.message ? e.message : e));
             }
         } catch (pushErr) {
             console.warn('[push] notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
@@ -2849,7 +2873,7 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
             [newOutletCode, newMqFolder, newDesignImages, rowId]
         );
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'update', id: updated.backend_id, data: ksRowToApp(updated) });
         return res.json({ ok: true, data: ksRowToApp(updated), renamedFiles: Object.keys(remap).length });
     } catch (err) {
         console.error('/api/ks/requests/:id/rename-mq-folder error:', err && err.message ? err.message : err);

@@ -49,6 +49,51 @@
           if (!payload) return;
           if (String(payload.resource || '').toLowerCase() === 'ks_requests') {
             _esRetryMs = 1000; // successful message → reset backoff
+
+            // ── Inline cache patch: instant UI update without HTTP round-trip ──
+            // If the SSE payload contains `data`, patch the local store immediately
+            // (like App-1 pattern).  A background refresh still fires to ensure
+            // consistency, but the UI updates in <100ms instead of waiting for
+            // the HTTP fetch to return.
+            var patched = false;
+            if (payload.data && payload.data.__backendId) {
+              var row = payload.data;
+              var bid = row.__backendId;
+              if (payload.action === 'create') {
+                // New row: add if not already present
+                var exists = false;
+                for (var pi = 0; pi < _store.length; pi++) {
+                  if (_store[pi].__backendId === bid) { exists = true; _store[pi] = row; break; }
+                }
+                if (!exists) _store.push(row);
+                patched = true;
+              } else if (payload.action === 'update' || payload.action === 'upsert') {
+                for (var ui = 0; ui < _store.length; ui++) {
+                  if (_store[ui].__backendId === bid) {
+                    // Merge fields (keep existing fields, overwrite changed ones)
+                    for (var key in row) { _store[ui][key] = row[key]; }
+                    patched = true;
+                    break;
+                  }
+                }
+              } else if (payload.action === 'delete') {
+                for (var di = 0; di < _store.length; di++) {
+                  if (_store[di].__backendId === bid) { _store.splice(di, 1); patched = true; break; }
+                }
+              }
+              if (patched && _onDataChanged) {
+                _onDataChanged(_cloneStoreRows());
+              }
+            }
+
+            // Fire global invalidation hook (for desktop banner notifications)
+            if (typeof window.__ksOnInvalidate === 'function') {
+              try { window.__ksOnInvalidate(payload); } catch (hookErr) {
+                console.warn('[dataSdk] __ksOnInvalidate hook error:', hookErr);
+              }
+            }
+
+            // Background refresh to ensure full consistency (debounced)
             window.dataSdk.refresh().catch(function (e) {
               console.error('[dataSdk] refresh after invalidate failed', e);
             });
