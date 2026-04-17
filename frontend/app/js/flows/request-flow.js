@@ -524,6 +524,8 @@ function validateTab2() {
 // ── Submit ────────────────────────────────────────────────────────────
 
 async function submitNewRequest() {
+  // Guard: prevent concurrent/double submissions (e.g. impatient double-tap)
+  if (_isNewRequestSubmitting) return;
   clearNewRequestFieldErrors();
   const content = document.getElementById('signContent').value.trim();
   let hasError = false;
@@ -552,14 +554,47 @@ async function submitNewRequest() {
   if (allRequests.length >= 999) { showToast('Đã đạt giới hạn 999 yêu cầu'); return; }
 
   const btn = document.getElementById('submitNewBtn');
+  _isNewRequestSubmitting = true;
   btn.disabled = true;
-  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang xử lý...';
+  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang nén ảnh...';
 
   // Pre-generate __backendId so GCS folder name is consistent between create and patch
   const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
 
-  // Capture File objects now (before form reset) for background upload
-  const _capturedStatus = _statusImageFiles.slice();
+  // ── CRITICAL FIX: compress and include images SYNCHRONOUSLY in POST ──
+  // Previously images were uploaded in a fire-and-forget background PATCH,
+  // which caused permanent image loss when network dropped, tab closed, or
+  // retries exhausted.  Now we compress → base64 → include in POST body so
+  // the backend uploads to GCS atomically with the INSERT.
+  let _compressedStatusDataUrls = [];
+  try {
+    _compressedStatusDataUrls = await _compressImageFiles(_statusImageFiles, 1600, 0.82);
+  } catch (compressErr) {
+    console.warn('[submit] image compression error — falling back to raw read:', compressErr);
+    // Fallback: read raw base64 (larger but still works)
+    for (const file of _statusImageFiles) {
+      try {
+        const raw = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = (e) => resolve(e.target.result);
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+        if (raw) _compressedStatusDataUrls.push(raw);
+      } catch (e) { console.warn('[submit] raw read failed:', e); }
+    }
+  }
+
+  // Safety: if compression lost all images but user had selected some, abort
+  if (_statusImageFiles.length > 0 && _compressedStatusDataUrls.length === 0) {
+    showToast('Lỗi xử lý ảnh — vui lòng thử lại');
+    btn.disabled = false;
+    btn.textContent = 'Xác nhận yêu cầu';
+    _isNewRequestSubmitting = false;
+    return;
+  }
+
+  btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang gửi yêu cầu...';
 
   const request = {
     type: 'new',
@@ -573,7 +608,7 @@ async function submitNewRequest() {
     content: isOldContent ? '' : content,
     oldContent: isOldContent,
     oldContentExtra: isOldContent ? (document.getElementById('oldContentExtra')||{value:''}).value.trim() : '',
-    statusImages: '[]',        // uploaded in background after modal shown — see _bgUploadAndPatch
+    statusImages: JSON.stringify(_compressedStatusDataUrls),  // ← Images included directly
     designImages: '[]',
     acceptanceImages: '[]',
     createdAt: new Date().toISOString(),
@@ -582,9 +617,9 @@ async function submitNewRequest() {
     __backendId: __preBackendId,
   };
 
-  // NOTE: Images are NOT sent in the create payload — they are uploaded in
-  // background AFTER the request is created and modal is shown to the user.
-  // This reduces perceived wait time from ~5-12s → <1s.
+  // NOTE: Images are now included directly in the POST body (compressed base64).
+  // The backend uploads them to GCS atomically during request creation.
+  // No more background PATCH needed — images are guaranteed to be saved.
 
   // If user previously confirmed "Hạng mục mới" for this outlet, ensure items are not identical to the latest existing request
   try {
@@ -595,6 +630,7 @@ async function submitNewRequest() {
         showDuplicateItemsModal();
         btn.disabled = false;
         btn.textContent = 'Xác nhận yêu cầu';
+        _isNewRequestSubmitting = false;
         return;
       }
     }
@@ -615,34 +651,33 @@ async function submitNewRequest() {
       // store last created id for quick view
       try { lastCreatedRequestId = result.data && result.data.__backendId ? result.data.__backendId : (request.__backendId || null); } catch (e) {}
       try { blurActiveInput(); } catch (e) {}
+
+      // Verify images were saved: the POST response should contain GCS URLs.
+      // If the backend somehow returned without uploading (e.g. KS_GCS_BUCKET
+      // not set), log a warning.  No background PATCH needed — the backend
+      // POST handler uploads base64 → GCS atomically in ksAutoUploadImages().
+      try {
+        const savedImgs = (result.data && result.data.statusImages) || '[]';
+        const parsed = JSON.parse(savedImgs);
+        if (_compressedStatusDataUrls.length > 0 && (!Array.isArray(parsed) || parsed.length === 0)) {
+          console.warn('[submit] WARNING: images were sent but server returned empty statusImages — check KS_GCS_BUCKET config');
+        } else {
+          console.log('[submit] images confirmed saved:', parsed.length, 'image(s)');
+        }
+      } catch (verifyErr) { console.warn('[submit] image verify parse error:', verifyErr); }
+
+      // Reset form immediately so that if the user dismisses the modal via the
+      // OS back gesture (instead of the official modal buttons) they land on a
+      // clean, empty form — preventing accidental duplicate submissions.
+      resetNewRequestForm();
+
       document.getElementById('confirmModal').classList.remove('hidden');
 
-      // Background: upload status images then PATCH (user sees modal immediately)
-      // Use TK code (e.g. TK26.00001) as GCS folder name so it matches server-side paths;
-      // fall back to __preBackendId if tkCode is not available.
-      if (window.dataSdk && window.dataSdk.uploadImage && _capturedStatus.length > 0) {
-        const _tkCode = (result.data && result.data.tkCode) || __preBackendId;
-        _bgUploadAndPatch(__preBackendId, _tkCode, _capturedStatus);
-      }
-
-      // Fire push notification to QCAG team (best-effort, never blocks UI)
-      try {
-        const outletLabel = request.outletName || request.outletCode || 'Outlet';
-        const tkCode = (result.data && result.data.__backendId) || request.__backendId || '';
-        const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
-        fetch('/api/ks/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: 'QCAG — Yêu cầu mới từ Heineken',
-            body: senderName + ' vừa gửi yêu cầu mới cho Outlet ' + outletLabel + '.',
-            data: { backendId: tkCode },
-            role: 'qcag',
-          }),
-        }).catch(function (e) { console.warn('[push/new-req]', e); });
-      } catch (e) {
-        console.warn('[push] new request notify error (non-fatal):', e);
-      }
+      // Release the guard — form is now clean, future submissions are safe.
+      _isNewRequestSubmitting = false;
+      // NOTE: We intentionally do NOT re-enable the submit button here.
+      // resetNewRequestForm() resets it; the modal is the only visible UI now.
+      return;
     } else {
       showToast('Lỗi tạo yêu cầu');
     }
@@ -653,20 +688,23 @@ async function submitNewRequest() {
     updateRequestCount();
     lastCreatedRequestId = request.__backendId;
     try { blurActiveInput(); } catch (e) {}
+    resetNewRequestForm();
     document.getElementById('confirmModal').classList.remove('hidden');
+    _isNewRequestSubmitting = false;
+    return;
   }
 
+  // Reached only on failure — re-enable the button so user can retry.
   btn.disabled = false;
   btn.textContent = 'Xác nhận yêu cầu';
+  _isNewRequestSubmitting = false;
 }
 
-// ── Background image upload (runs AFTER modal shown — never blocks UI) ─────────
-// FIX: Instead of multiple /api/ks/upload round-trips (which caused a race where
-// GCS received the files but the client never got the URLs back, leaving
-// status_images empty in Neon), we now read all files as base64 client-side and
-// send them directly in a single PATCH body.
-// The backend PATCH handler already calls ksAutoUploadImages() which atomically
-// uploads base64 → GCS and writes the resulting URLs to Neon.
+// ── Background image upload — DEPRECATED ────────────────────────────────────
+// No longer used for new requests.  Images are now included synchronously in
+// the POST body (compressed base64) so they are uploaded atomically with
+// request creation.  This function is kept only for backward compatibility
+// with warranty-flow or potential future use.
 async function _bgUploadAndPatch(backendId, tkCode, statusFiles) {
   if (!window.dataSdk) return;
   try {
@@ -789,6 +827,11 @@ function resetNewRequestForm() {
     if (lockIcon) lockIcon.style.display = 'none';
   } catch (e) {}
   try { localStorage.removeItem(OUTLET_DRAFT_KEY); } catch (e) {}
+  // Always re-enable the submit button so a fresh form is ready for input.
+  try {
+    const sb = document.getElementById('submitNewBtn');
+    if (sb) { sb.disabled = false; sb.textContent = 'Xác nhận yêu cầu'; }
+  } catch (e) {}
   switchTab(1);
 }
 

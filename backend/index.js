@@ -2478,8 +2478,9 @@ app.post('/api/ks/requests', async (req, res) => {
             console.warn('[ks/create] early notify error (non-fatal):', earlyNotifyErr && earlyNotifyErr.message ? earlyNotifyErr.message : earlyNotifyErr);
         }
 
-        // Step 4: Upload any base64 images to GCS in PARALLEL (fastest path).
-        // When frontend sends '[]' (new default), these resolve instantly.
+        // Step 4: Upload any base64 images to GCS in PARALLEL.
+        // Frontend now sends compressed base64 images directly in the POST body
+        // so they are uploaded atomically with request creation (no background PATCH).
         const [statusImgsJson, designImgsJson, acceptanceImgsJson] = await Promise.all([
             ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang'),
             ksAutoUploadImages(normalizeBodyValue(b.designImages)     || '[]', tkCode, 'mq'),
@@ -2507,6 +2508,8 @@ app.post('/api/ks/requests', async (req, res) => {
 // Input:  JSON string like '["data:image/jpeg;base64,...","https://..."]'
 // Output: Same array with base64 replaced by GCS public URLs.
 // Folder structure: ks-surveys/{mqFolder}/{subfolder}/{ts}_{rand}.{ext}
+// Each image is retried up to 3 times on transient GCS errors to guarantee
+// no silent image loss.
 async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
     const ksBucket = process.env.KS_GCS_BUCKET;
     if (!ksBucket) {
@@ -2532,13 +2535,23 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
         else if (mimetype === 'image/gif')  ext = 'gif';
         const rand     = crypto.randomBytes(6).toString('hex');
         const filename = `ks-surveys/${safeMq}/${safeSub}/${Date.now()}_${rand}.${ext}`;
-        try {
-            await bucket.file(filename).save(buffer, { contentType: mimetype });
-            return `https://storage.googleapis.com/${ksBucket}/${filename}`;
-        } catch (uploadErr) {
-            console.warn('[ksAutoUpload] GCS upload failed, dropping image:', uploadErr && uploadErr.message ? uploadErr.message : uploadErr);
-            return null;
+        // Retry up to 3 times on transient GCS errors
+        const GCS_RETRIES = 3;
+        for (let attempt = 1; attempt <= GCS_RETRIES; attempt++) {
+            try {
+                await bucket.file(filename).save(buffer, { contentType: mimetype });
+                return `https://storage.googleapis.com/${ksBucket}/${filename}`;
+            } catch (uploadErr) {
+                console.warn(`[ksAutoUpload] GCS upload attempt ${attempt}/${GCS_RETRIES} failed:`, uploadErr && uploadErr.message ? uploadErr.message : uploadErr);
+                if (attempt < GCS_RETRIES) {
+                    await new Promise(r => setTimeout(r, 500 * attempt));
+                }
+            }
         }
+        // All retries failed — keep base64 in DB as last resort so data is not lost.
+        // The image can be re-uploaded manually or via a cleanup job later.
+        console.error('[ksAutoUpload] All GCS retries failed for image — preserving base64 in DB');
+        return item;
     }));
     return JSON.stringify(uploaded.filter(x => x !== null));
 }

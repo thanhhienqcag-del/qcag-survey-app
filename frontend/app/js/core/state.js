@@ -17,6 +17,9 @@ let lastCreatedRequestId = null;
 // sequence counter for request items (used to keep logical numbering)
 let nextRequestItemSeq = 1;
 
+// ── Submit guards ─────────────────────────────────────────────────────
+let _isNewRequestSubmitting = false; // prevents double-submit in submitNewRequest()
+
 // ── Form images ───────────────────────────────────────────────────────
 let isOldContent = false;
 let oldContentImages = [];
