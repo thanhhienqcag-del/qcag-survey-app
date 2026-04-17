@@ -2909,58 +2909,11 @@ async function qcagDesktopMarkProcessed() {
     return;
   }
 
-  // Push notification to Sale Heineken — sent from QCAG desktop directly via
-  // /api/ks/push/send (Vercel function). This ensures the same VAPID keys are
-  // used as when the subscription was created, avoiding backend key-mismatch issues.
-  try {
-      let requesterPhone = null;
-      let requesterSaleCode = null;
-      try {
-        const reqObj = typeof updated.requester === 'string' ? JSON.parse(updated.requester) : (updated.requester || {});
-        requesterPhone    = reqObj.phone    || null;
-        requesterSaleCode = reqObj.saleCode || null;
-      } catch (_) {}
-
-      if (requesterPhone || requesterSaleCode) {
-        const outletLabel = updated.outletName || updated.outletCode || 'Outlet';
-        const pushTitle = isPendingEdit
-          ? 'QCAG — Đã hoàn thành chỉnh sửa'
-          : 'QCAG — Đã có mẫu quảng cáo (MQ)';
-        const pushBody = isPendingEdit
-          ? `Yêu cầu Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
-          : `Yêu cầu Outlet ${outletLabel} đã được QCAG duyệt MQ. Vui lòng mở app để xem.`;
-
-        const target = requesterSaleCode || (requesterPhone ? requesterPhone.slice(-4) : '?');
-        fetch('/api/ks/push/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: pushTitle,
-            body:  pushBody,
-            saleCode: requesterSaleCode,
-            phone:    requesterPhone,
-            data: { backendId: updated.__backendId }
-          })
-        }).then(function(r) {
-          return r.ok ? r.json() : Promise.reject(r.status);
-        }).then(function(result) {
-          if (result && result.sent > 0) {
-            showToast('✓ Đã hoàn thành — đã gửi thông báo đến Sale [' + target + ']', 4000);
-          } else {
-            showToast('✓ Đã hoàn thành — Sale [' + target + '] chưa bật thông báo trên thiết bị', 5000);
-            console.warn('[push] no active subscription for', target, result);
-          }
-        }).catch(function(e) {
-          console.warn('[push] notify heineken error:', e);
-          showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 4000);
-        });
-      } else {
-        showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
-      }
-  } catch (e) {
-    // non-fatal — persist already succeeded
-    showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
-  }
+  // Push notification to Sale Heineken — backend sends push automatically via
+  // PATCH handler (becomingDone check). We do NOT send from here to avoid duplicate
+  // notifications (Sale would receive 2 pushes for the same event).
+  // Frontend just shows the result toast based on the persist outcome.
+  showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
 
   } finally {
     _qcagMarkProcessedInFlight = false;
