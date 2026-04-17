@@ -116,7 +116,8 @@ async function qcagDesktopTogglePush() {
 
 function qcagDesktopNormalizeImageUrl(url) {
   const v = String(url || '').trim();
-  if (!v) return '';
+  // Filter out empty strings and the list-endpoint placeholder sentinel '...'
+  if (!v || v === '...') return '';
   // `storage.cloud.google.com` often serves HTML/login flow, which breaks <img>.
   // Convert to direct object URL format for browser image rendering.
   return v.replace(
@@ -2365,13 +2366,20 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
     return;
   }
 
-  let request = await qcagDesktopGetFullRequest(id);
+  // ── Two-phase render ────────────────────────────────────────────────
+  // Phase 1: render immediately using list data or in-memory cache (no network wait).
+  //   The list endpoint returns image arrays as ['...'] placeholder to save bandwidth.
+  //   qcagDesktopNormalizeImageUrl already filters '...' → images show as empty until loaded.
+  // Phase 2: if not yet fully cached, fetch full request in background and refresh image
+  //   sections in-place so the user sees real images appear without a full re-render.
+  const _cachedFull = _qcagDesktopFullRequestCache[id];
+  let request = _cachedFull || allRequests.find(r => r.__backendId === id);
   if (!request) return;
 
-  // Warm assets in background, do not block UI updates while switching tabs.
-  qcagDesktopWarmRequestAssets(request).catch(() => {});
+  const _needsFullFetch = !_cachedFull;
 
-  request = _qcagDesktopFullRequestCache[id] || request;
+  // Warm already-known assets in background (no-op if nothing cached yet).
+  if (!_needsFullFetch) qcagDesktopWarmRequestAssets(request).catch(() => {});
 
   const isSameReq = _qcagDesktopCurrentId === id;
   _qcagDesktopCurrentId = id;
@@ -2676,6 +2684,35 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   }
 
   qcagDesktopSyncReadStatus(request);
+
+  // ── Phase 2: background full-request fetch (only when not yet cached) ──
+  // Fetches real image URLs to replace ['...'] placeholders, then refreshes
+  // status-image and MQ-image sections in-place — no flicker, no scroll jump.
+  if (_needsFullFetch) {
+    qcagDesktopGetFullRequest(id).then(full => {
+      if (!full || _qcagDesktopCurrentId !== id) return;
+      currentDetailRequest = full;
+      // Refresh hiện trạng (status) images section
+      const statusThumbEl = document.getElementById('qcagStatusThumbGrid');
+      if (statusThumbEl) {
+        const newSImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(full.statusImages, []));
+        if (newSImgs.length === 0) {
+          statusThumbEl.innerHTML = '<span class="qcag-detail-muted">Đang trống</span>';
+        } else {
+          const enc = encodeURIComponent(JSON.stringify(newSImgs));
+          const first = newSImgs[0];
+          if (newSImgs.length === 1) {
+            statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng"></div>`;
+          } else {
+            statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng"><div class="qcag-img-more">+${newSImgs.length - 1}</div></div>`;
+          }
+        }
+      }
+      // Refresh MQ / design / acceptance images + complete button state
+      qcagDesktopRefreshMQInPlace(full);
+      qcagDesktopWarmRequestAssets(full).catch(() => {});
+    }).catch(() => {});
+  }
 
   // Background refresh: fetch full data for old design entries so real image URLs replace
   // the '["..."]' placeholder that the list endpoint uses for bandwidth efficiency.
