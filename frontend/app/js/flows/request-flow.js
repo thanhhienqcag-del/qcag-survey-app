@@ -676,7 +676,10 @@ async function submitNewRequest() {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
         const tkCode = (result.data && result.data.__backendId) || request.__backendId || '';
         const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
-        fetch('/api/ks/push/send', {
+        var pushUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+          ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
+          : '/api/ks/push/send';
+        fetch(pushUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

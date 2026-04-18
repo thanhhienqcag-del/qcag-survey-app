@@ -2980,7 +2980,12 @@ async function qcagDesktopMarkProcessed() {
     const pushBody = isPendingEdit
       ? `Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
       : `Outlet ${outletLabel} đã được duyệt MQ. Vui lòng mở app để xem.`;
-    fetch('/api/ks/push/send', {
+    // Use absolute Vercel URL so push works even when QCAG desktop is accessed
+    // from localhost (relative URL would go to http://127.0.0.1/api/... which doesn't exist)
+    var pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
+      : '/api/ks/push/send';
+    fetch(pushEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
