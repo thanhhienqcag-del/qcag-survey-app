@@ -2934,29 +2934,66 @@ async function qcagDesktopMarkProcessed() {
     extraFields.editRevisionCount = (currentDetailRequest.editRevisionCount || 0) + 1;
   }
 
-  const updated = {
-    ...currentDetailRequest,
+  // Build PATCH payload with ONLY changed fields — avoid sending large image data
+  const patchPayload = {
+    __backendId: currentDetailRequest.__backendId,
     status: 'done',
     processedAt: now,
     updatedAt: now,
-    // Clear any pending edit request when QCAG marks done again after revision
     editingRequestedAt: null,
     comments: JSON.stringify(comments),
     ...extraFields
   };
-  // Pass empty successMsg — a single definitive toast is shown after push result below
-  const persistOk = await qcagDesktopPersistRequest(updated, '');
-  if (!persistOk) {
-    // Re-enable button so QCAG can retry
-    qcagDesktopRefreshMQInPlace(currentDetailRequest);
-    return;
-  }
+  // Local state gets full merge for UI
+  const updated = { ...currentDetailRequest, ...patchPayload };
 
-  // Push notification to Sale Heineken — backend sends push automatically via
-  // PATCH handler (becomingDone check). We do NOT send from here to avoid duplicate
-  // notifications (Sale would receive 2 pushes for the same event).
-  // Frontend just shows the result toast based on the persist outcome.
+  // Persist: send only the slim PATCH payload to backend
+  if (window.dataSdk) {
+    const result = await window.dataSdk.update(patchPayload);
+    if (!result.isOk) {
+      showToast('Không thể cập nhật request');
+      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+      return;
+    }
+  }
+  // Update local state
+  const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
+  if (idxAll !== -1) allRequests[idxAll] = updated;
+  currentDetailRequest = updated;
+  qcagDesktopCacheRequest(updated);
+  _qcagRequestsVersion += 1;
+  _qcagRequestCodeCache.version = 0;
+  qcagDesktopRefreshMQInPlace(updated);
+
   showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
+
+  // Push notification to Sale Heineken via Vercel function (same VAPID key as subscription)
+  // Fire-and-forget so UI is not blocked
+  try {
+    const reqObj = (() => { try { return JSON.parse(currentDetailRequest.requester || '{}'); } catch (_) { return {}; } })();
+    const requesterPhone = reqObj.phone || null;
+    const requesterSaleCode = reqObj.saleCode || null;
+    const outletLabel = currentDetailRequest.outletName || currentDetailRequest.outletCode || 'Outlet';
+    const pushTitle = isPendingEdit
+      ? 'QCAG — Đã hoàn thành chỉnh sửa'
+      : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+    const pushBody = isPendingEdit
+      ? `Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
+      : `Outlet ${outletLabel} đã được duyệt MQ. Vui lòng mở app để xem.`;
+    fetch('/api/ks/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: pushTitle,
+        body: pushBody,
+        data: { backendId: currentDetailRequest.__backendId },
+        phone: requesterPhone,
+        saleCode: requesterSaleCode,
+      })
+    }).catch(function (e) { console.warn('[push] confirm-done push error (non-fatal):', e); });
+  } catch (pushErr) {
+    console.warn('[push] confirm-done push error (non-fatal):', pushErr);
+  }
 
   } finally {
     _qcagMarkProcessedInFlight = false;
