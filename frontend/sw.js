@@ -2,7 +2,7 @@
 // Must be served at / for full PWA standalone push support on iOS 16.4+
 'use strict';
 
-const CACHE_NAME = 'qcag-v2.4.4';
+const CACHE_NAME = 'qcag-v2.4.5';
 
 // ── Install: immediately activate ──────────────────────────────────────────────
 self.addEventListener('install', function (event) {

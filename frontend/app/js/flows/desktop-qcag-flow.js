@@ -1885,13 +1885,13 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
   }
 
   // Update the complete button state
+  const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(updatedRequest);
   const completeBtn = document.querySelector('.qcag-complete-btn');
   if (completeBtn) {
     const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
     const reqStatus = String(updatedRequest.status || '').toLowerCase();
     const isDone = (reqStatus === 'done' || reqStatus === 'processed') && !isPendingEdit;
 
-    const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(updatedRequest);
     const disabledTitleBySurvey = isSurveySizeIncomplete ? 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành' : '';
 
     if (isDone) {
@@ -2976,15 +2976,16 @@ async function qcagDesktopMarkProcessed() {
     const outletLabel = currentDetailRequest.outletName || currentDetailRequest.outletCode || 'Outlet';
     const pushTitle = isPendingEdit
       ? 'QCAG — Đã hoàn thành chỉnh sửa'
-      : 'QCAG — Đã có mẫu quảng cáo (MQ)';
+      : 'QCAG uploaded to MQ';
     const pushBody = isPendingEdit
-      ? `Outlet ${outletLabel} đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
-      : `Outlet ${outletLabel} đã được duyệt MQ. Vui lòng mở app để xem.`;
+      ? `Outlet "${outletLabel}" đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
+      : `Outlet "${outletLabel}" đã có MQ, vui lòng mở app để xem chi tiết`;
     // Use absolute Vercel URL so push works even when QCAG desktop is accessed
     // from localhost (relative URL would go to http://127.0.0.1/api/... which doesn't exist)
     var pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
       ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
       : '/api/ks/push/send';
+    showToast('⏳ Gửi push → ' + (requesterSaleCode || requesterPhone || 'N/A'), 2000);
     fetch(pushEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2995,7 +2996,12 @@ async function qcagDesktopMarkProcessed() {
         phone: requesterPhone,
         saleCode: requesterSaleCode,
       })
-    }).catch(function (e) { console.warn('[push] confirm-done push error (non-fatal):', e); });
+    }).then(function(r) {
+      return r.json().then(function(j) {
+        if (j && j.sent > 0) showToast('📲 Push đã gửi (sent:' + j.sent + ')', 3000);
+        else showToast('⚠️ Push: ' + JSON.stringify(j), 4000);
+      });
+    }).catch(function (e) { showToast('❌ Push error: ' + (e && e.message ? e.message : String(e)), 4000); console.warn('[push] confirm-done push error (non-fatal):', e); });
   } catch (pushErr) {
     console.warn('[push] confirm-done push error (non-fatal):', pushErr);
   }

@@ -1,4 +1,4 @@
-var CACHE_NAME = 'qcag-v2.4.4';
+var CACHE_NAME = 'qcag-v2.4.5';
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (event) {
   event.waitUntil(
