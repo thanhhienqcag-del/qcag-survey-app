@@ -2584,7 +2584,25 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         // Auto-upload any base64 images to GCS before persisting
         // Use tk_code as folder name (falls back to backend_id for pre-existing rows)
         const folderForUpload = current.tk_code || current.backend_id || ('db_' + current.id);
-        if ('statusImages' in b) b.statusImages = await ksAutoUploadImages(normalizeBodyValue(b.statusImages), folderForUpload, 'hien-trang');
+
+        // ── Protect status_images: NEVER overwrite real GCS URLs with placeholder/empty ──
+        // The list endpoint returns '"[\"...\"]"' as placeholder to save bandwidth.
+        // If frontend sends that placeholder back (or sends '[]'/null), and the DB
+        // already has real image URLs, SKIP the update for this field entirely.
+        if ('statusImages' in b) {
+            const incomingRaw = normalizeBodyValue(b.statusImages) || '[]';
+            const existingRaw = current.status_images || '[]';
+            const isPlaceholder = incomingRaw === '["..."]' || incomingRaw === '"[\\"...\\"]"';
+            const isEmptyIncoming = incomingRaw === '[]' || incomingRaw === 'null' || incomingRaw === '';
+            const existingHasReal = existingRaw.length > 4 && existingRaw !== '[]' && existingRaw !== '["..."]';
+            if ((isPlaceholder || isEmptyIncoming) && existingHasReal) {
+                // Drop statusImages from the PATCH — preserve DB value
+                delete b.statusImages;
+                console.log('[patch] status_images protected: incoming was placeholder/empty, DB has real URLs');
+            } else {
+                b.statusImages = await ksAutoUploadImages(incomingRaw, folderForUpload, 'hien-trang');
+            }
+        }
         if ('designImages' in b) b.designImages = await ksAutoUploadImages(normalizeBodyValue(b.designImages), folderForUpload, 'mq');
         if ('acceptanceImages' in b) b.acceptanceImages = await ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages), folderForUpload, 'mq');
 

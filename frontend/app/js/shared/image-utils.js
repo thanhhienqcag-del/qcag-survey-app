@@ -69,22 +69,59 @@ function handleOldContentImages(input) {
 
 function handleStatusImages(input) {
   const files = Array.from(input.files);
+  if (files.length === 0) return;
+
+  // Read file data BEFORE clearing input — some Android browsers invalidate
+  // File references when input.value is reset.
+  var filesToProcess = [];
+  for (var i = 0; i < files.length; i++) {
+    filesToProcess.push(files[i]);
+  }
   input.value = '';
-  files.forEach(file => {
+
+  filesToProcess.forEach(function (file) {
     // Show instant preview from blob URL while compressing in background
-    const blobUrl = URL.createObjectURL(file);
-    const idx = statusImages.length;
+    var blobUrl;
+    try { blobUrl = URL.createObjectURL(file); } catch (_) { blobUrl = ''; }
+    var idx = statusImages.length;
     statusImages.push(blobUrl);
     _statusImageFiles.push(file);
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
+
     // Compress in background — replace blob preview with compressed data URL
     _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
-      URL.revokeObjectURL(blobUrl);
+      if (blobUrl) try { URL.revokeObjectURL(blobUrl); } catch (_) {}
       statusImages[idx] = dataUrl;
-      // Replace File with a pre-compressed sentinel so submit doesn't re-compress
       _statusImageFiles[idx] = dataUrl;
       renderImagePreviews('statusImagesPreview', statusImages, 'status');
-    }).catch(function () { /* keep blob URL as fallback */ });
+    }).catch(function () {
+      // Compression failed (Android HEIC, large file, etc.) — fall back to FileReader
+      try {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var raw = e.target.result;
+          if (raw) {
+            if (blobUrl) try { URL.revokeObjectURL(blobUrl); } catch (_) {}
+            statusImages[idx] = raw;
+            _statusImageFiles[idx] = raw;
+            renderImagePreviews('statusImagesPreview', statusImages, 'status');
+          }
+        };
+        reader.onerror = function () {
+          // Unable to read file at all — remove the broken entry
+          console.warn('[handleStatusImages] FileReader fallback also failed for index', idx);
+          statusImages.splice(idx, 1);
+          _statusImageFiles.splice(idx, 1);
+          renderImagePreviews('statusImagesPreview', statusImages, 'status');
+        };
+        reader.readAsDataURL(file);
+      } catch (fallbackErr) {
+        console.warn('[handleStatusImages] fallback error:', fallbackErr);
+        statusImages.splice(idx, 1);
+        _statusImageFiles.splice(idx, 1);
+        renderImagePreviews('statusImagesPreview', statusImages, 'status');
+      }
+    });
   });
 }
 

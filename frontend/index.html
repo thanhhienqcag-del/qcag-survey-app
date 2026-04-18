@@ -1,10 +1,10 @@
-﻿<!-- Tập trung phát triển UX và UI của phần công ty Heineken (khách hàng), còn lại không đúng tới và phát triển sau khi hoàn thành phần của khách hàng -->
+<!-- T?p trung ph�t tri?n UX v� UI c?a ph?n c�ng ty Heineken (kh�ch h�ng), c�n l?i kh�ng d�ng t?i v� ph�t tri?n sau khi ho�n th�nh ph?n c?a kh�ch h�ng -->
 <!doctype html>
 <html lang="vi" class="h-full">
  <head>
   <meta charset="UTF-8">
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quản Lý Yêu Cầu Bảng Hiệu</title>
+  <title>Qu?n L� Y�u C?u B?ng Hi?u</title>
   <script>
     (function () {
       try {
@@ -21,9 +21,9 @@
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="/api/env"></script>
   <script>
-    // Runtime config — BACKEND_URL trỏ đến KS backend
-    // Local dev  : thường là http://localhost:3000 hoặc http://localhost:3101
-    // Production : ưu tiên lấy từ /api/env (BACKEND_URL, BACKEND_URL_CANDIDATES)
+    // Runtime config � BACKEND_URL tr? d?n KS backend
+    // Local dev  : thu?ng l� http://localhost:3000 ho?c http://localhost:3101
+    // Production : uu ti�n l?y t? /api/env (BACKEND_URL, BACKEND_URL_CANDIDATES)
     window.__env = window.__env || {};
     (function () {
       var host = (location && location.hostname) ? location.hostname : '';
@@ -54,14 +54,14 @@
       }
     })();
   </script>
-  <script src="app/_sdk/data_sdk.js?v=20260416"></script>
-  <script type="module" src="app/js/push.js?v=20260416"></script>
+  <script src="app/_sdk/data_sdk.js?v=20260418"></script>
+  <script type="module" src="app/js/push.js?v=20260418"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app/css/base.css?v=20260416">
-  <link rel="stylesheet" href="app/css/mobile.css?v=20260416">
-  <link rel="stylesheet" href="app/css/desktop.css?v=20260416">
+  <link rel="stylesheet" href="app/css/base.css?v=20260418">
+  <link rel="stylesheet" href="app/css/mobile.css?v=20260418">
+  <link rel="stylesheet" href="app/css/desktop.css?v=20260418">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     /* Outlet locate button: fixed width on desktop, full-width on small screens, ellipsis */
@@ -147,7 +147,7 @@
       border-color: rgba(255,255,255,0.04);
       box-shadow: 0 8px 28px rgba(2,6,23,0.5);
     }
-    /* Center area background (behind the card) — theme aware */
+    /* Center area background (behind the card) � theme aware */
     .center-bg { background-color: #f8fafc; }
     .theme-dark .center-bg, [data-theme="dark"] .center-bg { background-color: #0b1220; }
     /* TBA-disabled input: black background with gray text/placeholder */
@@ -158,7 +158,7 @@
       cursor: not-allowed !important;
     }
     .tba-disabled::placeholder { color: #ef4444 !important; opacity: 1 !important; }
-    /* Mobile push notification bell — positioned in top-user-bar */
+    /* Mobile push notification bell � positioned in top-user-bar */
     .mobile-push-bell-btn {
       position: relative;
       display: inline-flex;
@@ -205,7 +205,7 @@
     /* Survey warning: light theme uses red; dark theme keeps amber */
     .survey-warning {
       margin-top: 0.5rem;
-      margin-bottom: 0.75rem; /* thêm khoảng cách dưới để phần chọn loại bảng hiệu hở ra */
+      margin-bottom: 0.75rem; /* th�m kho?ng c�ch du?i d? ph?n ch?n lo?i b?ng hi?u h? ra */
       display: block;
       width: 100%;
       padding: 0.5rem 0.75rem;
@@ -251,18 +251,18 @@
       <div class="w-20 h-20 mb-6 border-2 border-gray-900 rounded-2xl flex items-center justify-center">
        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
       </div>
-      <h1 class="text-2xl font-semibold mb-1 text-center">Quản Lý Bảng Hiệu</h1>
-      <p class="text-gray-500 text-sm mb-10 text-center">Chọn công ty để tiếp tục</p>
+      <h1 class="text-2xl font-semibold mb-1 text-center">Qu?n L� B?ng Hi?u</h1>
+      <p class="text-gray-500 text-sm mb-10 text-center">Ch?n c�ng ty d? ti?p t?c</p>
       <div class="w-full max-w-xs space-y-4">
       <button onclick="loginSelectCompany('heineken')" class="company-select-btn w-full py-4 rounded-2xl flex flex-col items-center gap-1 transition-colors">
       <img src="app/assets/Heineken_Logo.svg" alt="Heineken" class="w-auto max-h-8 md:max-h-10 lg:max-h-12 object-contain">
        <span class="font-semibold">Heineken Vietnam</span>
-       <span class="text-xs">Nhân viên Sale / TBA</span>
+       <span class="text-xs">Nh�n vi�n Sale / TBA</span>
       </button>
       <button onclick="loginSelectCompany('qcag')" class="company-select-btn w-full py-4 rounded-2xl flex flex-col items-center gap-1 transition-colors">
       <img src="app/assets/qcag-logo.svg" alt="QCAG" class="w-auto max-h-8 md:max-h-10 lg:max-h-12 object-contain">
-       <span class="font-semibold">Quảng Cáo An Giang</span>
-       <span class="text-xs">Nhân viên nội bộ</span>
+       <span class="font-semibold">Qu?ng C�o An Giang</span>
+       <span class="text-xs">Nh�n vi�n n?i b?</span>
       </button>
       </div>
      </div>
@@ -272,31 +272,31 @@
     <div id="loginStepHK1" class="h-full flex-col hidden lg:items-center lg:justify-center lg:center-bg">
     <div class="lg:w-[480px] lg:h-auto lg:bg-gray-100 lg:rounded-2xl lg:shadow-md lg:overflow-hidden flex flex-col h-full w-full center-card">
       <div class="flex items-center p-4 border-b border-gray-100">
-       <button onclick="loginBack('loginStepCompany','loginStepHK1')" aria-label="Quay lại" class="p-2 -ml-2 text-gray-600">
+       <button onclick="loginBack('loginStepCompany','loginStepHK1')" aria-label="Quay l?i" class="p-2 -ml-2 text-gray-600">
         <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
        </button>
        <div class="ml-2">
         <div class="font-semibold">Heineken Vietnam</div>
-        <div class="text-xs text-gray-400">Bước 1 / 2 — Thông tin cá nhân</div>
+        <div class="text-xs text-gray-400">Bu?c 1 / 2 � Th�ng tin c� nh�n</div>
        </div>
       </div>
       <div class="flex-1 overflow-y-auto p-6">
        <div class="space-y-4">
         <div>
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại <span class="text-red-500">*</span></label>
-         <input id="hkPhone" type="tel" inputmode="numeric" placeholder="Nhập số điện thoại" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">S? di?n tho?i <span class="text-red-500">*</span></label>
+         <input id="hkPhone" type="tel" inputmode="numeric" placeholder="Nh?p s? di?n tho?i" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
         </div>
         <div>
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Mã nhân viên Sale <span class="text-red-500">*</span></label>
-         <input id="hkSaleCode" type="tel" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" placeholder="Nhập mã nhân viên sale (8 chữ số)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,8)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">M� nh�n vi�n Sale <span class="text-red-500">*</span></label>
+         <input id="hkSaleCode" type="tel" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" placeholder="Nh?p m� nh�n vi�n sale (8 ch? s?)" oninput="this.value=this.value.replace(/\D/g,'').slice(0,8)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
         </div>
         <div>
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Họ và tên sale <span class="text-red-500">*</span></label>
-         <input id="hkSaleName" type="text" placeholder="Nhập tên đầy đủ" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">H? v� t�n sale <span class="text-red-500">*</span></label>
+         <input id="hkSaleName" type="text" placeholder="Nh?p t�n d?y d?" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
         </div>
        </div>
        <div class="mt-8">
-        <button onclick="loginHK1Next()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Tiếp tục</button>
+        <button onclick="loginHK1Next()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Ti?p t?c</button>
        </div>
       </div>
      </div>
@@ -306,28 +306,28 @@
     <div id="loginStepHK2" class="h-full flex-col hidden lg:items-center lg:justify-center lg:center-bg">
     <div class="lg:w-[480px] lg:h-auto lg:max-h-none lg:bg-gray-50 lg:rounded-2xl lg:shadow-md lg:overflow-hidden flex flex-col h-full w-full center-card">
       <div class="flex items-center p-3 border-b border-gray-100 flex-shrink-0">
-       <button onclick="loginBack('loginStepHK1','loginStepHK2')" aria-label="Quay lại" class="p-2 -ml-2 text-gray-600">
+       <button onclick="loginBack('loginStepHK1','loginStepHK2')" aria-label="Quay l?i" class="p-2 -ml-2 text-gray-600">
         <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
        </button>
        <div class="ml-2">
         <div class="font-semibold">Heineken Vietnam</div>
-        <div class="text-xs text-gray-400">Bước 2 / 2 — Khu vực làm việc</div>
+        <div class="text-xs text-gray-400">Bu?c 2 / 2 � Khu v?c l�m vi?c</div>
        </div>
       </div>
       <div class="flex-1 overflow-y-auto p-4 lg:overflow-visible lg:p-4">
        <!-- TBA toggle -->
       <div class="flex items-center justify-between p-3 bg-gray-100 rounded-xl mb-3">
        <div>
-        <div class="font-medium text-sm">Chức vụ TBA</div>
-        <div class="text-xs text-gray-400 mt-0.5">Bật nếu bạn là TBA (không cần điền thông tin SS)</div>
+        <div class="font-medium text-sm">Ch?c v? TBA</div>
+        <div class="text-xs text-gray-400 mt-0.5">B?t n?u b?n l� TBA (kh�ng c?n di?n th�ng tin SS)</div>
        </div>
-      <button id="tbToggle" onclick="loginToggleTBA()" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative flex-shrink-0" aria-label="Bật/Tắt TBA" aria-pressed="false">
+      <button id="tbToggle" onclick="loginToggleTBA()" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative flex-shrink-0" aria-label="B?t/T?t TBA" aria-pressed="false">
        <div class="toggle-slider w-5 h-5 bg-gray-100 rounded-full shadow-sm" aria-hidden="true"></div>
       </button>
       </div>
       <!-- Region -->
       <div class="mb-3">
-       <label class="block text-sm font-medium mb-2 text-gray-700">Khu vực <span class="text-red-500">*</span></label>
+       <label class="block text-sm font-medium mb-2 text-gray-700">Khu v?c <span class="text-red-500">*</span></label>
       <div id="regionGrid" class="grid grid-cols-3 gap-2">
        <button onclick="loginSelectRegion(this,'South 4')" class="region-btn py-2 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 active:bg-gray-100">South 4</button>
        <button onclick="loginSelectRegion(this,'South 5')" class="region-btn py-2 rounded-xl border-2 border-gray-200 text-sm font-medium text-gray-700 active:bg-gray-100">South 5</button>
@@ -340,17 +340,17 @@
       </div>
       <!-- SS info (hidden when TBA) -->
       <div id="ssInfoBlock" class="space-y-3">
-      <div id="tbaNote" class="text-xs text-red-500 hidden mb-2">TBA không cần nhập thông tin SS/SE</div>
+      <div id="tbaNote" class="text-xs text-red-500 hidden mb-2">TBA kh�ng c?n nh?p th�ng tin SS/SE</div>
       <div>
-       <label class="block text-sm font-medium mb-1.5 text-gray-700">Họ và Tên SS/SE <span class="text-red-500">*</span></label>
-      <input id="hkSSName" type="text" placeholder="Nhập tên SS/SE" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-100">
+       <label class="block text-sm font-medium mb-1.5 text-gray-700">H? v� T�n SS/SE <span class="text-red-500">*</span></label>
+      <input id="hkSSName" type="text" placeholder="Nh?p t�n SS/SE" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-100">
       </div>
       </div>
       <div class="mt-6">
-       <button onclick="loginHK2Submit()" class="w-full py-3 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Vào hệ thống</button>
+       <button onclick="loginHK2Submit()" class="w-full py-3 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">V�o h? th?ng</button>
       </div>
       <div class="mt-4 px-3">
-       <p class="text-xs text-gray-400 italic text-center">Vui lòng chọn đúng thông tin nơi bạn đang làm việc. Chân thành cảm ơn các anh chị!</p>
+       <p class="text-xs text-gray-400 italic text-center">Vui l�ng ch?n d�ng th�ng tin noi b?n dang l�m vi?c. Ch�n th�nh c?m on c�c anh ch?!</p>
       </div>
      </div>
      </div>
@@ -360,36 +360,36 @@
     <div id="loginStepQCAG" class="h-full flex-col hidden lg:items-center lg:justify-center lg:center-bg">
     <div class="lg:w-[480px] lg:h-auto lg:bg-gray-100 lg:rounded-2xl lg:shadow-md lg:overflow-hidden flex flex-col h-full w-full center-card">
       <div class="flex items-center p-4 border-b border-gray-100">
-       <button onclick="loginBack('loginStepCompany','loginStepQCAG')" aria-label="Quay lại" class="p-2 -ml-2 text-gray-600">
+       <button onclick="loginBack('loginStepCompany','loginStepQCAG')" aria-label="Quay l?i" class="p-2 -ml-2 text-gray-600">
         <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
        </button>
        <div class="ml-2">
-        <div class="font-semibold">Quảng Cáo An Giang</div>
-        <div class="text-xs text-gray-400">Đăng nhập nội bộ</div>
+        <div class="font-semibold">Qu?ng C�o An Giang</div>
+        <div class="text-xs text-gray-400">�ang nh?p n?i b?</div>
        </div>
       </div>
       <div class="flex-1 overflow-y-auto p-6">
        <div class="space-y-4">
         <div>
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại <span class="text-red-500">*</span></label>
-         <input id="qcPhone" type="tel" inputmode="numeric" placeholder="Nhập số điện thoại" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">S? di?n tho?i <span class="text-red-500">*</span></label>
+         <input id="qcPhone" type="tel" inputmode="numeric" placeholder="Nh?p s? di?n tho?i" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
         </div>
       <div>
-       <label class="block text-sm font-medium mb-1.5 text-gray-700">Tên nhân viên QCAG</label>
-      <input id="qcName" type="text" placeholder="Nhập tên nhân viên QCAG" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
+       <label class="block text-sm font-medium mb-1.5 text-gray-700">T�n nh�n vi�n QCAG</label>
+      <input id="qcName" type="text" placeholder="Nh?p t�n nh�n vi�n QCAG" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100">
       </div>
         <div>
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Mật khẩu <span class="text-red-500">*</span></label>
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">M?t kh?u <span class="text-red-500">*</span></label>
          <div class="relative">
-          <input id="qcPassword" type="password" placeholder="Nhập mật khẩu" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 pr-12">
-          <button type="button" onclick="loginTogglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400" aria-label="Hiện/Ẩn mật khẩu" aria-pressed="false">
+          <input id="qcPassword" type="password" placeholder="Nh?p m?t kh?u" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-100 pr-12">
+          <button type="button" onclick="loginTogglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400" aria-label="Hi?n/?n m?t kh?u" aria-pressed="false">
            <svg id="pwdEyeIcon" aria-hidden="true" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
           </button>
          </div>
         </div>
        </div>
        <div class="mt-8">
-        <button onclick="loginQCAGSubmit()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Đăng nhập</button>
+        <button onclick="loginQCAGSubmit()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">�ang nh?p</button>
        </div>
       </div>
      </div>
@@ -403,58 +403,58 @@
       <nav id="qcagNavSidebar" class="qcag-nav-sidebar">
         <div class="qcag-nav-sidebar-header">
           <img src="app/assets/qcag-logo.svg" alt="QCAG" class="qcag-nav-sidebar-logo">
-          <button class="qcag-nav-close-btn" onclick="qcagCloseNavSidebar()" title="Đóng">&#x2715;</button>
+          <button class="qcag-nav-close-btn" onclick="qcagCloseNavSidebar()" title="��ng">&#x2715;</button>
         </div>
         <ul class="qcag-nav-list">
           <li><button class="qcag-nav-item" onclick="qcagNavShowView('list')">
-            <span class="qcag-nav-icon">&#x1F4CB;</span> Xem danh sách
+            <span class="qcag-nav-icon">&#x1F4CB;</span> Xem danh s�ch
           </button></li>
           <li><button class="qcag-nav-item" onclick="qcagNavShowView('map')">
-            <span class="qcag-nav-icon">&#x1F5FA;</span> Bản Đồ
+            <span class="qcag-nav-icon">&#x1F5FA;</span> B?n �?
           </button></li>
-          <li><button class="qcag-nav-item qcag-nav-item--disabled" onclick="qcagNavShowView('stats')" title="Sắp ra mắt">
-            <span class="qcag-nav-icon">&#x1F4CA;</span> Thống kê <span class="qcag-nav-soon">Coming soon</span>
+          <li><button class="qcag-nav-item qcag-nav-item--disabled" onclick="qcagNavShowView('stats')" title="S?p ra m?t">
+            <span class="qcag-nav-icon">&#x1F4CA;</span> Th?ng k� <span class="qcag-nav-soon">Coming soon</span>
           </button></li>
         </ul>
-        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.4.1 &nbsp;·&nbsp; 2026-04-16</div>
+        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phi�n b?n ?ng d?ng">v2.4.1 &nbsp;�&nbsp; 2026-04-16</div>
       </nav>
 
       <!-- Nav Overlay Panels -->
       <div id="qcagNavListPanel" class="qcag-nav-panel hidden">
         <div class="qcag-nav-panel-header">
-          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
-          <span class="qcag-nav-panel-title">Danh sách yêu cầu</span>
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay l?i</button>
+          <span class="qcag-nav-panel-title">Danh s�ch y�u c?u</span>
           <span id="qcagNavListCount" class="qcag-nav-panel-count"></span>
         </div>
         <div class="qcag-nav-list-toolbar">
-          <input id="qcagNavListSearch" type="search" placeholder="Tìm theo Mã TK, Tên Sale, Tên SS, Outlet code, Tên outlet, Khu vực, Brand..." oninput="qcagNavListOnSearch(this.value)" class="qcag-nav-list-search-input">
-          <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xuất Excel">
+          <input id="qcagNavListSearch" type="search" placeholder="T�m theo M� TK, T�n Sale, T�n SS, Outlet code, T�n outlet, Khu v?c, Brand..." oninput="qcagNavListOnSearch(this.value)" class="qcag-nav-list-search-input">
+          <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xu?t Excel">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Xuất Excel
+            Xu?t Excel
           </button>
-          <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="Bỏ chọn">Bỏ chọn</button>
+          <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="B? ch?n">B? ch?n</button>
         </div>
         <div class="qcag-nav-list-filter-bar" id="qcagNavListFilterBar">
-          <span class="qcag-nav-filter-label">Trạng thái:</span>
-          <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">Tất cả</button>
-          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Chờ khảo sát</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Chờ thiết kế</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Chờ chỉnh sửa</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Chờ xác nhận</button>
-          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">Đang xử lý</button>
-          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý</button>
-          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành</button>
+          <span class="qcag-nav-filter-label">Tr?ng th�i:</span>
+          <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">T?t c?</button>
+          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Ch? kh?o s�t</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Ch? thi?t k?</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Ch? ch?nh s?a</button>
+          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Ch? x�c nh?n</button>
+          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">�ang x? l�</button>
+          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Ch? x? l�</button>
+          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Ho�n th�nh</button>
         </div>
         <div class="qcag-nav-list-filter-bar qcag-nav-region-filter-bar" id="qcagNavListRegionBar">
-          <span class="qcag-nav-filter-label">Khu vực:</span>
-          <button class="qcag-nav-region-pill active" data-region="" onclick="qcagNavListSetRegionFilter('')">Tất cả</button>
-          <button class="qcag-nav-region-pill" data-region="s4" onclick="qcagNavListSetRegionFilter('s4')">S4 Hậu Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s5" onclick="qcagNavListSetRegionFilter('s5')">S5 Cà Mau</button>
+          <span class="qcag-nav-filter-label">Khu v?c:</span>
+          <button class="qcag-nav-region-pill active" data-region="" onclick="qcagNavListSetRegionFilter('')">T?t c?</button>
+          <button class="qcag-nav-region-pill" data-region="s4" onclick="qcagNavListSetRegionFilter('s4')">S4 H?u Giang</button>
+          <button class="qcag-nav-region-pill" data-region="s5" onclick="qcagNavListSetRegionFilter('s5')">S5 C� Mau</button>
           <button class="qcag-nav-region-pill" data-region="s16" onclick="qcagNavListSetRegionFilter('s16')">S16 An Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s17" onclick="qcagNavListSetRegionFilter('s17')">S17 Kiên Giang</button>
-          <button class="qcag-nav-region-pill" data-region="24" onclick="qcagNavListSetRegionFilter('24')">24 Kiên Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s19" onclick="qcagNavListSetRegionFilter('s19')">S19 Bạc Liêu</button>
-          <button class="qcag-nav-region-pill" data-region="mot8" onclick="qcagNavListSetRegionFilter('mot8')">MOT8 Phú Quốc</button>
+          <button class="qcag-nav-region-pill" data-region="s17" onclick="qcagNavListSetRegionFilter('s17')">S17 Ki�n Giang</button>
+          <button class="qcag-nav-region-pill" data-region="24" onclick="qcagNavListSetRegionFilter('24')">24 Ki�n Giang</button>
+          <button class="qcag-nav-region-pill" data-region="s19" onclick="qcagNavListSetRegionFilter('s19')">S19 B?c Li�u</button>
+          <button class="qcag-nav-region-pill" data-region="mot8" onclick="qcagNavListSetRegionFilter('mot8')">MOT8 Ph� Qu?c</button>
         </div>
         <div class="qcag-nav-panel-body">
           <div class="qcag-nav-table-wrap">
@@ -462,16 +462,16 @@
               <thead>
                 <tr>
                   <th>STT</th>
-                  <th>Mã TK</th>
-                  <th>Khu vực</th>
-                  <th>Tên Sale</th>
-                  <th>Tên SS</th>
+                  <th>M� TK</th>
+                  <th>Khu v?c</th>
+                  <th>T�n Sale</th>
+                  <th>T�n SS</th>
                   <th>Outlet Code</th>
-                  <th>Tên Outlet</th>
+                  <th>T�n Outlet</th>
                   <th>Brand</th>
-                  <th>SL hạng mục</th>
-                  <th>Trạng thái</th>
-                  <th>Định vị</th>
+                  <th>SL h?ng m?c</th>
+                  <th>Tr?ng th�i</th>
+                  <th>�?nh v?</th>
                 </tr>
               </thead>
               <tbody id="qcagNavListBody"></tbody>
@@ -483,66 +483,66 @@
 
       <div id="qcagNavMapPanel" class="qcag-nav-panel hidden">
         <div class="qcag-nav-panel-header">
-          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
-          <span class="qcag-nav-panel-title">Bản đồ điểm bán</span>
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay l?i</button>
+          <span class="qcag-nav-panel-title">B?n d? di?m b�n</span>
           <span id="qcagNavMapCount" class="qcag-nav-panel-count"></span>
-          <button id="qcagNavTooltipToggleBtn" class="qcag-nav-tooltip-toggle" onclick="qcagNavToggleMapTooltips()" title="Hiện thẻ thông tin">
+          <button id="qcagNavTooltipToggleBtn" class="qcag-nav-tooltip-toggle" onclick="qcagNavToggleMapTooltips()" title="Hi?n th? th�ng tin">
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 10h8M8 14h4"/></svg>
-            Thẻ thông tin
+            Th? th�ng tin
           </button>
         </div>
         <div class="qcag-nav-map-search-bar">
-          <input id="qcagNavMapSearch" type="search" placeholder="Tìm theo Outlet code, Mã TK, Tên outlet, Tên Sale, Tên SS, Khu vực..." oninput="qcagNavMapOnSearch(this.value)" class="qcag-nav-map-search-input">
+          <input id="qcagNavMapSearch" type="search" placeholder="T�m theo Outlet code, M� TK, T�n outlet, T�n Sale, T�n SS, Khu v?c..." oninput="qcagNavMapOnSearch(this.value)" class="qcag-nav-map-search-input">
         </div>
         <div id="qcagNavMapContainer" class="qcag-nav-map-container"></div>
       </div>
 
       <div id="qcagNavStatsPanel" class="qcag-nav-panel hidden">
         <div class="qcag-nav-panel-header">
-          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
-          <span class="qcag-nav-panel-title">Thống kê</span>
+          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay l?i</button>
+          <span class="qcag-nav-panel-title">Th?ng k�</span>
         </div>
         <div class="qcag-nav-panel-body qcag-nav-stats-placeholder">
-          <div class="qcag-nav-stats-msg">&#x1F4CA; Chức năng Thống kê đang được phát triển.</div>
+          <div class="qcag-nav-stats-msg">&#x1F4CA; Ch?c nang Th?ng k� dang du?c ph�t tri?n.</div>
         </div>
       </div>
 
       <div class="qcag-desktop-shell">
         <header class="qcag-desktop-header">
-          <button class="qcag-hamburger-btn" onclick="qcagToggleNavSidebar()" title="Menu" aria-label="Mở menu">
+          <button class="qcag-hamburger-btn" onclick="qcagToggleNavSidebar()" title="Menu" aria-label="M? menu">
             <span></span><span></span><span></span>
           </button>
           <div class="qcag-desktop-brand">
             <div class="qcag-logo"><img src="app/assets/qcag-logo.svg" alt="QCAG" class="qcag-logo-img"></div>
           </div>
           <div class="qcag-desktop-search-wrap">
-            <input id="qcagDesktopSearch" type="search" placeholder="Tìm request theo outlet, mã, địa chỉ..." oninput="qcagDesktopOnSearch(this.value)" class="qcag-desktop-search">
+            <input id="qcagDesktopSearch" type="search" placeholder="T�m request theo outlet, m�, d?a ch?..." oninput="qcagDesktopOnSearch(this.value)" class="qcag-desktop-search">
           </div>
           <div class="qcag-desktop-user">
             <div id="qcagDesktopUserLabel" class="qcag-user-label">QCAG</div>
-            <button id="qcagPushBellBtn" onclick="qcagDesktopTogglePush()" class="qcag-push-bell-btn" type="button" title="Bật/tắt thông báo" aria-label="Bật/tắt thông báo">
+            <button id="qcagPushBellBtn" onclick="qcagDesktopTogglePush()" class="qcag-push-bell-btn" type="button" title="B?t/t?t th�ng b�o" aria-label="B?t/t?t th�ng b�o">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
               <span id="qcagPushBellStatus" class="qcag-push-bell-dot"></span>
             </button>
-            <button id="qcagThemeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn qcag-theme-btn hidden lg:inline-flex" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
-              <span class="theme-icon" aria-hidden="true">🌙</span>
-              <span class="theme-label">Tối</span>
+            <button id="qcagThemeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn qcag-theme-btn hidden lg:inline-flex" type="button" title="�?i giao di?n" aria-label="�?i giao di?n">
+              <span class="theme-icon" aria-hidden="true">??</span>
+              <span class="theme-label">T?i</span>
             </button>
-            <button onclick="qcagDesktopToggleDVHCLookup()" class="qcag-dvhc-btn" type="button" title="Tra cứu đơn vị hành chính mới">🗺️ Tra cứu ĐVHC</button>
-            <button onclick="logout()" class="qcag-user-logout">Đăng xuất</button>
+            <button onclick="qcagDesktopToggleDVHCLookup()" class="qcag-dvhc-btn" type="button" title="Tra c?u don v? h�nh ch�nh m?i">??? Tra c?u �VHC</button>
+            <button onclick="logout()" class="qcag-user-logout">�ang xu?t</button>
           </div>
         </header>
 
         <main class="qcag-desktop-main">
           <aside class="qcag-desktop-list-panel">
             <div class="qcag-status-tabs">
-              <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn active">Đang xử lý</button>
-              <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn">Hoàn thành</button>
+              <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn active">�ang x? l�</button>
+              <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn">Ho�n th�nh</button>
             </div>
 
             <div class="qcag-list-toolbar">
-              <button id="qcagFilterNew" onclick="qcagDesktopSetTypeFilter('new')" class="qcag-filter-btn active">Yêu cầu mới <span id="qcagNewCount" class="qcag-filter-count">0</span></button>
-              <button id="qcagFilterWarranty" onclick="qcagDesktopSetTypeFilter('warranty')" class="qcag-filter-btn">Bảo hành <span id="qcagWarrantyCount" class="qcag-filter-count">0</span></button>
+              <button id="qcagFilterNew" onclick="qcagDesktopSetTypeFilter('new')" class="qcag-filter-btn active">Y�u c?u m?i <span id="qcagNewCount" class="qcag-filter-count">0</span></button>
+              <button id="qcagFilterWarranty" onclick="qcagDesktopSetTypeFilter('warranty')" class="qcag-filter-btn">B?o h�nh <span id="qcagWarrantyCount" class="qcag-filter-count">0</span></button>
             </div>
             <div id="qcagDesktopRequestList" class="qcag-request-list"></div>
             <div id="qcagDesktopListPagination" class="qcag-list-pagination"></div>
@@ -550,17 +550,17 @@
 
           <div class="qcag-detail-wrapper">
             <div class="qcag-detail-filter-bar">
-              <button onclick="qcagDesktopSetRegionFilter('all')" id="qcagRegionAll" class="qcag-detail-filter-btn active">Tất Cả</button>
-              <button onclick="qcagDesktopSetRegionFilter('S4')" id="qcagRegionS4" class="qcag-detail-filter-btn">S4 Hậu Giang</button>
-              <button onclick="qcagDesktopSetRegionFilter('S5')" id="qcagRegionS5" class="qcag-detail-filter-btn">S5 Cà Mau</button>
+              <button onclick="qcagDesktopSetRegionFilter('all')" id="qcagRegionAll" class="qcag-detail-filter-btn active">T?t C?</button>
+              <button onclick="qcagDesktopSetRegionFilter('S4')" id="qcagRegionS4" class="qcag-detail-filter-btn">S4 H?u Giang</button>
+              <button onclick="qcagDesktopSetRegionFilter('S5')" id="qcagRegionS5" class="qcag-detail-filter-btn">S5 C� Mau</button>
               <button onclick="qcagDesktopSetRegionFilter('S16')" id="qcagRegionS16" class="qcag-detail-filter-btn">S16 An Giang</button>
-              <button onclick="qcagDesktopSetRegionFilter('S17')" id="qcagRegionS17" class="qcag-detail-filter-btn">S17 Kiên Giang</button>
-              <button onclick="qcagDesktopSetRegionFilter('24')" id="qcagRegion24" class="qcag-detail-filter-btn">24 Kiên Giang</button>
-              <button onclick="qcagDesktopSetRegionFilter('S19')" id="qcagRegionS19" class="qcag-detail-filter-btn">S19 Bạc Liêu</button>
-              <button onclick="qcagDesktopSetRegionFilter('MOT8')" id="qcagRegionMOT8" class="qcag-detail-filter-btn">MOT8 Phú Quốc</button>
+              <button onclick="qcagDesktopSetRegionFilter('S17')" id="qcagRegionS17" class="qcag-detail-filter-btn">S17 Ki�n Giang</button>
+              <button onclick="qcagDesktopSetRegionFilter('24')" id="qcagRegion24" class="qcag-detail-filter-btn">24 Ki�n Giang</button>
+              <button onclick="qcagDesktopSetRegionFilter('S19')" id="qcagRegionS19" class="qcag-detail-filter-btn">S19 B?c Li�u</button>
+              <button onclick="qcagDesktopSetRegionFilter('MOT8')" id="qcagRegionMOT8" class="qcag-detail-filter-btn">MOT8 Ph� Qu?c</button>
             </div>
             <section id="qcagDesktopDetail" class="qcag-desktop-detail">
-              <div class="qcag-detail-empty">Chọn một request để xem chi tiết và trao đổi với Sale Heineken</div>
+              <div class="qcag-detail-empty">Ch?n m?t request d? xem chi ti?t v� trao d?i v?i Sale Heineken</div>
             </section>
           </div>
         </main>
@@ -573,15 +573,15 @@
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 top-user-bar">
        <div id="sessionInfoBar" class="text-xs text-gray-500 leading-tight flex-1"></div>
        <div class="flex items-center gap-2">
-         <button id="mobilePushBellBtn" onclick="homePushBtnClick()" class="mobile-push-bell-btn" type="button" title="Thông báo" aria-label="Bật/tắt thông báo">
+         <button id="mobilePushBellBtn" onclick="homePushBtnClick()" class="mobile-push-bell-btn" type="button" title="Th�ng b�o" aria-label="B?t/t?t th�ng b�o">
            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
            <span id="mobilePushBellDot" class="mobile-push-bell-dot"></span>
          </button>
-         <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
-           <span class="theme-icon" aria-hidden="true">🌙</span>
-           <span class="theme-label">Tối</span>
+         <button id="themeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn" type="button" title="�?i giao di?n" aria-label="�?i giao di?n">
+           <span class="theme-icon" aria-hidden="true">??</span>
+           <span class="theme-label">T?i</span>
          </button>
-         <button id="desktopLogoutBtn" onclick="logout()" class="hidden lg:inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700" title="Đăng xuất">Đăng xuất</button>
+         <button id="desktopLogoutBtn" onclick="logout()" class="hidden lg:inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700" title="�ang xu?t">�ang xu?t</button>
        </div>
       </div>
     <div class="flex-1 flex flex-col items-center justify-start p-4 overflow-y-auto">
@@ -591,73 +591,73 @@
         <img src="app/assets/Heineken_Logo.svg" alt="Heineken" class="h-7 w-auto object-contain">
         <img src="app/assets/qcag-logo.svg" alt="QCAG" class="h-7 w-auto object-contain">
       </div>
-      <h1 class="text-sm font-semibold tracking-wide leading-tight">QUẢN LÝ BẢNG HIỆU HVN &amp; QCAG</h1>
-      <span id="appTitle" class="hidden" aria-hidden="true">QUẢN LÝ BẢNG HIỆU HVN &amp; QCAG</span>
+      <h1 class="text-sm font-semibold tracking-wide leading-tight">QU?N L� B?NG HI?U HVN &amp; QCAG</h1>
+      <span id="appTitle" class="hidden" aria-hidden="true">QU?N L� B?NG HI?U HVN &amp; QCAG</span>
     </div>
-    <!-- Dashboard stats: compact design-state filters (4 buttons, 2×2) -->
+    <!-- Dashboard stats: compact design-state filters (4 buttons, 2�2) -->
     <div class="w-full max-w-xs mb-3">
-    <p class="text-xs text-gray-400 font-medium mb-1 text-center">YÊU CẦU MỚI</p>
+    <p class="text-xs text-gray-400 font-medium mb-1 text-center">Y�U C?U M?I</p>
      <div id="homeStatsGrid" class="grid grid-cols-2 gap-1">
       <button onclick="showRequestListWithFilter('all')" class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-center active:bg-gray-100 transition-colors">
        <div id="statAll" class="text-base font-semibold text-gray-900">0</div>
-       <div class="text-[11px] text-gray-500">Tất cả</div>
+       <div class="text-[11px] text-gray-500">T?t c?</div>
       </button>
       <button onclick="showRequestListWithFilter('waiting')" class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-center active:bg-gray-100 transition-colors">
        <div id="statWaiting" class="text-base font-semibold text-gray-900">0</div>
-       <div class="text-[11px] text-gray-500">Chờ TK</div>
+       <div class="text-[11px] text-gray-500">Ch? TK</div>
       </button>
       <button onclick="showRequestListWithFilter('has_mq')" class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-center active:bg-gray-100 transition-colors">
        <div id="statHasMQ" class="text-base font-semibold text-gray-900">0</div>
-       <div class="text-[11px] text-gray-500">Có MQ</div>
+       <div class="text-[11px] text-gray-500">C� MQ</div>
       </button>
       <button onclick="showRequestListWithFilter('editing')" class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-center active:bg-gray-100 transition-colors">
        <div id="statEditing" class="text-base font-semibold text-gray-900">0</div>
-       <div class="text-[11px] text-gray-500">Đang sửa</div>
+       <div class="text-[11px] text-gray-500">�ang s?a</div>
       </button>
      </div>
     </div>
-     <!-- Dashboard stats: warranty states (2 buttons, 1×2) -->
+     <!-- Dashboard stats: warranty states (2 buttons, 1�2) -->
     <div class="w-full max-w-xs mb-4">
-     <p class="text-xs text-gray-400 font-medium mb-1 text-center">KIỂM TRA BẢO HÀNH</p>
+     <p class="text-xs text-gray-400 font-medium mb-1 text-center">KI?M TRA B?O H�NH</p>
       <div class="grid grid-cols-2 gap-2">
       <button onclick="showWarrantyListWithFilter('warranty_pending')" class="bg-gray-50 border border-gray-200 rounded-xl p-2 text-center active:bg-gray-100 transition-colors">
         <div id="statWarrantyPending" class="text-lg font-bold text-gray-900">0</div>
-        <div class="text-xs text-gray-500">Đang chờ BH</div>
+        <div class="text-xs text-gray-500">�ang ch? BH</div>
        </button>
       <button onclick="showWarrantyListWithFilter('warranty_done')" class="bg-gray-50 border border-gray-200 rounded-xl p-2 text-center active:bg-gray-100 transition-colors">
         <div id="statWarrantyDone" class="text-lg font-bold text-gray-900">0</div>
-        <div class="text-xs text-gray-500">Đã bảo hành</div>
+        <div class="text-xs text-gray-500">�� b?o h�nh</div>
        </button>
       </div>
      </div>
     <div id="homeActions" class="w-full max-w-xs space-y-2.5">
       <button onclick="startNewRequest()" class="w-full py-3 bg-gray-900 text-white font-medium rounded-xl flex items-center justify-center gap-3 active:bg-gray-800 transition-colors">
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-       Tạo Yêu Cầu Mới
+       T?o Y�u C?u M?i
       </button>
       <button onclick="startWarrantyCheck()" class="w-full py-3 bg-gray-50 text-gray-900 font-medium rounded-xl border-2 border-gray-900 flex items-center justify-center gap-3 active:bg-gray-100 transition-colors">
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-       Kiểm Tra Bảo Hành
+       Ki?m Tra B?o H�nh
       </button>
       <!-- Add to homescreen button (shown when PWA install prompt is available or on iOS) -->
       <button id="homeInstallBtn" onclick="homeInstallBtnClick()" class="w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 hidden items-center justify-center gap-2 text-sm text-blue-600 transition-colors active:bg-blue-100">
-        <span>📲</span>
-        <span>Thêm vào màn hình chính</span>
+        <span>??</span>
+        <span>Th�m v�o m�n h�nh ch�nh</span>
       </button>
      </div>
-     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.4.1 · 2026-04-16</p>
+     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phi�n b?n ?ng d?ng">v2.4.1 � 2026-04-16</p>
     </div>
-    <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
+    <!-- 'Xem Danh S�ch Y�u C?u' removed from home as requested -->
 
    </div><!-- New Request Form -->
    <div id="newRequestScreen" class="h-full flex-col hidden">
-    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="Về trang chủ" aria-label="Về trang chủ" class="p-2 -ml-2">
+    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="V? trang ch?" aria-label="V? trang ch?" class="p-2 -ml-2">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg></button>
-     <h2 class="font-semibold">Tạo Yêu Cầu Mới</h2>
+     <h2 class="font-semibold">T?o Y�u C?u M?i</h2>
      <div class="w-10"></div>
     </div>
-    <div class="flex border-b border-gray-100"><button id="tab1Btn" onclick="switchTab(1)" class="flex-1 py-3 text-sm font-medium tab-active"> <span class="block">1</span> <span class="text-xs">Thông tin</span> </button> <button id="tab2Btn" onclick="switchTab(2)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">2</span> <span class="text-xs">Hạng mục</span> </button> <button id="tab3Btn" onclick="switchTab(3)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">3</span> <span class="text-xs">Nội dung</span> </button>
+    <div class="flex border-b border-gray-100"><button id="tab1Btn" onclick="switchTab(1)" class="flex-1 py-3 text-sm font-medium tab-active"> <span class="block">1</span> <span class="text-xs">Th�ng tin</span> </button> <button id="tab2Btn" onclick="switchTab(2)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">2</span> <span class="text-xs">H?ng m?c</span> </button> <button id="tab3Btn" onclick="switchTab(3)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">3</span> <span class="text-xs">N?i dung</span> </button>
     </div><!-- Tab 1: Outlet Info -->
     <div id="tab1" class="flex-1 overflow-y-auto p-4 fade-in">
      <div class="space-y-4">
@@ -672,8 +672,8 @@
           </div>
         </div>
         <div class="relative mt-2">
-          <input type="tel" id="outletCode" inputmode="numeric" pattern="\d*" maxlength="8" oninput="sanitizeOutletCodeInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập mã outlet">
-          <button id="outletPasteBtn" type="button" onclick="pasteToOutletCode()" class="absolute right-2 -translate-y-1/2 px-3 py-1 bg-gray-900 text-white text-sm rounded-md outlet-paste">Dán</button>
+          <input type="tel" id="outletCode" inputmode="numeric" pattern="\d*" maxlength="8" oninput="sanitizeOutletCodeInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p m� outlet">
+          <button id="outletPasteBtn" type="button" onclick="pasteToOutletCode()" class="absolute right-2 -translate-y-1/2 px-3 py-1 bg-gray-900 text-white text-sm rounded-md outlet-paste">D�n</button>
           <div id="outletLockIcon" class="absolute right-2 -translate-y-1/2 outlet-lock-icon hidden">
             <!-- simple stroke lock icon -->
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -684,118 +684,118 @@
           </div>
         </div>
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Tên Outlet <span class="text-red-500">*</span></label> <input type="text" id="outletName" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập tên outlet">
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">T�n Outlet <span class="text-red-500">*</span></label> <input type="text" id="outletName" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p t�n outlet">
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Địa chỉ <span class="text-red-500">*</span></label> <textarea id="address" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nhập địa chỉ"></textarea>
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">�?a ch? <span class="text-red-500">*</span></label> <textarea id="address" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nh?p d?a ch?"></textarea>
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại <span class="text-red-500">*</span></label> <input type="tel" id="phone" inputmode="tel" pattern="\d*" oninput="sanitizeIntegerInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập số điện thoại">
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">S? di?n tho?i <span class="text-red-500">*</span></label> <input type="tel" id="phone" inputmode="tel" pattern="\d*" oninput="sanitizeIntegerInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p s? di?n tho?i">
       </div>
       <div>
-        <label class="block text-sm font-medium mb-1.5 text-gray-700">Vị trí cửa hàng</label>
+        <label class="block text-sm font-medium mb-1.5 text-gray-700">V? tr� c?a h�ng</label>
         <div class="flex items-center gap-3 w-full location-row">
-          <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0" onclick="openLocationModal()" title="Chọn định vị Outlet">Chọn định vị Outlet</button>
+          <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0" onclick="openLocationModal()" title="Ch?n d?nh v? Outlet">Ch?n d?nh v? Outlet</button>
         </div>
         <input type="hidden" id="outletLat">
         <input type="hidden" id="outletLng">
       </div>
      </div>
-     <div class="mt-6"><button onclick="validateTab1()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Tiếp tục </button>
+     <div class="mt-6"><button onclick="validateTab1()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Ti?p t?c </button>
      </div>
     </div><!-- Tab 2: Request Items -->
     <div id="tab2" class="flex-1 overflow-y-auto p-4 hidden">
      <div id="requestItems" class="space-y-4"></div>
      <div class="mt-6 pt-4 border-t border-gray-100">
        <div class="flex gap-3">
-         <button onclick="addRequestItem()" class="flex-1 py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Thêm hạng mục <span class="btn-icon" aria-hidden="true">+</span></button>
-         <button onclick="validateTab2()" class="flex-1 py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Tiếp tục</button>
+         <button onclick="addRequestItem()" class="flex-1 py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Th�m h?ng m?c <span class="btn-icon" aria-hidden="true">+</span></button>
+         <button onclick="validateTab2()" class="flex-1 py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Ti?p t?c</button>
        </div>
      </div>
     </div><!-- Tab 3: Content -->
     <div id="tab3" class="flex-1 overflow-y-auto p-4 hidden fade-in">
      <div class="space-y-4">
-      <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl"><span class="font-medium">Sử dụng nội dung cũ</span> <button id="oldContentToggle" onclick="toggleOldContent()" title="Sử dụng nội dung cũ" aria-label="Sử dụng nội dung cũ" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative">
+      <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl"><span class="font-medium">S? d?ng n?i dung cu</span> <button id="oldContentToggle" onclick="toggleOldContent()" title="S? d?ng n?i dung cu" aria-label="S? d?ng n?i dung cu" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative">
         <div class="toggle-slider w-5 h-5 bg-gray-100 rounded-full shadow-sm"></div></button>
       </div>
       <div id="newContentSection">
-        <label class="block text-sm font-medium mb-1.5 text-gray-700">Nội dung bảng hiệu <span class="text-red-500">*</span></label>
+        <label class="block text-sm font-medium mb-1.5 text-gray-700">N?i dung b?ng hi?u <span class="text-red-500">*</span></label>
         <div id="quickFillWrapper">
-          <textarea id="signContent" rows="4" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nhập nội dung bảng hiệu"></textarea>
+          <textarea id="signContent" rows="4" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nh?p n?i dung b?ng hi?u"></textarea>
 
           <!-- Quick sample bubbles -->
           <div id="quickSamples" class="mt-1 flex flex-wrap gap-2"></div>
           <!-- control row: note on left, quick-fill controls on right (sits right under textarea) -->
           <div id="quickFillCollapseRow" class="w-full flex justify-between items-center mt-1">
-            <div id="quickFillNote" class="hidden text-xs italic text-gray-400">Chọn 1 nội dung để nhập nhanh nội dung</div>
+            <div id="quickFillNote" class="hidden text-xs italic text-gray-400">Ch?n 1 n?i dung d? nh?p nhanh n?i dung</div>
             <div class="flex items-center gap-2">
               <button id="quickFillCollapsed" class="hidden quick-fill-collapsed inline-flex items-center gap-2 px-2 py-1 text-xs rounded-md bg-gray-800 text-white">
-                <span>Nhập nội dung nhanh</span>
-                <span class="text-gray-300">▾</span>
+                <span>Nh?p n?i dung nhanh</span>
+                <span class="text-gray-300">?</span>
               </button>
-              <button id="quickFillCollapseBtn" class="text-xs text-gray-500 hidden">Thu gọn ▴</button>
+              <button id="quickFillCollapseBtn" class="text-xs text-gray-500 hidden">Thu g?n ?</button>
             </div>
           </div>
         </div>
       </div>
       <div id="oldContentSection" class="hidden">
        <div class="mb-1">
-         <label class="block text-sm font-medium mb-1.5 text-gray-700">Yêu cầu thêm (nếu có)</label>
-         <textarea id="oldContentExtra" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm" placeholder="Ghi yêu cầu thêm hoặc thay đổi so với nội dung cũ nếu cần (không bắt buộc)."></textarea>
+         <label class="block text-sm font-medium mb-1.5 text-gray-700">Y�u c?u th�m (n?u c�)</label>
+         <textarea id="oldContentExtra" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-sm" placeholder="Ghi y�u c?u th�m ho?c thay d?i so v?i n?i dung cu n?u c?n (kh�ng b?t bu?c)."></textarea>
        </div>
       </div>
-      <div class="pt-4 border-t border-gray-100"><label class="block text-sm font-medium mb-1.5 text-gray-700">Ảnh hiện trạng <span class="text-red-500">*</span></label>
+      <div class="pt-4 border-t border-gray-100"><label class="block text-sm font-medium mb-1.5 text-gray-700">?nh hi?n tr?ng <span class="text-red-500">*</span></label>
       <div id="statusImagesPreview" class="flex flex-wrap gap-2 mb-2"></div><label id="statusUploadLabel" class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-50">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg> Upload ảnh hiện trạng <input type="file" accept="image/*" multiple class="hidden" onchange="handleStatusImages(this)"> </label>
+        </svg> Upload ?nh hi?n tr?ng <input type="file" accept="image/*" multiple class="hidden" onchange="handleStatusImages(this)"> </label>
       </div>
      </div>
-     <div class="mt-6 pt-4 border-t border-gray-100"><button onclick="submitNewRequest()" id="submitNewBtn" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Xác nhận yêu cầu </button>
+     <div class="mt-6 pt-4 border-t border-gray-100"><button onclick="submitNewRequest()" id="submitNewBtn" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> X�c nh?n y�u c?u </button>
      </div>
     </div>
    </div><!-- Warranty Check Form -->
    <div id="warrantyScreen" class="h-full flex-col hidden">
-    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="Về trang chủ" aria-label="Về trang chủ" class="p-2 -ml-2">
+    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="V? trang ch?" aria-label="V? trang ch?" class="p-2 -ml-2">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg></button>
-     <h2 class="font-semibold">Kiểm Tra Bảo Hành</h2>
+     <h2 class="font-semibold">Ki?m Tra B?o H�nh</h2>
      <div class="w-10"></div>
     </div>
-    <div class="flex border-b border-gray-100"><button id="wTab1Btn" onclick="switchWarrantyTab(1)" class="flex-1 py-3 text-sm font-medium tab-active"> <span class="block">1</span> <span class="text-xs">Thông tin</span> </button> <button id="wTab2Btn" onclick="switchWarrantyTab(2)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">2</span> <span class="text-xs">Hiện trạng</span> </button>
+    <div class="flex border-b border-gray-100"><button id="wTab1Btn" onclick="switchWarrantyTab(1)" class="flex-1 py-3 text-sm font-medium tab-active"> <span class="block">1</span> <span class="text-xs">Th�ng tin</span> </button> <button id="wTab2Btn" onclick="switchWarrantyTab(2)" class="flex-1 py-3 text-sm font-medium tab-inactive"> <span class="block">2</span> <span class="text-xs">Hi?n tr?ng</span> </button>
     </div><!-- Warranty Tab 1 -->
     <div id="wTab1" class="flex-1 overflow-y-auto p-4 fade-in">
      <div class="space-y-4">
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Outlet Code <span class="text-red-500">*</span></label> <input type="tel" id="wOutletCode" inputmode="numeric" pattern="\d*" maxlength="8" oninput="sanitizeOutletCodeInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập mã outlet">
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Outlet Code <span class="text-red-500">*</span></label> <input type="tel" id="wOutletCode" inputmode="numeric" pattern="\d*" maxlength="8" oninput="sanitizeOutletCodeInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p m� outlet">
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Tên Outlet <span class="text-red-500">*</span></label> <input type="text" id="wOutletName" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập tên outlet">
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">T�n Outlet <span class="text-red-500">*</span></label> <input type="text" id="wOutletName" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p t�n outlet">
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Địa chỉ <span class="text-red-500">*</span></label> <textarea id="wAddress" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nhập địa chỉ"></textarea>
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">�?a ch? <span class="text-red-500">*</span></label> <textarea id="wAddress" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Nh?p d?a ch?"></textarea>
       </div>
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại <span class="text-red-500">*</span></label> <input type="tel" id="wPhone" inputmode="tel" pattern="\d*" oninput="sanitizeIntegerInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập số điện thoại">
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">S? di?n tho?i <span class="text-red-500">*</span></label> <input type="tel" id="wPhone" inputmode="tel" pattern="\d*" oninput="sanitizeIntegerInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p s? di?n tho?i">
       </div>
      </div>
-     <div class="mt-6"><button onclick="validateWarrantyTab1()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Tiếp tục </button>
+     <div class="mt-6"><button onclick="validateWarrantyTab1()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Ti?p t?c </button>
      </div>
     </div><!-- Warranty Tab 2 -->
     <div id="wTab2" class="flex-1 overflow-y-auto p-4 hidden fade-in">
      <div class="space-y-4">
-      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Nội dung yêu cầu bảo hành <span class="text-red-500">*</span></label>
-       <p class="text-xs text-gray-500 mb-2">Ghi nội dung yêu cầu kiểm tra bảo hành</p><textarea id="warrantyContent" rows="4" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="Mô tả chi tiết tình trạng cần bảo hành"></textarea>
+      <div><label class="block text-sm font-medium mb-1.5 text-gray-700">N?i dung y�u c?u b?o h�nh <span class="text-red-500">*</span></label>
+       <p class="text-xs text-gray-500 mb-2">Ghi n?i dung y�u c?u ki?m tra b?o h�nh</p><textarea id="warrantyContent" rows="4" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 resize-none" placeholder="M� t? chi ti?t t�nh tr?ng c?n b?o h�nh"></textarea>
       </div>
-      <div class="pt-4 border-t border-gray-100"><label class="block text-sm font-medium mb-1.5 text-gray-700">Ảnh hiện trạng <span class="text-red-500">*</span></label>
+      <div class="pt-4 border-t border-gray-100"><label class="block text-sm font-medium mb-1.5 text-gray-700">?nh hi?n tr?ng <span class="text-red-500">*</span></label>
        <div id="warrantyImagesPreview" class="flex flex-wrap gap-2 mb-2"></div><label class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-50">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg> Upload ảnh hiện trạng <input type="file" accept="image/*" multiple class="hidden" onchange="handleWarrantyImages(this)"> </label>
+        </svg> Upload ?nh hi?n tr?ng <input type="file" accept="image/*" multiple class="hidden" onchange="handleWarrantyImages(this)"> </label>
       </div>
      </div>
-     <div class="mt-6 pt-4 border-t border-gray-100"><button onclick="submitWarrantyRequest()" id="submitWarrantyBtn" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Xác nhận yêu cầu </button>
+     <div class="mt-6 pt-4 border-t border-gray-100"><button onclick="submitWarrantyRequest()" id="submitWarrantyBtn" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> X�c nh?n y�u c?u </button>
      </div>
     </div>
    </div><!-- Request List -->
   <div id="listScreen" class="h-full flex-col hidden mobile-main-screen">
-    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="Về trang chủ" aria-label="Về trang chủ" class="p-2 -ml-2">
+    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="goHome()" title="V? trang ch?" aria-label="V? trang ch?" class="p-2 -ml-2">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg></button>
-     <h2 class="font-semibold">Danh Sách Yêu Cầu</h2>
-     <button onclick="toggleMobileListViewMode()" title="Đổi chế độ xem" aria-label="Đổi chế độ xem" class="p-2 -mr-2">
+     <h2 class="font-semibold">Danh S�ch Y�u C?u</h2>
+     <button onclick="toggleMobileListViewMode()" title="�?i ch? d? xem" aria-label="�?i ch? d? xem" class="p-2 -mr-2">
       <svg id="viewModeIcon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
        <!-- Default to List Icon (because default mode is gallery) -->
        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -805,24 +805,24 @@
     <!-- Search bar -->
     <div class="px-4 py-2 border-b border-gray-100 bg-gray-50">
     <div class="relative">
-     <input id="listSearchInput" type="search" placeholder="Tìm theo tên, mã outlet, địa chỉ..." oninput="onListSearch(this.value)" class="w-full pl-3 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 outline-none focus:border-gray-400">
+     <input id="listSearchInput" type="search" placeholder="T�m theo t�n, m� outlet, d?a ch?..." oninput="onListSearch(this.value)" class="w-full pl-3 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 outline-none focus:border-gray-400">
     </div>
     </div>
-    <div class="flex border-b border-gray-100"><button id="listTab1Btn" onclick="switchListTab('new')" class="flex-1 py-3 text-sm font-medium tab-active"> Yêu cầu mới <span id="newCount" class="ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full">0</span> </button> <button id="listTab2Btn" onclick="switchListTab('warranty')" class="flex-1 py-3 text-sm font-medium tab-inactive"> Bảo hành <span id="warrantyCount" class="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full">0</span> </button>
+    <div class="flex border-b border-gray-100"><button id="listTab1Btn" onclick="switchListTab('new')" class="flex-1 py-3 text-sm font-medium tab-active"> Y�u c?u m?i <span id="newCount" class="ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full">0</span> </button> <button id="listTab2Btn" onclick="switchListTab('warranty')" class="flex-1 py-3 text-sm font-medium tab-inactive"> B?o h�nh <span id="warrantyCount" class="ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full">0</span> </button>
     </div>
     <!-- Active design filter banner -->
     <div id="designFilterBanner" class="hidden px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-     <span class="text-xs text-gray-500">Lọc:</span>
+     <span class="text-xs text-gray-500">L?c:</span>
      <span id="designFilterLabel" class="text-xs font-semibold text-gray-900 bg-gray-200 px-2 py-0.5 rounded-full"></span>
      <button onclick="clearDesignFilter()" class="ml-auto text-xs text-gray-400 flex items-center gap-1">
-      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg> Xóa lọc
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg> X�a l?c
      </button>
     </div>
     <div id="requestListContainer" class="flex-1 overflow-y-auto p-4">
      <div id="emptyState" class="h-full flex flex-col items-center justify-center text-gray-400">
       <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
-      <p>Chưa có yêu cầu nào</p>
+      <p>Chua c� y�u c?u n�o</p>
      </div>
      <div id="requestList" class="space-y-3"></div>
     </div>
@@ -831,13 +831,13 @@
   <!-- Notifications -->
   <div id="notificationsScreen" class="h-full flex-col hidden mobile-main-screen">
    <div class="flex items-center justify-between p-4 border-b border-gray-100">
-    <h2 class="font-semibold">Thông báo</h2>
+    <h2 class="font-semibold">Th�ng b�o</h2>
     <div class="w-10"></div>
    </div>
    <div id="notificationsContainer" class="flex-1 overflow-y-auto p-4">
     <div id="notificationsEmpty" class="h-full flex flex-col items-center justify-center text-gray-400">
     <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-    <p>Chưa có thông báo tương tác</p>
+    <p>Chua c� th�ng b�o tuong t�c</p>
     </div>
     <div id="notificationsList" class="space-y-3"></div>
    </div>
@@ -846,35 +846,35 @@
   <!-- Account -->
   <div id="accountScreen" class="h-full flex-col hidden mobile-main-screen">
    <div class="flex items-center justify-between p-4 border-b border-gray-100">
-    <h2 class="font-semibold">Tài Khoản</h2>
-    <button id="accountThemeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn" type="button" title="Đổi giao diện" aria-label="Đổi giao diện">
-    <span class="theme-icon" aria-hidden="true">🌙</span>
-    <span class="theme-label">Tối</span>
+    <h2 class="font-semibold">T�i Kho?n</h2>
+    <button id="accountThemeToggleBtn" onclick="toggleTheme()" class="theme-toggle-btn" type="button" title="�?i giao di?n" aria-label="�?i giao di?n">
+    <span class="theme-icon" aria-hidden="true">??</span>
+    <span class="theme-label">T?i</span>
     </button>
    </div>
    <div class="flex-1 overflow-y-auto p-4">
     <div class="space-y-4">
     <div>
-     <label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại</label>
-     <input id="accountPhone" type="tel" inputmode="numeric" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập số điện thoại">
+     <label class="block text-sm font-medium mb-1.5 text-gray-700">S? di?n tho?i</label>
+     <input id="accountPhone" type="tel" inputmode="numeric" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p s? di?n tho?i">
     </div>
     <div>
-    <label class="block text-sm font-medium mb-1.5 text-gray-700">Mã SS/SE</label>
-    <input id="accountSSCode" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập mã SS/SE">
+    <label class="block text-sm font-medium mb-1.5 text-gray-700">M� SS/SE</label>
+    <input id="accountSSCode" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p m� SS/SE">
     </div>
     <div>
-    <label class="block text-sm font-medium mb-1.5 text-gray-700">Tên SS/SE</label>
-    <input id="accountSSName" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập tên SS/SE">
+    <label class="block text-sm font-medium mb-1.5 text-gray-700">T�n SS/SE</label>
+    <input id="accountSSName" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p t�n SS/SE">
     </div>
     <div>
-     <label class="block text-sm font-medium mb-1.5 text-gray-700">Khu vực</label>
-     <input id="accountRegion" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập khu vực">
+     <label class="block text-sm font-medium mb-1.5 text-gray-700">Khu v?c</label>
+     <input id="accountRegion" type="text" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nh?p khu v?c">
     </div>
     <div class="pt-2">
-     <button onclick="saveAccountProfile()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Lưu thông tin</button>
+     <button onclick="saveAccountProfile()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Luu th�ng tin</button>
     </div>
     <div>
-     <button onclick="logout()" class="w-full py-4 border border-red-200 text-red-500 font-medium rounded-xl active:bg-red-50 transition-colors">Đăng xuất</button>
+     <button onclick="logout()" class="w-full py-4 border border-red-200 text-red-500 font-medium rounded-xl active:bg-red-50 transition-colors">�ang xu?t</button>
     </div>
     </div>
    </div>
@@ -886,34 +886,34 @@
    <span class="main-nav-icon">
    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
    </span>
-   <span>Trang chủ</span>
+   <span>Trang ch?</span>
   </button>
    <button id="mainTabList" type="button" class="main-nav-btn" onclick="openMainTab('list')">
     <span class="main-nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg>
     </span>
-    <span>Danh Sách</span>
+    <span>Danh S�ch</span>
    </button>
    <button id="mainTabNotifications" type="button" class="main-nav-btn" onclick="openMainTab('notifications')">
     <span class="main-nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
     </span>
-    <span>Thông báo</span>
+    <span>Th�ng b�o</span>
    </button>
    <button id="mainTabAccount" type="button" class="main-nav-btn" onclick="openMainTab('account')">
     <span class="main-nav-icon">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z"/><path d="M4 21v-2a4 4 0 013-3.87"/><path d="M20 21v-2a4 4 0 00-3-3.87"/></svg>
     </span>
-    <span>Tài Khoản</span>
+    <span>T�i Kho?n</span>
    </button>
   </div>
 
   <!-- Request Detail -->
    <div id="detailScreen" class="h-full flex-col hidden">
-    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="backToList()" title="Quay lại" aria-label="Quay lại" class="p-2 -ml-2">
+    <div class="flex items-center justify-between p-4 border-b border-gray-100"><button onclick="backToList()" title="Quay l?i" aria-label="Quay l?i" class="p-2 -ml-2">
       <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
       </svg></button>
-    <h2 class="font-semibold">Chi Tiết Yêu Cầu</h2><button onclick="deleteCurrentRequest()" title="Xóa yêu cầu" aria-label="Xóa yêu cầu" class="p-2 -mr-2 text-red-500">
+    <h2 class="font-semibold">Chi Ti?t Y�u C?u</h2><button onclick="deleteCurrentRequest()" title="X�a y�u c?u" aria-label="X�a y�u c?u" class="p-2 -mr-2 text-red-500">
      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
      </svg></button>
     </div>
@@ -921,17 +921,17 @@
     <!-- Edit Request FAB -->
     <button id="editRequestFab" onclick="window._editRequestOrigin='detail'; openEditRequestSheet();" class="edit-request-fab hidden">
       <svg aria-hidden="true" class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-      <span>Yêu cầu chỉnh sửa</span>
+      <span>Y�u c?u ch?nh s?a</span>
     </button>
    </div><!-- Design Preview Modal -->
     <div id="designModal" class="fixed inset-0 bg-black bg-opacity-90 hidden flex-col design-modal">
      <div class="flex items-center justify-between p-4">
        <div class="w-10"></div>
        <div class="flex flex-col items-center gap-0.5">
-        <h2 class="font-semibold text-white leading-tight" id="dvModalTitle">Xem Thiết Kế</h2>
+        <h2 class="font-semibold text-white leading-tight" id="dvModalTitle">Xem Thi?t K?</h2>
         <span id="dvOutletCounter" class="text-xs text-gray-400"></span>
        </div>
-       <button onclick="closeDesignModal()" title="Đóng" aria-label="Đóng" class="p-2 text-white">
+       <button onclick="closeDesignModal()" title="��ng" aria-label="��ng" class="p-2 text-white">
         <svg aria-hidden="true" class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg></button>
       </div>
@@ -943,10 +943,10 @@
      <!-- Header with mode tabs -->
      <div class="flex items-center p-3 border-b gap-2 flex-shrink-0">
       <div class="flex-1 flex gap-2">
-       <button id="locTabGPS" onclick="switchLocTab('gps')" class="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white">Vị trí hiện tại</button>
-       <button id="locTabMap" onclick="switchLocTab('map')" class="flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Chọn trên bản đồ</button>
+       <button id="locTabGPS" onclick="switchLocTab('gps')" class="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white">V? tr� hi?n t?i</button>
+       <button id="locTabMap" onclick="switchLocTab('map')" class="flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Ch?n tr�n b?n d?</button>
       </div>
-       <button onclick="closeMapModal()" title="Đóng" aria-label="Đóng" class="p-2 text-gray-500 flex-shrink-0">
+       <button onclick="closeMapModal()" title="��ng" aria-label="��ng" class="p-2 text-gray-500 flex-shrink-0">
      <svg aria-hidden="true" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
      </div>
@@ -955,24 +955,24 @@
      <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
       <svg class="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
      </div>
-    <div id="gpsStatus" class="text-sm text-gray-500 text-center">Bấm nút bên dưới để lấy vị trí hiện tại</div>
-    <div class="text-sm text-red-600 text-center font-semibold max-w-xs">Chú ý: Chỉ dùng khi bạn đang ở tại điểm bán. Nếu không phải ở điểm bán, vui lòng chọn vị trí trên bản đồ.</div>
-     <button onclick="useCurrentLocation()" class="px-6 py-3 bg-gray-900 text-white rounded-xl font-medium">Lấy vị trí hiện tại</button>
+    <div id="gpsStatus" class="text-sm text-gray-500 text-center">B?m n�t b�n du?i d? l?y v? tr� hi?n t?i</div>
+    <div class="text-sm text-red-600 text-center font-semibold max-w-xs">Ch� �: Ch? d�ng khi b?n dang ? t?i di?m b�n. N?u kh�ng ph?i ? di?m b�n, vui l�ng ch?n v? tr� tr�n b?n d?.</div>
+     <button onclick="useCurrentLocation()" class="px-6 py-3 bg-gray-900 text-white rounded-xl font-medium">L?y v? tr� hi?n t?i</button>
     </div>
      <!-- Map tab -->
      <div id="locPanelMap" class="hidden flex-1 flex flex-col min-h-0">
       <!-- Search bar -->
       <div class="p-3 border-b flex-shrink-0">
-       <input id="mapSearchInput" type="text" placeholder="Tìm kiếm địa chỉ..." class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" oninput="searchMapAddress(this.value)">
+       <input id="mapSearchInput" type="text" placeholder="T�m ki?m d?a ch?..." class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" oninput="searchMapAddress(this.value)">
       <div id="mapSearchResults" class="mt-1 bg-gray-50 border border-gray-200 rounded-lg shadow-md hidden max-h-40 overflow-y-auto"></div>
       </div>
       <!-- Map container -->
       <div id="mapContainer" class="flex-1 min-h-0"></div>
       <!-- Bottom action bar -->
       <div class="p-3 border-t flex items-center gap-3 flex-shrink-0 bg-gray-50">
-       <div id="pickedCoords" class="text-xs text-gray-500 flex-1">Tap vào bản đồ để chọn vị trí</div>
-       <button id="locateMeBtn" onclick="locateMeOnMap()" title="Về vị trí hiện tại" class="p-2 bg-gray-100 text-gray-700 rounded-lg text-base leading-none flex-shrink-0">◎</button>
-       <button onclick="savePickedLocation()" class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium">Chọn vị trí này</button>
+       <div id="pickedCoords" class="text-xs text-gray-500 flex-1">Tap v�o b?n d? d? ch?n v? tr�</div>
+       <button id="locateMeBtn" onclick="locateMeOnMap()" title="V? v? tr� hi?n t?i" class="p-2 bg-gray-100 text-gray-700 rounded-lg text-base leading-none flex-shrink-0">?</button>
+       <button onclick="savePickedLocation()" class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium">Ch?n v? tr� n�y</button>
       </div>
      </div>
     </div>
@@ -985,14 +985,14 @@
        <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
        </svg>
       </div>
-      <h3 class="text-lg font-semibold mb-2">Yêu cầu tạo thành công!</h3>
-      <p class="text-gray-500 text-sm">QCAG cảm ơn &amp; sẽ sớm phản hồi yêu cầu của bạn.</p>
-      <p class="text-gray-500 text-sm mt-2">Bạn có muốn tạo thêm yêu cầu mới không?</p>
+      <h3 class="text-lg font-semibold mb-2">Y�u c?u t?o th�nh c�ng!</h3>
+      <p class="text-gray-500 text-sm">QCAG c?m on &amp; s? s?m ph?n h?i y�u c?u c?a b?n.</p>
+      <p class="text-gray-500 text-sm mt-2">B?n c� mu?n t?o th�m y�u c?u m?i kh�ng?</p>
      </div>
      <div class="space-y-3">
-       <button onclick="createAnotherRequest()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl"> Tạo yêu cầu mới </button>
-      <button onclick="viewLastCreatedRequest()" class="w-full py-3 bg-gray-50 text-gray-900 font-medium rounded-xl border border-gray-200"> Xem chi tiết yêu cầu vừa tạo </button>
-       <button onclick="goHomeFromModal()" class="w-full py-3 text-gray-600 font-medium"> Về trang chủ </button>
+       <button onclick="createAnotherRequest()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl"> T?o y�u c?u m?i </button>
+      <button onclick="viewLastCreatedRequest()" class="w-full py-3 bg-gray-50 text-gray-900 font-medium rounded-xl border border-gray-200"> Xem chi ti?t y�u c?u v?a t?o </button>
+       <button onclick="goHomeFromModal()" class="w-full py-3 text-gray-600 font-medium"> V? trang ch? </button>
      </div>
     </div>
    </div><!-- Delete Confirmation -->
@@ -1000,17 +1000,17 @@
   <div id="duplicateOutletModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-60 flex items-center justify-center">
     <div class="bg-gray-50 w-full max-w-md rounded-xl p-6 fade-in max-h-[90vh] overflow-auto relative">
       <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
-      <button onclick="closeDuplicateOutletModal()" aria-label="Đóng" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600">
+      <button onclick="closeDuplicateOutletModal()" aria-label="��ng" class="absolute right-4 top-4 text-gray-400 hover:text-gray-600">
         <svg aria-hidden="true" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
       <div class="text-center mb-4">
-        <h3 id="duplicateOutletTitle" class="text-lg font-semibold mb-2">Outlet trùng lặp</h3>
-        <p id="duplicateOutletMessage" class="text-gray-500 text-sm">Outlet này bạn đã yêu cầu vào lúc ...</p>
-        <p id="duplicateOutletConfirmQuestion" class="text-gray-500 text-sm mt-2">Bạn có chắc đây là hạng mục mới của Outlet này không?</p>
+        <h3 id="duplicateOutletTitle" class="text-lg font-semibold mb-2">Outlet tr�ng l?p</h3>
+        <p id="duplicateOutletMessage" class="text-gray-500 text-sm">Outlet n�y b?n d� y�u c?u v�o l�c ...</p>
+        <p id="duplicateOutletConfirmQuestion" class="text-gray-500 text-sm mt-2">B?n c� ch?c d�y l� h?ng m?c m?i c?a Outlet n�y kh�ng?</p>
       </div>
       <div class="space-y-3">
-        <button id="dupViewBtn" onclick="openOutletRequestListFromDuplicateModal()" class="w-full py-4 bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-xl">Xem danh sách</button>
-        <button id="dupContinueBtn" onclick="continueWithNewOutlet()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl">Hạng mục mới</button>
+        <button id="dupViewBtn" onclick="openOutletRequestListFromDuplicateModal()" class="w-full py-4 bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-xl">Xem danh s�ch</button>
+        <button id="dupContinueBtn" onclick="continueWithNewOutlet()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl">H?ng m?c m?i</button>
       </div>
     </div>
   </div>
@@ -1020,12 +1020,12 @@
     <div class="bg-gray-50 w-full max-w-md rounded-xl p-6 fade-in max-h-[90vh] overflow-auto">
       <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
       <div class="text-center mb-4">
-        <h3 class="text-lg font-semibold mb-2">Hạng mục trùng khớp</h3>
-        <p class="text-gray-500 text-sm">Yêu cầu bạn vừa tạo có các hạng mục và kích thước trùng khớp với yêu cầu trước đó. Vui lòng điều chỉnh các hạng mục hoặc mở yêu cầu cũ để chỉnh sửa.</p>
+        <h3 class="text-lg font-semibold mb-2">H?ng m?c tr�ng kh?p</h3>
+        <p class="text-gray-500 text-sm">Y�u c?u b?n v?a t?o c� c�c h?ng m?c v� k�ch thu?c tr�ng kh?p v?i y�u c?u tru?c d�. Vui l�ng di?u ch?nh c�c h?ng m?c ho?c m? y�u c?u cu d? ch?nh s?a.</p>
       </div>
       <div class="space-y-3">
-        <button onclick="openExistingRequestFromDuplicateItemsModal()" class="w-full py-4 bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-xl">Mở yêu cầu cũ</button>
-        <button onclick="closeDuplicateItemsModal()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl">Sửa hạng mục</button>
+        <button onclick="openExistingRequestFromDuplicateItemsModal()" class="w-full py-4 bg-gray-50 border border-gray-200 text-gray-900 font-medium rounded-xl">M? y�u c?u cu</button>
+        <button onclick="closeDuplicateItemsModal()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl">S?a h?ng m?c</button>
       </div>
     </div>
   </div>
@@ -1039,12 +1039,12 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
           </svg>
         </div>
-        <h3 class="text-lg font-semibold mb-3">Outlet đã có yêu cầu</h3>
+        <h3 class="text-lg font-semibold mb-3">Outlet d� c� y�u c?u</h3>
         <p id="otherOutletMessage" class="text-gray-500 text-sm leading-relaxed"></p>
       </div>
       <div class="space-y-3">
-        <button onclick="confirmTakeoverOutlet()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">Đúng, tôi quản lý</button>
-        <button onclick="cancelTakeoverOutlet()" class="w-full py-4 border border-gray-200 text-gray-700 font-medium rounded-xl active:bg-gray-50 transition-colors">Tôi không quản lý</button>
+        <button onclick="confirmTakeoverOutlet()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors">��ng, t�i qu?n l�</button>
+        <button onclick="cancelTakeoverOutlet()" class="w-full py-4 border border-gray-200 text-gray-700 font-medium rounded-xl active:bg-gray-50 transition-colors">T�i kh�ng qu?n l�</button>
       </div>
     </div>
   </div>
@@ -1055,43 +1055,43 @@
       <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5"></div>
       <!-- Step 1: category selection -->
       <div id="editSheetStep1">
-        <h3 class="font-semibold text-base mb-1">Yêu cầu chỉnh sửa</h3>
-        <p class="text-sm text-gray-500 mb-4">Chọn nội dung cần chỉnh sửa <span class="text-xs">(có thể chọn nhiều)</span></p>
+        <h3 class="font-semibold text-base mb-1">Y�u c?u ch?nh s?a</h3>
+        <p class="text-sm text-gray-500 mb-4">Ch?n n?i dung c?n ch?nh s?a <span class="text-xs">(c� th? ch?n nhi?u)</span></p>
         <div class="space-y-3 mb-5" id="editCategoryList">
-          <label class="edit-cat-option" onclick="toggleEditCategory('Sửa nội dung')">
+          <label class="edit-cat-option" onclick="toggleEditCategory('S?a n?i dung')">
             <div class="edit-cat-check" id="editCat_noiDung"></div>
-            <span>Sửa nội dung</span>
+            <span>S?a n?i dung</span>
           </label>
-          <label class="edit-cat-option" onclick="toggleEditCategory('Thay đổi hạng mục')">
+          <label class="edit-cat-option" onclick="toggleEditCategory('Thay d?i h?ng m?c')">
             <div class="edit-cat-check" id="editCat_hangMuc"></div>
-            <span>Thay đổi hạng mục</span>
+            <span>Thay d?i h?ng m?c</span>
           </label>
-          <label class="edit-cat-option" onclick="toggleEditCategory('Đổi brand')">
+          <label class="edit-cat-option" onclick="toggleEditCategory('�?i brand')">
             <div class="edit-cat-check" id="editCat_brand"></div>
-            <span>Đổi brand</span>
+            <span>�?i brand</span>
           </label>
         </div>
-        <button onclick="proceedEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">Tiếp theo</button>
-        <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">Hủy</button>
+        <button onclick="proceedEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">Ti?p theo</button>
+        <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">H?y</button>
       </div>
       <!-- Step 2: write edit details -->
       <div id="editSheetStep2" class="hidden">
         <button onclick="backToEditCategories()" class="flex items-center gap-1 text-sm text-gray-500 mb-4 -ml-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-          Quay lại
+          Quay l?i
         </button>
-        <h3 class="font-semibold text-base mb-1">Nội dung chỉnh sửa</h3>
+        <h3 class="font-semibold text-base mb-1">N?i dung ch?nh s?a</h3>
         <p id="editSheetCategLabel" class="text-xs text-gray-500 mb-3"></p>
-        <textarea id="editRequestInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-2" placeholder="Mô tả chi tiết nội dung cần chỉnh sửa..."></textarea>
+        <textarea id="editRequestInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-2" placeholder="M� t? chi ti?t n?i dung c?n ch?nh s?a..."></textarea>
         <div id="editRequestImgPreview" class="edit-request-img-preview hidden"></div>
         <label class="edit-request-img-btn">
           <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          Thêm ảnh
+          Th�m ?nh
           <input type="file" accept="image/*" multiple class="hidden" onchange="handleEditRequestImagePick(this)">
         </label>
         <div class="mb-4"></div>
-        <button onclick="submitEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">Gửi yêu cầu</button>
-        <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">Hủy</button>
+        <button onclick="submitEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">G?i y�u c?u</button>
+        <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">H?y</button>
       </div>
     </div>
   </div>
@@ -1102,12 +1102,12 @@
       <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style="background:rgba(239,68,68,0.1)">
        <svg class="w-7 h-7" fill="none" stroke="#ef4444" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       </div>
-      <h3 class="text-base font-semibold mb-1">Xóa yêu cầu này?</h3>
-      <p class="text-sm" style="color:#6b7280">Hành động này không thể hoàn tác.</p>
+      <h3 class="text-base font-semibold mb-1">X�a y�u c?u n�y?</h3>
+      <p class="text-sm" style="color:#6b7280">H�nh d?ng n�y kh�ng th? ho�n t�c.</p>
      </div>
      <div class="space-y-2.5">
-      <button onclick="confirmDelete()" class="w-full py-3 rounded-xl font-medium text-sm text-white" style="background:#ef4444">Xóa</button>
-      <button onclick="closeDeleteModal()" class="w-full py-3 rounded-xl font-medium text-sm border border-gray-200" style="background:transparent">Hủy</button>
+      <button onclick="confirmDelete()" class="w-full py-3 rounded-xl font-medium text-sm text-white" style="background:#ef4444">X�a</button>
+      <button onclick="closeDeleteModal()" class="w-full py-3 rounded-xl font-medium text-sm border border-gray-200" style="background:transparent">H?y</button>
      </div>
     </div>
    </div><!-- Toast -->
@@ -1118,24 +1118,24 @@
   </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app/js/core/state.js?v=20260416"></script>
-  <script src="app/js/shared/utils.js?v=20260416"></script>
-  <script src="app/js/shared/ui.js?v=20260416"></script>
-  <script src="app/js/shared/image-utils.js?v=20260416"></script>
-  <script src="app/js/shared/location.js?v=20260416"></script>
-  <script src="app/js/shared/sdk-init.js?v=20260416"></script>
-  <script src="app/js/flows/login-flow.js?v=20260416"></script>
-  <script src="app/js/flows/request-flow.js?v=20260416"></script>
-  <script src="app/js/flows/warranty-flow.js?v=20260416"></script>
-  <script src="app/js/flows/list-flow.js?v=20260416"></script>
-  <script src="app/js/flows/detail-flow.js?v=20260416"></script>
-  <script src="app/js/flows/desktop-qcag-flow.js?v=20260416"></script>
-  <script src="app/js/flows/mobile-nav-flow.js?v=20260416"></script>
-  <script src="app/js/core/router.js?v=20260416"></script>
-  <script src="app/js/app.js?v=20260416"></script>
+  <script src="app/js/core/state.js?v=20260418"></script>
+  <script src="app/js/shared/utils.js?v=20260418"></script>
+  <script src="app/js/shared/ui.js?v=20260418"></script>
+  <script src="app/js/shared/image-utils.js?v=20260418"></script>
+  <script src="app/js/shared/location.js?v=20260418"></script>
+  <script src="app/js/shared/sdk-init.js?v=20260418"></script>
+  <script src="app/js/flows/login-flow.js?v=20260418"></script>
+  <script src="app/js/flows/request-flow.js?v=20260418"></script>
+  <script src="app/js/flows/warranty-flow.js?v=20260418"></script>
+  <script src="app/js/flows/list-flow.js?v=20260418"></script>
+  <script src="app/js/flows/detail-flow.js?v=20260418"></script>
+  <script src="app/js/flows/desktop-qcag-flow.js?v=20260418"></script>
+  <script src="app/js/flows/mobile-nav-flow.js?v=20260418"></script>
+  <script src="app/js/core/router.js?v=20260418"></script>
+  <script src="app/js/app.js?v=20260418"></script>
   <!-- v2.4.1 | 2026-04-16 -->
   <script>
-    // ── Service Worker registration + auto-update ───────────────────────────────
+    // -- Service Worker registration + auto-update -------------------------------
     (function () {
       if (!('serviceWorker' in navigator)) return;
 
@@ -1150,9 +1150,9 @@
           'justify-content:space-between;padding:12px 16px',
           'font-family:sans-serif;font-size:14px;gap:12px'
         ].join(';');
-        banner.innerHTML = '<span>\uD83C\uDF89 Có phiên bản mới <b>v2.4.1</b> — nhấn để cập nhật!</span>'
+        banner.innerHTML = '<span>\uD83C\uDF89 C� phi�n b?n m?i <b>v2.4.1</b> � nh?n d? c?p nh?t!</span>'
           + '<button id="sw-update-btn" style="background:#fff;color:#1d4ed8;border:none;'
-          + 'border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;flex-shrink:0">Cập nhật</button>';
+          + 'border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;flex-shrink:0">C?p nh?t</button>';
         document.body.appendChild(banner);
         document.getElementById('sw-update-btn').addEventListener('click', function () {
           if (reg.waiting) {

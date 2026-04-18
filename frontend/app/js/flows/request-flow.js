@@ -569,6 +569,10 @@ async function submitNewRequest() {
     if (typeof item === 'string' && item.startsWith('data:')) {
       // Already compressed on pick
       _compressedStatusDataUrls.push(item);
+    } else if (typeof item === 'string' && item.startsWith('blob:')) {
+      // Blob URL still present — compression + fallback both failed or are pending.
+      // Skip silently — this entry will be dropped.
+      console.warn('[submit] skipping unresolved blob URL:', item.slice(0, 40));
     } else if (item instanceof File || item instanceof Blob) {
       // Fallback: compress now (shouldn't happen normally)
       try {
@@ -664,6 +668,27 @@ async function submitNewRequest() {
           console.log('[submit] images confirmed saved:', parsed.length, 'image(s)');
         }
       } catch (verifyErr) { console.warn('[submit] image verify parse error:', verifyErr); }
+
+      // Fire push notification to QCAG team (best-effort, never blocks UI)
+      // Uses the same-origin Vercel function /api/ks/push/send — this guarantees
+      // the same VAPID keys that were used when QCAG subscribed, avoiding key-mismatch.
+      try {
+        const outletLabel = request.outletName || request.outletCode || 'Outlet';
+        const tkCode = (result.data && result.data.__backendId) || request.__backendId || '';
+        const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
+        fetch('/api/ks/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'QCAG — Yêu cầu mới từ Heineken',
+            body: senderName + ' vừa gửi yêu cầu mới cho Outlet ' + outletLabel + '.',
+            data: { backendId: tkCode },
+            role: 'qcag',
+          }),
+        }).catch(function (e) { console.warn('[push/new-req]', e); });
+      } catch (e) {
+        console.warn('[push] new request notify error (non-fatal):', e);
+      }
 
       // Reset form immediately so that if the user dismisses the modal via the
       // OS back gesture (instead of the official modal buttons) they land on a

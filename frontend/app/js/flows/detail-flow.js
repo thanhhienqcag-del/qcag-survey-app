@@ -1643,7 +1643,16 @@ async function submitEditRequest() {
     };
   }
 
-  const updated = { ...request, comments: JSON.stringify(comments), ...extraFields, updatedAt: new Date().toISOString() };
+  // Build PATCH payload with ONLY the fields that need to change.
+  // CRITICAL: Do NOT spread the full request — it may contain placeholder
+  // values like '["..."]' for statusImages (from the list endpoint), which
+  // would overwrite real GCS URLs in the database.
+  const updated = {
+    __backendId: request.__backendId,
+    comments: JSON.stringify(comments),
+    ...extraFields,
+    updatedAt: new Date().toISOString()
+  };
 
   closeEditRequestSheet();
 
@@ -1651,8 +1660,9 @@ async function submitEditRequest() {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
       showToast('Đã gửi yêu cầu chỉnh sửa');
+      // Merge changes into existing record (don't replace — updated is partial)
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
-      if (idx !== -1) allRequests[idx] = updated;
+      if (idx !== -1) Object.assign(allRequests[idx], updated);
       showRequestDetail(backendId);
         // If QCAG desktop UI is open in this session, force it back to 'processing'
         try {
@@ -1669,7 +1679,7 @@ async function submitEditRequest() {
       showToast('Lỗi gửi yêu cầu');
     }
   } else {
-    allRequests[reqIdx] = updated;
+    Object.assign(allRequests[reqIdx], updated);
     saveAllRequestsToStorage();
     showToast('Đã gửi yêu cầu chỉnh sửa (lưu local)');
     showRequestDetail(backendId);
