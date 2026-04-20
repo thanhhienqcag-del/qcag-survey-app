@@ -72,6 +72,8 @@ async function addDesignComment(backendId) {
   const imgs = _detailCommentPendingImages.slice();
   if (!text && imgs.length === 0) { showToast('Vui lòng nhập nội dung bình luận'); return; }
 
+  if (imgs.length > 0) showLoadingOverlay('Đang gửi bình luận...', 'Đang tải hình ảnh lên');
+
   const reqIdx = allRequests.findIndex(r => r.__backendId === backendId);
   if (reqIdx === -1) { showToast('Không tìm thấy yêu cầu'); return; }
 
@@ -110,17 +112,30 @@ async function addDesignComment(backendId) {
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
+      hideLoadingOverlay();
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) { allRequests[idx] = updated; }
+      // Push notification for comment
+      try {
+        const outletLabel = request.outletName || request.outletCode || 'Outlet';
+        if (String(authorRole).toLowerCase() === 'heineken') {
+          sendPushNotification({ title: 'Bình luận mới', body: authorName + ' đã gửi 1 tin nhắn mới trong bình luận ' + outletLabel, role: 'qcag', data: { backendId: backendId } });
+        } else {
+          const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+          sendPushNotification({ title: 'Bình luận mới', body: authorName + ' đã gửi 1 tin nhắn mới trong bình luận ' + outletLabel, phone: reqObj.phone, saleCode: reqObj.saleCode, data: { backendId: backendId } });
+        }
+      } catch (e) { /* non-fatal */ }
       showRequestDetail(backendId);
       viewDesign(backendId);
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi gửi bình luận');
     }
   } else {
     allRequests[reqIdx] = updated;
     saveAllRequestsToStorage();
+    hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
     viewDesign(backendId);
   }
@@ -134,6 +149,8 @@ async function addDetailComment(backendId) {
   const text = textarea.value.trim();
   const imgs = _detailCommentPendingImages.slice();
   if (!text && imgs.length === 0) { showToast('Vui lòng nhập nội dung bình luận'); return; }
+
+  if (imgs.length > 0) showLoadingOverlay('Đang gửi bình luận...', 'Đang tải hình ảnh lên');
 
   const reqIdx = allRequests.findIndex(r => r.__backendId === backendId);
   if (reqIdx === -1) { showToast('Không tìm thấy yêu cầu'); return; }
@@ -173,17 +190,30 @@ async function addDetailComment(backendId) {
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
+      hideLoadingOverlay();
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) { allRequests[idx] = updated; }
+      // Push notification for comment
+      try {
+        const outletLabel = request.outletName || request.outletCode || 'Outlet';
+        if (String(authorRole).toLowerCase() === 'heineken') {
+          sendPushNotification({ title: 'Bình luận mới', body: authorName + ' đã gửi 1 tin nhắn mới trong bình luận ' + outletLabel, role: 'qcag', data: { backendId: backendId } });
+        } else {
+          const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+          sendPushNotification({ title: 'Bình luận mới', body: authorName + ' đã gửi 1 tin nhắn mới trong bình luận ' + outletLabel, phone: reqObj.phone, saleCode: reqObj.saleCode, data: { backendId: backendId } });
+        }
+      } catch (e) { /* non-fatal */ }
       showRequestDetail(backendId);
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi gửi bình luận');
     }
   } else {
     allRequests[reqIdx] = updated;
     saveAllRequestsToStorage();
     textarea.value = '';
+    hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
     showRequestDetail(backendId);
   }
@@ -843,6 +873,8 @@ async function uploadDesign(input) {
   const files = Array.from(input.files);
   const currentImgs = JSON.parse(currentDetailRequest.designImages || '[]');
 
+  showLoadingOverlay('Đang upload thiết kế...', 'Vui lòng chờ trong giây lát');
+
   // Determine GCS subfolder: use mqFolder from request (e.g. 'mq-12345678'),
   // or fall back to generating from outletCode
   const mqSubfolder = currentDetailRequest.mqFolder ||
@@ -879,9 +911,11 @@ async function uploadDesign(input) {
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
+      hideLoadingOverlay();
       showToast('Đã upload thiết kế');
       showRequestDetail(currentDetailRequest.__backendId);
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi upload thiết kế');
     }
   } else {
@@ -890,9 +924,11 @@ async function uploadDesign(input) {
       allRequests[idx] = { ...allRequests[idx], designImages: JSON.stringify(currentImgs), designUpdatedAt: new Date().toISOString(), editingRequestedAt: null };
       currentDetailRequest = allRequests[idx];
       saveAllRequestsToStorage();
+      hideLoadingOverlay();
       showToast('Đã upload thiết kế (lưu local)');
       showRequestDetail(currentDetailRequest.__backendId);
     } else {
+      hideLoadingOverlay();
       showToast('Không tìm thấy yêu cầu để lưu');
     }
   }
@@ -903,6 +939,8 @@ async function uploadAcceptance(input) {
   if (!currentDetailRequest) return;
   const files = Array.from(input.files);
   const currentImgs = JSON.parse(currentDetailRequest.acceptanceImages || '[]');
+
+  showLoadingOverlay('Đang upload ảnh nghiệm thu...', 'Vui lòng chờ trong giây lát');
 
   for (const file of files) {
     // Compress immediately (WebP preferred) — much faster upload
@@ -934,10 +972,12 @@ async function uploadAcceptance(input) {
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
+      hideLoadingOverlay();
       showToast('Đã upload ảnh nghiệm thu');
       // Navigate to warranty list filtered by "Đã bảo hành" so item appears in correct category
       if (typeof showWarrantyListWithFilter === 'function') showWarrantyListWithFilter('warranty_done');
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi upload ảnh nghiệm thu');
     }
   } else {
@@ -946,9 +986,11 @@ async function uploadAcceptance(input) {
       allRequests[idx] = { ...allRequests[idx], acceptanceImages: JSON.stringify(currentImgs) };
       currentDetailRequest = allRequests[idx];
       saveAllRequestsToStorage();
+      hideLoadingOverlay();
       showToast('Đã upload ảnh nghiệm thu (lưu local)');
       if (typeof showWarrantyListWithFilter === 'function') showWarrantyListWithFilter('warranty_done');
     } else {
+      hideLoadingOverlay();
       showToast('Không tìm thấy yêu cầu để lưu');
     }
   }
@@ -1655,10 +1697,12 @@ async function submitEditRequest() {
   };
 
   closeEditRequestSheet();
+  showLoadingOverlay('Đang gửi yêu cầu chỉnh sửa...', 'Vui lòng chờ trong giây lát');
 
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
+      hideLoadingOverlay();
       showToast('Đã gửi yêu cầu chỉnh sửa');
       // Merge changes into existing record (don't replace — updated is partial)
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
@@ -1676,11 +1720,13 @@ async function submitEditRequest() {
           }
         } catch (e) { /* non-fatal */ }
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi gửi yêu cầu');
     }
   } else {
     Object.assign(allRequests[reqIdx], updated);
     saveAllRequestsToStorage();
+    hideLoadingOverlay();
     showToast('Đã gửi yêu cầu chỉnh sửa (lưu local)');
     showRequestDetail(backendId);
   }

@@ -54,14 +54,14 @@
       }
     })();
   </script>
-  <script src="app/_sdk/data_sdk.js?v=20260418f"></script>
-  <script type="module" src="app/js/push.js?v=20260418f"></script>
+  <script src="app/_sdk/data_sdk.js?v=20260420a"></script>
+  <script type="module" src="app/js/push.js?v=20260420a"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app/css/base.css?v=20260418f">
-  <link rel="stylesheet" href="app/css/mobile.css?v=20260418f">
-  <link rel="stylesheet" href="app/css/desktop.css?v=20260418f">
+  <link rel="stylesheet" href="app/css/base.css?v=20260420a">
+  <link rel="stylesheet" href="app/css/mobile.css?v=20260420a">
+  <link rel="stylesheet" href="app/css/desktop.css?v=20260420a">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     /* Outlet locate button: fixed width on desktop, full-width on small screens, ellipsis */
@@ -416,7 +416,7 @@
             <span class="qcag-nav-icon">&#x1F4CA;</span> Thống kê <span class="qcag-nav-soon">Coming soon</span>
           </button></li>
         </ul>
-        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.4.1 &nbsp;·&nbsp; 2026-04-16</div>
+        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.4.3 &nbsp;·&nbsp; 2026-04-20</div>
       </nav>
 
       <!-- Nav Overlay Panels -->
@@ -645,7 +645,7 @@
         <span>Thêm vào màn hình chính</span>
       </button>
      </div>
-     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.4.1 · 2026-04-16</p>
+     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.4.3 · 2026-04-20</p>
     </div>
     <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
 
@@ -971,6 +971,7 @@
       <!-- Bottom action bar -->
       <div class="p-3 border-t flex items-center gap-3 flex-shrink-0 bg-gray-50">
        <div id="pickedCoords" class="text-xs text-gray-500 flex-1">Tap vào bản đồ để chọn vị trí</div>
+       <button id="mapLayerToggleBtn" onclick="toggleMapLayer()" title="Chuyển sang chế độ vệ tinh" class="p-2 bg-gray-100 text-gray-700 rounded-lg text-xs leading-none flex-shrink-0 flex items-center gap-1 font-medium"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Vệ tinh</button>
        <button id="locateMeBtn" onclick="locateMeOnMap()" title="Về vị trí hiện tại" class="p-2 bg-gray-100 text-gray-700 rounded-lg text-base leading-none flex-shrink-0">◎</button>
        <button onclick="savePickedLocation()" class="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium">Chọn vị trí này</button>
       </div>
@@ -1111,6 +1112,18 @@
      </div>
     </div>
    </div><!-- Toast -->
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay">
+    <div class="loading-overlay-card">
+      <div class="loading-overlay-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="loading-overlay-text">
+        <div id="loadingOverlayMsg" class="loading-overlay-msg">Đang xử lý...</div>
+        <div id="loadingOverlaySub" class="loading-overlay-sub"></div>
+      </div>
+    </div>
+  </div>
   <div id="toast" class="fixed top-6 inset-x-0 flex items-start justify-center pointer-events-none">
   <div id="toastInner" class="pointer-events-auto max-w-xs w-auto bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white px-3 py-2 rounded-full shadow-md border-2 border-orange-500 transform -translate-y-20 scale-90 opacity-0 transition-all duration-400 ease-out">
    <span id="toastMessage" class="text-sm text-center block w-full"></span>
@@ -1118,22 +1131,22 @@
   </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app/js/core/state.js?v=20260418f"></script>
-  <script src="app/js/shared/utils.js?v=20260418f"></script>
-  <script src="app/js/shared/ui.js?v=20260418f"></script>
-  <script src="app/js/shared/image-utils.js?v=20260418f"></script>
-  <script src="app/js/shared/location.js?v=20260418f"></script>
-  <script src="app/js/shared/sdk-init.js?v=20260418f"></script>
-  <script src="app/js/flows/login-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/request-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/warranty-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/list-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/detail-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/desktop-qcag-flow.js?v=20260418f"></script>
-  <script src="app/js/flows/mobile-nav-flow.js?v=20260418f"></script>
-  <script src="app/js/core/router.js?v=20260418f"></script>
-  <script src="app/js/app.js?v=20260418f"></script>
-  <!-- v2.4.1 | 2026-04-16 -->
+  <script src="app/js/core/state.js?v=20260420a"></script>
+  <script src="app/js/shared/utils.js?v=20260420a"></script>
+  <script src="app/js/shared/ui.js?v=20260420a"></script>
+  <script src="app/js/shared/image-utils.js?v=20260420a"></script>
+  <script src="app/js/shared/location.js?v=20260420a"></script>
+  <script src="app/js/shared/sdk-init.js?v=20260420a"></script>
+  <script src="app/js/flows/login-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/request-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/warranty-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/list-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/detail-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/desktop-qcag-flow.js?v=20260420a"></script>
+  <script src="app/js/flows/mobile-nav-flow.js?v=20260420a"></script>
+  <script src="app/js/core/router.js?v=20260420a"></script>
+  <script src="app/js/app.js?v=20260420a"></script>
+  <!-- v2.4.3 | 2026-04-20 -->
   <script>
     // ── Service Worker registration + auto-update ───────────────────────────────
     (function () {
@@ -1150,7 +1163,7 @@
           'justify-content:space-between;padding:12px 16px',
           'font-family:sans-serif;font-size:14px;gap:12px'
         ].join(';');
-        banner.innerHTML = '<span>\uD83C\uDF89 Có phiên bản mới <b>v2.4.1</b> — nhấn để cập nhật!</span>'
+        banner.innerHTML = '<span>\uD83C\uDF89 Có phiên bản mới <b>v2.4.3</b> — nhấn để cập nhật!</span>'
           + '<button id="sw-update-btn" style="background:#fff;color:#1d4ed8;border:none;'
           + 'border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;flex-shrink:0">Cập nhật</button>';
         document.body.appendChild(banner);

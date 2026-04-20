@@ -55,3 +55,44 @@ function disableModalBackdrop() {
     document.body.classList.remove('modal-open');
   } catch (e) {}
 }
+
+// ── Loading Overlay ──────────────────────────────────────────────────────
+function showLoadingOverlay(message, subMessage) {
+  var el = document.getElementById('loadingOverlay');
+  if (!el) return;
+  var msg = document.getElementById('loadingOverlayMsg');
+  var sub = document.getElementById('loadingOverlaySub');
+  if (msg) msg.textContent = message || 'Đang xử lý...';
+  if (sub) { sub.textContent = subMessage || ''; sub.style.display = subMessage ? '' : 'none'; }
+  el.classList.add('active');
+}
+
+function hideLoadingOverlay() {
+  var el = document.getElementById('loadingOverlay');
+  if (el) el.classList.remove('active');
+}
+
+// ── Push notification helper (frontend → /api/ks/push/send) ───────────
+function sendPushNotification(opts) {
+  // opts: { title, body, role, phone, saleCode, data }
+  // Best-effort, never blocks UI
+  try {
+    var pushUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+      ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
+      : '/api/ks/push/send';
+    fetch(pushUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: opts.title || 'QCAG',
+        body: opts.body || '',
+        role: opts.role || undefined,
+        phone: opts.phone || undefined,
+        saleCode: opts.saleCode || undefined,
+        data: opts.data || {},
+      }),
+    }).catch(function (e) { console.warn('[push/send]', e); });
+  } catch (e) {
+    console.warn('[push] sendPushNotification error (non-fatal):', e);
+  }
+}

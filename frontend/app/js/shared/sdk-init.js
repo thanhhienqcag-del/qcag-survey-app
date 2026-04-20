@@ -195,6 +195,11 @@ async function initHomeAndLoad() {
 }
 
 async function initApp() {
+  // Show loading overlay while waiting for remote data
+  if (typeof showLoadingOverlay === 'function') {
+    showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
+  }
+
   // Show cached data instantly so the list is never blank while network loads
   try {
     loadAllRequestsFromStorage();
@@ -299,6 +304,7 @@ async function initApp() {
         }
       }
     });
+    if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
     if (!result.isOk) {
       showToast('Lỗi kết nối dữ liệu');
     }
@@ -318,6 +324,7 @@ async function initApp() {
     if (notifyEl && notifyEl.classList.contains('flex') && typeof renderNotifications === 'function') {
       renderNotifications();
     }
+    if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
   }
 
   // Only ensure an initial request item when New Request screen is visible.

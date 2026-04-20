@@ -2469,9 +2469,16 @@ app.post('/api/ks/requests', async (req, res) => {
             const reqObj = (() => { try { return JSON.parse(earlyRow.requester || '{}'); } catch (_) { return {}; } })();
             const senderName = reqObj.saleName || reqObj.phone || 'Sale Heineken';
             const outletLabel = earlyRow.outlet_name || earlyRow.outlet_code || 'Outlet';
+            const isWarranty = String(earlyRow.type || '').toLowerCase() === 'warranty';
+            const pushTitle = isWarranty
+                ? 'Có 1 Yêu Cầu Kiểm Tra BH'
+                : 'QCAG — Yêu cầu mới từ Heineken';
+            const pushBody = isWarranty
+                ? `Yêu cầu KT-BH cho Outlet "${outletLabel}"`
+                : `${senderName} vừa gửi yêu cầu mới cho Outlet ${outletLabel}.`;
             sendKsPush({
-                title: 'QCAG — Yêu cầu mới từ Heineken',
-                body: `${senderName} vừa gửi yêu cầu mới cho Outlet ${outletLabel}.`,
+                title: pushTitle,
+                body: pushBody,
                 data: { backendId: earlyRow.backend_id },
                 targetPhone: null,
                 targetSaleCode: null,
@@ -2776,6 +2783,28 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     targetSaleCode: null,
                     targetRole: 'qcag',
                 }).catch(e => console.warn('[push] editing-request notify error (non-fatal):', e && e.message ? e.message : e));
+            }
+
+            // ── Push for warranty acceptance: QCAG uploads acceptance images → notify Heineken sale ──
+            const isWarrantyType = String(updated.type || '').toLowerCase() === 'warranty';
+            const hadNoAcceptance = !current.acceptance_images || current.acceptance_images === '[]' || current.acceptance_images.length <= 4;
+            const hasAcceptanceNow = updated.acceptance_images && updated.acceptance_images !== '[]' && updated.acceptance_images.length > 4;
+            if (isWarrantyType && hadNoAcceptance && hasAcceptanceNow) {
+                let requesterPhone3 = null;
+                let requesterSaleCode3 = null;
+                try {
+                    const reqObj3 = JSON.parse(updated.requester || '{}') || {};
+                    requesterPhone3    = reqObj3.phone    || null;
+                    requesterSaleCode3 = reqObj3.saleCode || null;
+                } catch (_) {}
+                const outletLabel3 = updated.outlet_name || updated.outlet_code || 'Outlet';
+                sendKsPush({
+                    title: 'QCAG phản hồi yêu cầu KT - Bảo Hành',
+                    body: `Outlet "${outletLabel3}" đã được bảo hành sửa chữa`,
+                    data: { backendId: updated.backend_id },
+                    targetPhone: requesterPhone3,
+                    targetSaleCode: requesterSaleCode3,
+                }).catch(e => console.warn('[push] warranty-acceptance notify error (non-fatal):', e && e.message ? e.message : e));
             }
         } catch (pushErr) {
             console.warn('[push] notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);

@@ -9,6 +9,9 @@ let lMarker = null;
 let pickedLatLng = null;
 let locCurrentTab = 'gps';
 let searchDebounce = null;
+let _osmLayer = null;
+let _satLayer = null;
+let _currentMapMode = 'normal'; // 'normal' or 'satellite'
 
 function openLocationModal() {
   document.getElementById('mapModal').classList.remove('hidden');
@@ -58,9 +61,20 @@ function initLeafletMap() {
   const defaultCenter = hasCoords ? [latVal, lngVal] : [10.7769, 106.7009];
   lMap = L.map('mapContainer', { zoomControl: true }).setView(defaultCenter, hasCoords ? 16 : 14);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  _osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(lMap);
+  });
+  _satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '&copy; Esri &mdash; Sources: Esri, DigitalGlobe, GeoEye, Earthstar Geographics'
+  });
+
+  // Add the default layer
+  if (_currentMapMode === 'satellite') {
+    _satLayer.addTo(lMap);
+  } else {
+    _osmLayer.addTo(lMap);
+  }
+  _updateMapLayerToggle();
 
   // Ensure Leaflet recalculates size after modal layout settles — prevents
   // blank map tiles when container was hidden or had no size at init time.
@@ -102,6 +116,32 @@ function reverseGeocode(lat, lng, cb) {
     .then(r => r.json())
     .then(d => cb(d.display_name || null))
     .catch(() => cb(null));
+}
+
+function toggleMapLayer() {
+  if (!lMap) return;
+  if (_currentMapMode === 'satellite') {
+    _currentMapMode = 'normal';
+    if (_satLayer) lMap.removeLayer(_satLayer);
+    if (_osmLayer) _osmLayer.addTo(lMap);
+  } else {
+    _currentMapMode = 'satellite';
+    if (_osmLayer) lMap.removeLayer(_osmLayer);
+    if (_satLayer) _satLayer.addTo(lMap);
+  }
+  _updateMapLayerToggle();
+}
+
+function _updateMapLayerToggle() {
+  var btn = document.getElementById('mapLayerToggleBtn');
+  if (!btn) return;
+  if (_currentMapMode === 'satellite') {
+    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg> Bản đồ';
+    btn.title = 'Chuyển sang bản đồ thường';
+  } else {
+    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Vệ tinh';
+    btn.title = 'Chuyển sang chế độ vệ tinh';
+  }
 }
 
 function searchMapAddress(query) {

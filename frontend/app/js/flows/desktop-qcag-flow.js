@@ -2741,7 +2741,13 @@ async function qcagDesktopUploadStatusImage(input) {
   if (files.length === 0) return;
   input.value = '';
 
-  const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(currentDetailRequest.statusImages, [])).slice();
+  // Capture request identity BEFORE any await — prevents saving to the wrong
+  // request (e.g. TKy) if the user switches away from TKx while the async
+  // compress/upload is still in flight.
+  const targetRequest = currentDetailRequest;
+  const targetId = targetRequest.__backendId;
+
+  const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(targetRequest.statusImages, [])).slice();
 
   for (const file of files) {
     // Compress immediately (WebP preferred) — much faster upload
@@ -2756,10 +2762,10 @@ async function qcagDesktopUploadStatusImage(input) {
       });
     }
     let imageUrl = dataUrl;
-    if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
+    if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
       try {
         const uploaded = await window.dataSdk.uploadImage(
-          dataUrl, file.name || 'status.jpg', currentDetailRequest.__backendId, 'hien-trang'
+          dataUrl, file.name || 'status.jpg', targetId, 'hien-trang'
         );
         if (typeof uploaded === 'string' && uploaded.trim()) {
           imageUrl = uploaded.trim();
@@ -2769,10 +2775,12 @@ async function qcagDesktopUploadStatusImage(input) {
     currentImgs.push(imageUrl);
   }
 
-  const updated = { ...currentDetailRequest, statusImages: JSON.stringify(currentImgs), updatedAt: new Date().toISOString() };
+  const updated = { ...targetRequest, statusImages: JSON.stringify(currentImgs), updatedAt: new Date().toISOString() };
   const ok = await qcagDesktopPersistRequest(updated, 'Đã thêm ảnh hiện trạng', true);
   if (ok) {
-    // Refresh the status image section in-place
+    // Only update the UI section for the request that was active when upload started.
+    // If the user has navigated to a different request, skip the DOM update entirely.
+    if (_qcagDesktopCurrentId !== targetId) return;
     const thumbGrid = document.getElementById('qcagStatusThumbGrid');
     if (thumbGrid) {
       const newImgs = qcagDesktopPrepareRenderImageList(currentImgs);
@@ -2800,6 +2808,11 @@ async function qcagDesktopUploadMQ(input) {
   // Only keep a single MQ image: the most recently added file replaces any existing images
   const file = files[files.length - 1];
 
+  // Capture request identity BEFORE any await — prevents saving to the wrong
+  // request if the user switches to a different TK while async compression is in progress.
+  const targetRequest = currentDetailRequest;
+  const targetId = targetRequest.__backendId;
+
   // Compress immediately (WebP preferred) — much faster upload
   let dataUrl;
   try {
@@ -2812,30 +2825,31 @@ async function qcagDesktopUploadMQ(input) {
     });
   }
 
-  // Upload to GCS so Sale Heineken can also receive the image URL
-  let imageUrl = dataUrl;
-  if (window.dataSdk && window.dataSdk.uploadImage && currentDetailRequest.__backendId) {
-    showToast('Đang upload MQ...');
-    try {
-      const mqSubfolder = 'mq-' + String(currentDetailRequest.outletCode || 'OUTLET')
-        .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
-      const uploaded = await window.dataSdk.uploadImage(
-        dataUrl, file.name || 'mq.jpg', currentDetailRequest.__backendId, mqSubfolder
-      );
-      if (typeof uploaded === 'string' && uploaded.trim()) {
-        imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
-      } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-        imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
-      }
-    } catch (e) {
-      console.warn('[qcagDesktopUploadMQ] GCS upload failed, keeping base64:', e);
-    }
-  }
+  // Guard: if the user navigated to a different request during compression, abort.
+  if (_qcagDesktopCurrentId !== targetId) return;
 
-  const isWarrantyReq = String((currentDetailRequest.type || '')).toLowerCase() === 'warranty';
+  const isWarrantyReq = String((targetRequest.type || '')).toLowerCase() === 'warranty';
 
   if (isWarrantyReq) {
-    // Warranty type: append to acceptanceImages (not designImages)
+    // Warranty type: upload to GCS immediately and append to acceptanceImages.
+    let imageUrl = dataUrl;
+    if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
+      showToast('Đang upload ảnh nghiệm thu...');
+      try {
+        const uploaded = await window.dataSdk.uploadImage(
+          dataUrl, file.name || 'accept.jpg', targetId, 'nghiem-thu'
+        );
+        if (typeof uploaded === 'string' && uploaded.trim()) {
+          imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
+        } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+          imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
+        }
+      } catch (e) {
+        console.warn('[qcagDesktopUploadMQ] GCS upload failed for acceptance, keeping base64:', e);
+      }
+    }
+    // Guard after GCS upload await too
+    if (_qcagDesktopCurrentId !== targetId) return;
     const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
     existingAccept.push(imageUrl);
     const updated = {
@@ -2849,13 +2863,16 @@ async function qcagDesktopUploadMQ(input) {
     return;
   }
 
-  const currentImgs = [imageUrl];
-
+  // Normal MQ flow:
+  // Store compressed image as base64 only — GCS upload is DEFERRED to the
+  // "Hoàn thành" / "Đã chỉnh sửa" confirm step (qcagDesktopMarkProcessed).
+  // This ensures the user sees the image under the "chờ xác nhận" (processing)
+  // tag first, and GCS storage only happens when they explicitly confirm.
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
 
   const updated = {
     ...currentDetailRequest,
-    designImages: JSON.stringify(currentImgs),
+    designImages: JSON.stringify([dataUrl]),
     designUpdatedAt: new Date().toISOString(),
     // Track who last uploaded/edited the MQ (updated on every upload)
     designLastEditedBy: currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG',
@@ -2870,7 +2887,7 @@ async function qcagDesktopUploadMQ(input) {
     updatedAt: new Date().toISOString()
   };
 
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã upload MQ thiết kế', true);
+  const ok = await qcagDesktopPersistRequest(updated, 'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận và lưu lên cloud', true);
   if (ok) qcagDesktopRefreshMQInPlace(updated);
   input.value = '';
 }
@@ -2909,6 +2926,46 @@ async function qcagDesktopMarkProcessed() {
     return;
   }
 
+  // ── Upload any still-base64 MQ images to GCS before finalizing ──────────
+  // qcagDesktopUploadMQ defers GCS storage to this point so the user sees the
+  // image under the "chờ xác nhận" (processing) state first.
+  // On "Hoàn thành", we upload to GCS, replace the base64 with a GCS URL,
+  // then persist status = 'done'.
+  const _confirmBackendId = currentDetailRequest.__backendId;
+  let finalDesignImages = designImgs.slice();
+  if (finalDesignImages.some(img => typeof img === 'string' && img.startsWith('data:'))
+      && window.dataSdk && window.dataSdk.uploadImage && _confirmBackendId) {
+    showToast('Đang lưu MQ lên cloud...');
+    const mqSubfolder = 'mq-' + String(currentDetailRequest.outletCode || 'OUTLET')
+      .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+    const uploadedImgs = [];
+    for (const img of finalDesignImages) {
+      if (typeof img === 'string' && img.startsWith('data:')) {
+        try {
+          const uploaded = await window.dataSdk.uploadImage(img, 'mq.jpg', _confirmBackendId, mqSubfolder);
+          if (typeof uploaded === 'string' && uploaded.trim()) {
+            uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded));
+          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+            uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded.url));
+          } else {
+            uploadedImgs.push(img); // fallback: upload returned nothing useful
+          }
+        } catch (e) {
+          console.warn('[qcagDesktopMarkProcessed] GCS upload failed, keeping base64:', e);
+          uploadedImgs.push(img);
+        }
+      } else {
+        uploadedImgs.push(img); // already a GCS URL — keep as-is
+      }
+    }
+    finalDesignImages = uploadedImgs;
+    // Guard: if the user switched to a different request during GCS upload, abort.
+    if (!currentDetailRequest || currentDetailRequest.__backendId !== _confirmBackendId) {
+      showToast('Đã hủy xác nhận: chuyển sang yêu cầu khác trong lúc đang lưu');
+      return;
+    }
+  }
+
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   if (isPendingEdit) {
     comments.push({
@@ -2944,26 +3001,43 @@ async function qcagDesktopMarkProcessed() {
     comments: JSON.stringify(comments),
     ...extraFields
   };
-  // Local state gets full merge for UI
-  const updated = { ...currentDetailRequest, ...patchPayload };
+  // Include designImages in the patch only when they changed (base64 → GCS URL).
+  // If GCS upload failed and images are still base64, the DB already holds them
+  // from qcagDesktopUploadMQ, so no need to re-send the large payload.
+  const _finalDesignImgStr = JSON.stringify(finalDesignImages);
+  if (_finalDesignImgStr !== JSON.stringify(designImgs)) {
+    patchPayload.designImages = _finalDesignImgStr;
+  }
+  // Save pre-confirm snapshot for rollback
+  const _rollbackRequest = { ...currentDetailRequest };
+  // Local state gets full merge for UI — ensure finalDesignImages (GCS URLs) are used.
+  const updated = { ...currentDetailRequest, ...patchPayload, designImages: _finalDesignImgStr };
+
+  // Optimistically update local state BEFORE the await so that if an SSE event
+  // arrives during the network round-trip the statRank guard correctly sees 'done'
+  // and won't revert the UI to 'processing'.
+  const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
+  if (idxAll !== -1) allRequests[idxAll] = updated;
+  currentDetailRequest = updated;
+  qcagDesktopCacheRequest(updated);
+  qcagDesktopRefreshMQInPlace(updated);
 
   // Persist: send only the slim PATCH payload to backend
   if (window.dataSdk) {
     const result = await window.dataSdk.update(patchPayload);
     if (!result.isOk) {
       showToast('Không thể cập nhật request');
-      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+      // Rollback optimistic update on failure
+      const idxRb = allRequests.findIndex(r => r.__backendId === _rollbackRequest.__backendId);
+      if (idxRb !== -1) allRequests[idxRb] = _rollbackRequest;
+      currentDetailRequest = _rollbackRequest;
+      qcagDesktopCacheRequest(_rollbackRequest);
+      qcagDesktopRefreshMQInPlace(_rollbackRequest);
       return;
     }
   }
-  // Update local state
-  const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
-  if (idxAll !== -1) allRequests[idxAll] = updated;
-  currentDetailRequest = updated;
-  qcagDesktopCacheRequest(updated);
   _qcagRequestsVersion += 1;
   _qcagRequestCodeCache.version = 0;
-  qcagDesktopRefreshMQInPlace(updated);
 
   showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
 
@@ -3811,10 +3885,40 @@ function qcagNavRenderMap() {
   const map = L.map(container, { center: defaultCenter, zoom: 8 });
   _qcagNavMapInstance = map;
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const _osmDesktop = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
     maxZoom: 18
-  }).addTo(map);
+  });
+  const _satDesktop = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '© Esri — Sources: Esri, DigitalGlobe, GeoEye',
+    maxZoom: 18
+  });
+  _osmDesktop.addTo(map);
+
+  // Layer toggle control
+  var _desktopMapSat = false;
+  var layerCtrl = L.control({ position: 'topright' });
+  layerCtrl.onAdd = function () {
+    var div = L.DomUtil.create('div', 'leaflet-bar');
+    div.innerHTML = '<a href="#" title="Chuyển sang vệ tinh" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;font-size:11px;font-weight:600;background:#fff;color:#333;text-decoration:none;cursor:pointer" id="qcagMapLayerBtn">🛰️</a>';
+    L.DomEvent.disableClickPropagation(div);
+    div.querySelector('a').addEventListener('click', function (e) {
+      e.preventDefault();
+      if (_desktopMapSat) {
+        map.removeLayer(_satDesktop);
+        _osmDesktop.addTo(map);
+        _desktopMapSat = false;
+        this.title = 'Chuyển sang vệ tinh';
+      } else {
+        map.removeLayer(_osmDesktop);
+        _satDesktop.addTo(map);
+        _desktopMapSat = true;
+        this.title = 'Chuyển sang bản đồ thường';
+      }
+    });
+    return div;
+  };
+  layerCtrl.addTo(map);
 
   const latlngs = [];
   points.forEach(r => {

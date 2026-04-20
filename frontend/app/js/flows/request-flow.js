@@ -557,6 +557,7 @@ async function submitNewRequest() {
   _isNewRequestSubmitting = true;
   btn.disabled = true;
   btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang gửi yêu cầu...';
+  showLoadingOverlay('Đang gửi yêu cầu...', 'Hệ thống đang tải hình và xử lý dữ liệu, vui lòng chờ trong giây lát');
 
   // Pre-generate __backendId so GCS folder name is consistent between create and patch
   const __preBackendId = 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -592,6 +593,7 @@ async function submitNewRequest() {
 
   // Safety: if all images lost, abort
   if (_statusImageFiles.length > 0 && _compressedStatusDataUrls.length === 0) {
+    hideLoadingOverlay();
     showToast('Lỗi xử lý ảnh — vui lòng thử lại');
     btn.disabled = false;
     btn.textContent = 'Xác nhận yêu cầu';
@@ -698,6 +700,7 @@ async function submitNewRequest() {
       // clean, empty form — preventing accidental duplicate submissions.
       resetNewRequestForm();
 
+      hideLoadingOverlay();
       document.getElementById('confirmModal').classList.remove('hidden');
 
       // Release the guard — form is now clean, future submissions are safe.
@@ -706,6 +709,7 @@ async function submitNewRequest() {
       // resetNewRequestForm() resets it; the modal is the only visible UI now.
       return;
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi tạo yêu cầu');
     }
   } else {
@@ -716,12 +720,14 @@ async function submitNewRequest() {
     lastCreatedRequestId = request.__backendId;
     try { blurActiveInput(); } catch (e) {}
     resetNewRequestForm();
+    hideLoadingOverlay();
     document.getElementById('confirmModal').classList.remove('hidden');
     _isNewRequestSubmitting = false;
     return;
   }
 
   // Reached only on failure — re-enable the button so user can retry.
+  hideLoadingOverlay();
   btn.disabled = false;
   btn.textContent = 'Xác nhận yêu cầu';
   _isNewRequestSubmitting = false;

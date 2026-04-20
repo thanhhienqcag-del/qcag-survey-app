@@ -28,6 +28,7 @@ async function submitWarrantyRequest() {
   const btn = document.getElementById('submitWarrantyBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="inline-block animate-spin mr-2">⏳</span> Đang xử lý...';
+  showLoadingOverlay('Đang gửi yêu cầu bảo hành...', 'Đang tải hình ảnh lên, vui lòng chờ trong giây lát');
 
   const request = {
     type: 'warranty',
@@ -74,8 +75,10 @@ async function submitWarrantyRequest() {
     const result = await window.dataSdk.create(request);
     if (result.isOk) {
       try { blurActiveInput(); } catch (e) {}
+      hideLoadingOverlay();
       document.getElementById('confirmModal').classList.remove('hidden');
     } else {
+      hideLoadingOverlay();
       showToast('Lỗi tạo yêu cầu');
     }
   } else {
@@ -84,6 +87,7 @@ async function submitWarrantyRequest() {
     saveAllRequestsToStorage();
     updateRequestCount();
     try { blurActiveInput(); } catch (e) {}
+    hideLoadingOverlay();
     document.getElementById('confirmModal').classList.remove('hidden');
   }
 
