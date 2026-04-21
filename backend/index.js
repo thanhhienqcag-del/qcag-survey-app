@@ -2529,6 +2529,11 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
     let arr;
     try { arr = JSON.parse(jsonStr || '[]'); } catch (_) { return jsonStr; }
     if (!Array.isArray(arr) || arr.length === 0) return jsonStr;
+    // Filter out the list-endpoint placeholder sentinel '...' so it is NEVER
+    // stored in the database as a URL, even if it somehow bypasses the
+    // statusImages/designImages protection checks above.
+    arr = arr.filter(item => typeof item !== 'string' || item !== '...');
+    if (arr.length === 0) return '[]';
     const safeMq  = String(mqFolder  || 'misc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
     const safeSub = String(subfolder || 'misc').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 32);
     const bucket  = gcs.bucket(ksBucket);
@@ -2601,8 +2606,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const existingRaw = current.status_images || '[]';
             const isPlaceholder = incomingRaw === '["..."]' || incomingRaw === '"[\\"...\\"]"';
             const isEmptyIncoming = incomingRaw === '[]' || incomingRaw === 'null' || incomingRaw === '';
+            // Also catch arrays where every element is the '...' sentinel
+            const incomingParsedArr = (() => { try { return JSON.parse(incomingRaw); } catch (_) { return null; } })();
+            const isAllPlaceholder = Array.isArray(incomingParsedArr) && incomingParsedArr.length > 0 && incomingParsedArr.every(x => x === '...');
             const existingHasReal = existingRaw.length > 4 && existingRaw !== '[]' && existingRaw !== '["..."]';
-            if ((isPlaceholder || isEmptyIncoming) && existingHasReal) {
+            if ((isPlaceholder || isEmptyIncoming || isAllPlaceholder) && existingHasReal) {
                 // Drop statusImages from the PATCH — preserve DB value
                 delete b.statusImages;
                 console.log('[patch] status_images protected: incoming was placeholder/empty, DB has real URLs');
@@ -2764,6 +2772,39 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     targetPhone: requesterPhone,
                     targetSaleCode: requesterSaleCode,
                 });
+
+                // ── Send design task to App 1 (QCAG Báo Giá) ──
+                // Fire-and-forget so this PATCH is not blocked by App 1 availability
+                try {
+                    const app1BaseUrl = process.env.APP1_API_BASE_URL;
+                    if (app1BaseUrl) {
+                        let requesterObj = {};
+                        try { requesterObj = JSON.parse(updated.requester || '{}') || {}; } catch (_) {}
+                        const taskPayload = {
+                            ks_backend_id: updated.backend_id || null,
+                            sale_name: requesterObj.saleName || null,
+                            sale_code: requesterObj.saleCode || null,
+                            sale_phone: requesterObj.phone || null,
+                            region: requesterObj.region || null,
+                            outlet_name: updated.outlet_name || null,
+                            outlet_code: updated.outlet_code || null,
+                            outlet_phone: updated.phone || null,
+                            address: updated.address || null,
+                            tk_code: tkCode || null,
+                            design_created_by: updated.design_created_by || null,
+                        };
+                        fetch(app1BaseUrl.replace(/\/+$/, '') + '/design-tasks', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(taskPayload),
+                        }).then(r => r.json()).then(j => {
+                            if (j && j.ok) console.log('[design-task] Sent to App1, id:', j.id || j.message);
+                            else console.warn('[design-task] App1 response:', JSON.stringify(j));
+                        }).catch(e => console.warn('[design-task] App1 error (non-fatal):', e && e.message ? e.message : e));
+                    }
+                } catch (dtErr) {
+                    console.warn('[design-task] error (non-fatal):', dtErr && dtErr.message ? dtErr.message : dtErr);
+                }
             }
 
             // ── Push for editing request: Sale Heineken yêu cầu chỉnh sửa → notify QCAG ──

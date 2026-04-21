@@ -1065,8 +1065,11 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
   if (candidates.length === 0) return;
 
   for (const req of candidates) {
+    // CRITICAL: Build MINIMAL PATCH — do NOT spread full req.
+    // req.statusImages may be the list-endpoint placeholder '["..."]' which
+    // would overwrite real hiện trạng GCS URLs in DB if sent as-is.
     const updated = {
-      ...req,
+      __backendId: req.__backendId,
       editingRequestedAt: req.editingRequestedAt || new Date().toISOString(),
       status: 'processing',
       updatedAt: new Date().toISOString()
@@ -1080,8 +1083,9 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
       if (!result.isOk) continue;
     }
 
+    // Merge only changed fields — preserve existing statusImages/designImages in allRequests
     const idx = allRequests.findIndex(r => r.__backendId === updated.__backendId);
-    if (idx !== -1) allRequests[idx] = updated;
+    if (idx !== -1) Object.assign(allRequests[idx], updated);
   }
 
   _qcagRequestsVersion += 1;
@@ -2747,7 +2751,21 @@ async function qcagDesktopUploadStatusImage(input) {
   const targetRequest = currentDetailRequest;
   const targetId = targetRequest.__backendId;
 
-  const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(targetRequest.statusImages, [])).slice();
+  // If statusImages is still the list-endpoint placeholder '["..."]', fetch the real
+  // GCS URLs from the server first to avoid losing existing hiện trạng photos.
+  let baseStatusImages = targetRequest.statusImages;
+  if (baseStatusImages === '["..."]' && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
+    try {
+      const r = await window.dataSdk.getOne(targetId);
+      if (r && r.isOk && r.data && r.data.statusImages && r.data.statusImages !== '["..."]' && r.data.statusImages !== '[]') {
+        baseStatusImages = r.data.statusImages;
+        // Update local store with real value so subsequent renders are correct
+        const bsIdx = allRequests.findIndex(x => x.__backendId === targetId);
+        if (bsIdx !== -1) allRequests[bsIdx] = Object.assign({}, allRequests[bsIdx], { statusImages: baseStatusImages });
+      }
+    } catch (e) { /* proceed with existing data */ }
+  }
+  const currentImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(baseStatusImages, [])).slice();
 
   for (const file of files) {
     // Compress immediately (WebP preferred) — much faster upload
@@ -2775,7 +2793,13 @@ async function qcagDesktopUploadStatusImage(input) {
     currentImgs.push(imageUrl);
   }
 
+  // Spread targetRequest for all non-image fields, override statusImages with the
+  // correct up-to-date list (real existing URLs + newly uploaded).
+  // Drop designImages/acceptanceImages if they are still the list-endpoint
+  // placeholder so they are NOT sent to PATCH and do not clear real DB values.
   const updated = { ...targetRequest, statusImages: JSON.stringify(currentImgs), updatedAt: new Date().toISOString() };
+  if (updated.designImages === '["..."]') delete updated.designImages;
+  if (updated.acceptanceImages === '["..."]') delete updated.acceptanceImages;
   const ok = await qcagDesktopPersistRequest(updated, 'Đã thêm ảnh hiện trạng', true);
   if (ok) {
     // Only update the UI section for the request that was active when upload started.

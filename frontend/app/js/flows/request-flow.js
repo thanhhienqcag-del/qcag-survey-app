@@ -1323,16 +1323,19 @@ async function confirmTakeoverOutlet() {
     try { comments = JSON.parse(req.comments || '[]'); } catch (e) { comments = []; }
     comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
 
+    // CRITICAL: Build MINIMAL PATCH — exclude image fields.
+    // req.statusImages/designImages may hold the list-endpoint placeholder '["..."]'
+    // and must never overwrite real GCS URLs in the database.
     const updated = {
-      ...req,
+      __backendId: req.__backendId,
       requester: JSON.stringify(currentSession),
       comments: JSON.stringify(comments),
       updatedAt: now
     };
 
-    // Update in allRequests array in-place
+    // Merge only changed fields into local store (preserve existing image URLs)
     const idx = allRequests.findIndex(r => r.__backendId === req.__backendId);
-    if (idx !== -1) allRequests[idx] = updated;
+    if (idx !== -1) Object.assign(allRequests[idx], updated);
 
     if (window.dataSdk && req.__backendId) {
       try { await window.dataSdk.update(updated); } catch (e) {}

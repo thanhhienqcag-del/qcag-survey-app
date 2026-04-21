@@ -907,7 +907,16 @@ async function uploadDesign(input) {
   }
 
   // Upload mới → xóa cờ editingRequestedAt (quay về trạng thái Có MQ)
-  const updated = { ...currentDetailRequest, designImages: JSON.stringify(currentImgs), designUpdatedAt: new Date().toISOString(), editingRequestedAt: null };
+  // CRITICAL: Build MINIMAL PATCH — do NOT spread currentDetailRequest.
+  // currentDetailRequest.statusImages may be the list-endpoint placeholder
+  // '["..."]' which would overwrite real hiện trạng GCS URLs in the database.
+  const updated = {
+    __backendId: currentDetailRequest.__backendId,
+    designImages: JSON.stringify(currentImgs),
+    designUpdatedAt: new Date().toISOString(),
+    editingRequestedAt: null,
+    updatedAt: new Date().toISOString()
+  };
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
@@ -968,7 +977,13 @@ async function uploadAcceptance(input) {
     }
   }
 
-  const updated = { ...currentDetailRequest, acceptanceImages: JSON.stringify(currentImgs) };
+  // CRITICAL: Build MINIMAL PATCH — do NOT spread currentDetailRequest.
+  // statusImages placeholder must never reach the DB and overwrite real hiện trạng URLs.
+  const updated = {
+    __backendId: currentDetailRequest.__backendId,
+    acceptanceImages: JSON.stringify(currentImgs),
+    updatedAt: new Date().toISOString()
+  };
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
