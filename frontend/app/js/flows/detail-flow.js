@@ -107,15 +107,23 @@ async function addDesignComment(backendId) {
 
   // NOTE: Generic comments do NOT auto-clear design images.
   // Only the dedicated "Yêu cầu chỉnh sửa" flow (submitEditRequest) clears MQ images.
-  const updated = { ...request, comments: JSON.stringify(comments) };
+  // CRITICAL: Build SLIM PATCH — do NOT spread the full request object.
+  // request.statusImages may hold the list-endpoint placeholder '["..."]'
+  // which would overwrite real GCS URLs in the database if sent as-is.
+  const commentsJson = JSON.stringify(comments);
+  const patchPayload = {
+    __backendId: request.__backendId,
+    comments: commentsJson,
+    updatedAt: new Date().toISOString()
+  };
 
   if (window.dataSdk) {
-    const result = await window.dataSdk.update(updated);
+    const result = await window.dataSdk.update(patchPayload);
     if (result.isOk) {
       hideLoadingOverlay();
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
-      if (idx !== -1) { allRequests[idx] = updated; }
+      if (idx !== -1) { Object.assign(allRequests[idx], { comments: commentsJson, updatedAt: patchPayload.updatedAt }); }
       // Push notification for comment
       try {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
@@ -133,7 +141,7 @@ async function addDesignComment(backendId) {
       showToast('Lỗi gửi bình luận');
     }
   } else {
-    allRequests[reqIdx] = updated;
+    Object.assign(allRequests[reqIdx], { comments: commentsJson, updatedAt: patchPayload.updatedAt });
     saveAllRequestsToStorage();
     hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
@@ -185,15 +193,23 @@ async function addDetailComment(backendId) {
 
   // NOTE: Generic comments do NOT auto-clear design images.
   // Only the dedicated "Yêu cầu chỉnh sửa" flow (submitEditRequest) clears MQ images.
-  const updated = { ...request, comments: JSON.stringify(comments) };
+  // CRITICAL: Build SLIM PATCH — do NOT spread the full request object.
+  // request.statusImages may hold the list-endpoint placeholder '["..."]'
+  // which would overwrite real GCS URLs in the database if sent as-is.
+  const commentsJson = JSON.stringify(comments);
+  const patchPayload = {
+    __backendId: request.__backendId,
+    comments: commentsJson,
+    updatedAt: new Date().toISOString()
+  };
 
   if (window.dataSdk) {
-    const result = await window.dataSdk.update(updated);
+    const result = await window.dataSdk.update(patchPayload);
     if (result.isOk) {
       hideLoadingOverlay();
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
-      if (idx !== -1) { allRequests[idx] = updated; }
+      if (idx !== -1) { Object.assign(allRequests[idx], { comments: commentsJson, updatedAt: patchPayload.updatedAt }); }
       // Push notification for comment
       try {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
@@ -210,9 +226,8 @@ async function addDetailComment(backendId) {
       showToast('Lỗi gửi bình luận');
     }
   } else {
-    allRequests[reqIdx] = updated;
+    Object.assign(allRequests[reqIdx], { comments: commentsJson, updatedAt: patchPayload.updatedAt });
     saveAllRequestsToStorage();
-    textarea.value = '';
     hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
     showRequestDetail(backendId);

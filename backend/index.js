@@ -2529,10 +2529,11 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
     let arr;
     try { arr = JSON.parse(jsonStr || '[]'); } catch (_) { return jsonStr; }
     if (!Array.isArray(arr) || arr.length === 0) return jsonStr;
-    // Filter out the list-endpoint placeholder sentinel '...' so it is NEVER
-    // stored in the database as a URL, even if it somehow bypasses the
-    // statusImages/designImages protection checks above.
-    arr = arr.filter(item => typeof item !== 'string' || item !== '...');
+    // Filter out all sentinel / placeholder strings:
+    //   - exact '...'  (3-dot list-endpoint sentinel)
+    //   - any string consisting entirely of dots, e.g. '....' or '..'
+    //     (mis-encoded variants that must never reach the DB as a URL)
+    arr = arr.filter(item => typeof item !== 'string' || !/^\.+$/.test(item));
     if (arr.length === 0) return '[]';
     const safeMq  = String(mqFolder  || 'misc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
     const safeSub = String(subfolder || 'misc').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 32);
@@ -2606,16 +2607,25 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const existingRaw = current.status_images || '[]';
             const isPlaceholder = incomingRaw === '["..."]' || incomingRaw === '"[\\"...\\"]"';
             const isEmptyIncoming = incomingRaw === '[]' || incomingRaw === 'null' || incomingRaw === '';
-            // Also catch arrays where every element is the '...' sentinel
+            // Also catch arrays where every element is a sentinel/dots-only string
             const incomingParsedArr = (() => { try { return JSON.parse(incomingRaw); } catch (_) { return null; } })();
-            const isAllPlaceholder = Array.isArray(incomingParsedArr) && incomingParsedArr.length > 0 && incomingParsedArr.every(x => x === '...');
+            const isAllPlaceholder = Array.isArray(incomingParsedArr) && incomingParsedArr.length > 0 &&
+                incomingParsedArr.every(x => typeof x === 'string' && /^\.+$/.test(x));
             const existingHasReal = existingRaw.length > 4 && existingRaw !== '[]' && existingRaw !== '["..."]';
             if ((isPlaceholder || isEmptyIncoming || isAllPlaceholder) && existingHasReal) {
                 // Drop statusImages from the PATCH — preserve DB value
                 delete b.statusImages;
                 console.log('[patch] status_images protected: incoming was placeholder/empty, DB has real URLs');
             } else {
-                b.statusImages = await ksAutoUploadImages(incomingRaw, folderForUpload, 'hien-trang');
+                const processedStatus = await ksAutoUploadImages(incomingRaw, folderForUpload, 'hien-trang');
+                // Secondary safety net: if ksAutoUploadImages filtered everything out
+                // (returned '[]') but the DB already has real image URLs, do NOT write.
+                // This catches mis-encoded sentinels that slip past the first guard.
+                if (processedStatus === '[]' && existingHasReal) {
+                    console.log('[patch] status_images secondary protection: processed result was empty but DB has real URLs — skipping write');
+                } else {
+                    b.statusImages = processedStatus;
+                }
             }
         }
         if ('designImages' in b) b.designImages = await ksAutoUploadImages(normalizeBodyValue(b.designImages), folderForUpload, 'mq');
