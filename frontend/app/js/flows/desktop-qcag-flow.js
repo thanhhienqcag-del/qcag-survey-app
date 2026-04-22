@@ -1811,7 +1811,30 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
   if (!updated) return false;
 
   if (window.dataSdk) {
-    const result = await window.dataSdk.update(updated);
+    // Build a SLIM patch: strip image fields that were not intentionally changed.
+    // Many callers do `{ ...currentDetailRequest, [changedField]: newVal }` which
+    // spreads all image fields unchanged. If those image fields hold the
+    // list-endpoint placeholder '["..."]', sending them would overwrite real
+    // GCS URLs in the database.
+    //
+    // Rule: remove an image field from the patch if its value is IDENTICAL to
+    // the corresponding field on currentDetailRequest (i.e. the caller just
+    // spread it in — it wasn't a deliberate change). Also strip any value that
+    // is a sentinel placeholder regardless of origin.
+    const IMAGE_FIELDS = ['statusImages', 'designImages', 'acceptanceImages', 'oldContentImages'];
+    const PLACEHOLDER_RE = /^\[["']\.+["']\]$/;  // matches ["..."], ["...."], etc.
+    const patchToSend = Object.assign({}, updated);
+    for (const field of IMAGE_FIELDS) {
+      if (!(field in patchToSend)) continue;
+      const v = String(patchToSend[field] == null ? '' : patchToSend[field]);
+      // Strip if it's a placeholder sentinel
+      if (PLACEHOLDER_RE.test(v)) { delete patchToSend[field]; continue; }
+      // Strip if the value is unchanged from currentDetailRequest (was just spread in)
+      if (currentDetailRequest && patchToSend[field] === currentDetailRequest[field]) {
+        delete patchToSend[field];
+      }
+    }
+    const result = await window.dataSdk.update(patchToSend);
     if (!result.isOk) {
       showToast('Không thể cập nhật request');
       return false;
