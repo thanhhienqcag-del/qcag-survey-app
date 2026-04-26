@@ -54,7 +54,7 @@ function getBackendCandidates(req) {
     ...splitList(process.env.KS_BACKEND_CANDIDATES),
     ...getLocalDevCandidates(req),
     // Known production backends in this project.
-    'https://qcag-backend-493469512136.asia-southeast1.run.app',
+    'https://ks-backend-493469512136.asia-southeast1.run.app',
     'https://qcag-backend-k7disoxmcq-as.a.run.app',
     'https://qcag-backend-bgrkahehra-as.a.run.app'
   ]);
