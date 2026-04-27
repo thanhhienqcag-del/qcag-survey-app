@@ -19,11 +19,15 @@ function getBrandsForType(type) {
     }
   } catch (e) {}
 
-  if (String(type || '').includes('Logo')) {
+  const tl = String(type || '').toLowerCase();
+  if (tl.includes('logo')) {
     return allBrands.filter(b => !['Bivina', 'Bivina Export', 'Shopname'].includes(b));
   }
-
-  if (String(type || '').includes('Bảng') || String(type || '').includes('Hộp đèn')) {
+  // Prefer detecting "hộp"/"hộp đèn" before generic "bảng"
+  if (tl.includes('hộp') || tl.includes('hop') || tl.includes('hộp đèn')) {
+    return allBrands.filter(b => !['Heineken', 'Strongbow'].includes(b));
+  }
+  if (tl.includes('bảng')) {
     return allBrands.filter(b => !['Heineken', 'Strongbow'].includes(b));
   }
 
@@ -53,6 +57,12 @@ function sanitizeIntegerInput(el) {
   } catch (e) {
     el.value = String(el.value || '').replace(/\D/g, '').slice(0, 10);
   }
+}
+
+// Strip any non-digit characters (disallow decimal separator)
+function sanitizeNoDecimalInput(el) {
+  if (!el) return;
+  el.value = String(el.value || '').replace(/[^0-9]/g, '');
 }
 
 function sanitizeOutletCodeInput(el) {

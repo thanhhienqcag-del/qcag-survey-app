@@ -223,6 +223,32 @@
       border-color: #fb923c;
       color: #ffd7a6;
     }
+    /* QCAG desktop customizations requested */
+    .qcag-type-hopden { color: #ef4444; font-weight:600; }
+    .qcag-type-bang { color: #2563eb; font-weight:600; }
+    .qcag-type-logo { color: #fb923c; font-weight:600; }
+    .qcag-request-name, .qcag-requester-grid strong, .qcag-outlet-grid .ot-first strong, .qcag-request-ss { text-transform: uppercase; }
+    #qcagEditOutletName, #qcagEditOutletName::placeholder { text-transform: uppercase; }
+    .qcag-filter-count.qcag-blink { animation: qcag-warranty-blink 1s ease-in-out infinite; }
+    @keyframes qcag-warranty-blink { 0% { transform: scale(1); opacity:1 } 50% { transform: scale(1.12); opacity:0.5 } 100% { transform: scale(1); opacity:1 } }
+    /* Warranty tab alert: only add a red outline + subtle halo; do not override
+       the button's selected/active background or the count badge colors. */
+    .qcag-filter-btn.qcag-filter-alert {
+      border: 2px solid #ef4444; /* red outline */
+      box-shadow: 0 0 0 6px rgba(239,68,68,0.04); /* subtle halo */
+      /* Do not change background or text color — respect theme/selected styles */
+      background-color: inherit;
+      color: inherit;
+    }
+    /* Keep the inner count badge styling untouched so theme selection persists. */
+    .qcag-filter-btn.qcag-filter-alert .qcag-filter-count {
+      /* no overrides here */
+    }
+    [data-theme="dark"] .qcag-filter-btn.qcag-filter-alert,
+    .theme-dark .qcag-filter-btn.qcag-filter-alert {
+      border-color: #b91c1c; /* darker red outline for dark theme */
+      box-shadow: 0 0 0 6px rgba(185,28,28,0.04);
+    }
   </style>
   <style>
     /* Accessibility & layout fixes moved from inline styles */
@@ -536,8 +562,10 @@
         <main class="qcag-desktop-main">
           <aside class="qcag-desktop-list-panel">
             <div class="qcag-status-tabs">
-              <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn active">Đang xử lý</button>
-              <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn">Hoàn thành</button>
+              <div class="flex items-center bg-gray-100 rounded-lg p-1 text-sm">
+                <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn px-3 py-1 rounded-md active">Đang xử lý <span id="qcagProcessingCount" class="qcag-status-count">0</span></button>
+                <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn px-3 py-1 rounded-md">Hoàn thành <span id="qcagDoneCount" class="qcag-status-count">0</span></button>
+              </div>
             </div>
 
             <div class="qcag-list-toolbar">

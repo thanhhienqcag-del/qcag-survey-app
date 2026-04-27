@@ -381,12 +381,56 @@
     color: #ffffff;
   }
 
+  /* Scoped: make status tabs segmented control use high-contrast text
+     Non-active: transparent/soft bg with dark text. Active: white card with
+     dark text and subtle shadow (matches App-1). */
+  .qcag-status-tabs .qcag-status-btn {
+    border: none;
+    background: transparent;
+    color: #0f172a; /* gray-900 — high contrast */
+    box-shadow: none;
+    padding: 6px 10px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  .qcag-status-tabs .qcag-status-btn:hover {
+    background: rgba(15,23,42,0.04);
+  }
+
+  .qcag-status-tabs .qcag-status-btn.active {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 6px 18px rgba(2,6,23,0.08);
+  }
+
   .qcag-list-toolbar {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
     padding: 10px;
     border-bottom: 1px solid #f3f4f6;
+  }
+
+  /* Small numeric badge for status tabs */
+  .qcag-status-count {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(17,24,39,0.9);
+    color: #fff;
+    vertical-align: middle;
+  }
+
+  /* Invert badge colors when parent button is active */
+  .qcag-status-btn.active .qcag-status-count {
+    background: rgba(255,255,255,0.92);
+    color: #111827;
   }
 
   .qcag-filter-count {

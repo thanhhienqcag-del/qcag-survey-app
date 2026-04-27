@@ -54,6 +54,22 @@ function qcagDesktopParseJson(raw, fallback) {
   try { return JSON.parse(raw || ''); } catch (e) { return fallback; }
 }
 
+// Global delegated handler for `.toggle-switch` elements to keep toggles responsive
+(function qcagInitToggleSwitches() {
+  if (typeof window === 'undefined' || !document) return;
+  document.addEventListener('click', (ev) => {
+    try {
+      const btn = ev.target && (ev.target.closest ? ev.target.closest('.toggle-switch') : null);
+      if (!btn) return;
+      // Prevent accidental form submissions
+      ev.preventDefault();
+      btn.classList.toggle('toggle-on');
+      btn.classList.toggle('bg-gray-900');
+      btn.classList.toggle('bg-gray-300');
+    } catch (e) {}
+  }, true);
+})();
+
 // ── Push notification bell for QCAG desktop ──────────────────────────
 function qcagDesktopUpdateBellUI() {
   const dot = document.getElementById('qcagPushBellStatus');
@@ -560,12 +576,24 @@ function qcagEnsureEditSingleItemModal() {
           <label>Ghi chú / Yêu cầu
             <input id="qcagEditSingleItemNote" type="text" placeholder="Ghi chú"/>
           </label>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+            <label style="display:flex;gap:8px;align-items:center;">Khảo sát
+              <button id="qcagEditSingleItemSurveyToggle" type="button" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative" aria-pressed="false">
+                <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
+              </button>
+            </label>
+            <label style="display:flex;gap:8px;align-items:center;">Kích thước cũ
+              <button id="qcagEditSingleItemUseOldSizeToggle" type="button" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative" aria-pressed="false">
+                <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
+              </button>
+            </label>
+          </div>
           <div class="qcag-edit-grid-3" style="margin-top:8px">
             <label>Chiều ngang (m)
-              <input id="qcagEditSingleItemWidth" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this)"/>
+              <input id="qcagEditSingleItemWidth" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this)"/>
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditSingleItemHeight" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this)"/>
+              <input id="qcagEditSingleItemHeight" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this)"/>
             </label>
             <label>Số trụ
               <input id="qcagEditSingleItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this)"/>
@@ -637,6 +665,20 @@ function qcagDesktopOpenEditItemModal(index) {
   if (heightEl) heightEl.value = (item.surveySize && item.surveySize.height) || item.height || '';
   if (polesEl)  polesEl.value  = item.poles || 0;
 
+  // Prefill toggles (survey / useOldSize)
+  try {
+    const sBtn = document.getElementById('qcagEditSingleItemSurveyToggle');
+    const uBtn = document.getElementById('qcagEditSingleItemUseOldSizeToggle');
+    if (sBtn) {
+      if (item.survey) sBtn.className = 'toggle-switch bg-gray-900 toggle-on rounded-full p-0.5 relative';
+      else sBtn.className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
+    }
+    if (uBtn) {
+      if (item.useOldSize) uBtn.className = 'toggle-switch bg-gray-900 toggle-on rounded-full p-0.5 relative';
+      else uBtn.className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
+    }
+  } catch (e) {}
+
   const modal = document.getElementById('qcagEditSingleItemModal');
   if (modal) modal.classList.remove('hidden');
 }
@@ -658,6 +700,11 @@ async function qcagDesktopConfirmEditSingleItemModal() {
   const newWidth  = parseFloat((document.getElementById('qcagEditSingleItemWidth')  || {}).value)  || 0;
   const newHeight = parseFloat((document.getElementById('qcagEditSingleItemHeight') || {}).value) || 0;
   const newPoles  = parseInt((document.getElementById('qcagEditSingleItemPoles')   || {}).value, 10) || 0;
+
+  const sBtn = document.getElementById('qcagEditSingleItemSurveyToggle');
+  const uBtn = document.getElementById('qcagEditSingleItemUseOldSizeToggle');
+  const newSurvey = !!(sBtn && sBtn.classList.contains('toggle-on'));
+  const newUseOldSize = !!(uBtn && uBtn.classList.contains('toggle-on'));
 
   if (!newType) { showToast('Vui lòng chọn loại hạng mục'); return; }
 
@@ -682,6 +729,8 @@ async function qcagDesktopConfirmEditSingleItemModal() {
   if (newWidth  !== oldWidth)  changes.push(`Chiều ngang: ${oldWidth}m → ${newWidth}m`);
   if (newHeight !== oldHeight) changes.push(`Chiều cao: ${oldHeight}m → ${newHeight}m`);
   if (newPoles  !== oldPoles)  changes.push(`Số trụ: ${oldPoles} → ${newPoles}`);
+  if (newSurvey !== !!oldItem.survey) changes.push(`Khảo sát: ${oldItem.survey ? 'Có' : 'Không'} → ${newSurvey ? 'Có' : 'Không'}`);
+  if (newUseOldSize !== !!oldItem.useOldSize) changes.push(`Kích thước cũ: ${oldItem.useOldSize ? 'Có' : 'Không'} → ${newUseOldSize ? 'Có' : 'Không'}`);
 
   items[idx] = {
     ...oldItem,
@@ -692,6 +741,8 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     width:        newWidth  || oldItem.width  || undefined,
     height:       newHeight || oldItem.height || undefined,
     poles:        newPoles,
+    survey:       newSurvey,
+    useOldSize:   newUseOldSize,
     otherContent: newType === 'Hạng mục khác' ? newNote : (oldItem.otherContent || ''),
     editedByQCAG:   true,
     editedByQCAGBy: editor,
@@ -764,13 +815,26 @@ function qcagEnsureEditItemsModal() {
 
           <div class="qcag-edit-grid-3">
             <label>Chiều ngang (m)
-              <input id="qcagEditItemWidth" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemWidth" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditItemHeight" type="number" step="0.01" min="0" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemHeight" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Số trụ
               <input id="qcagEditItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this); qcagEditItemsMaybeValidate()" />
+            </label>
+          </div>
+          
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+            <label style="display:flex;gap:8px;align-items:center;">Khảo sát
+              <button id="qcagEditItemSurveyToggle" type="button" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative" aria-pressed="false">
+                <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
+              </button>
+            </label>
+            <label style="display:flex;gap:8px;align-items:center;">Kích thước cũ
+              <button id="qcagEditItemUseOldSizeToggle" type="button" class="toggle-switch bg-gray-300 rounded-full p-0.5 relative" aria-pressed="false">
+                <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
+              </button>
             </label>
           </div>
 
@@ -930,7 +994,10 @@ async function qcagDesktopConfirmEditItemsModal() {
   const polesVal = parseInt((document.getElementById('qcagEditItemPoles') || {}).value, 10) || 0;
   const width = parseFloat((document.getElementById('qcagEditItemWidth') || {}).value) || 0;
   const height = parseFloat((document.getElementById('qcagEditItemHeight') || {}).value) || 0;
-  const survey = false;
+  const sBtn = document.getElementById('qcagEditItemSurveyToggle');
+  const uBtn = document.getElementById('qcagEditItemUseOldSizeToggle');
+  const survey = !!(sBtn && sBtn.classList.contains('toggle-on'));
+  const useOldSize = !!(uBtn && uBtn.classList.contains('toggle-on'));
   const otherContent = (document.getElementById('qcagEditItemOtherContent') || {}).value || '';
 
   if (!type) {
@@ -949,6 +1016,7 @@ async function qcagDesktopConfirmEditItemsModal() {
     width: width || undefined,
     height: height || undefined,
     survey,
+    useOldSize: useOldSize,
     addedByQCAG: true,
     addedByQCAGBy: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
     addedByQCAGAt: now,
@@ -1431,10 +1499,13 @@ function qcagDesktopUpdateFilterCounts() {
     }
 
     if (_qcagDesktopStatusFilter === 'done') {
-      // Exclude items that were pulled back to processing by an edit request
+      // Exclude items that were pulled back to processing by an edit request.
+      // Warranty requests are considered done when status is done/processed
+      // even if they don't have MQ images.
+      const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
+      if (t === 'warranty') return isDone && !hasEditRequest;
       const designImgs = qcagDesktopParseJson(r.designImages, []);
       const hasMq = Array.isArray(designImgs) && designImgs.length > 0;
-      const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
       return isDone && hasMq && !hasEditRequest;
     }
 
@@ -1443,12 +1514,82 @@ function qcagDesktopUpdateFilterCounts() {
 
   const newCount = list.filter(r => matchesStatusForType(r, 'new')).length;
   const warrantyCount = list.filter(r => matchesStatusForType(r, 'warranty')).length;
+  // Compute processing vs done counts for the top-left status tabs
+  const processingCount = list.filter(r => {
+    try { const st = String(r.status || 'pending').toLowerCase(); return !(st === 'done' || st === 'processed'); } catch (e) { return false; }
+  }).length;
+  const doneCount = list.filter(r => {
+    try { const st = String(r.status || 'pending').toLowerCase(); return (st === 'done' || st === 'processed'); } catch (e) { return false; }
+  }).length;
+  // Also compute pending warranty (non-done) to use for alerting the tab
+  const pendingWarrantyCount = list.filter(r => {
+    try {
+      const t = String(r.type || '').toLowerCase();
+      if (t !== 'warranty') return false;
+      const status = String(r.status || 'pending').toLowerCase();
+      return !(status === 'done' || status === 'processed');
+    } catch (e) { return false; }
+  }).length;
 
   const newSpan = document.getElementById('qcagNewCount');
   const warrantySpan = document.getElementById('qcagWarrantyCount');
+  const procSpan = document.getElementById('qcagProcessingCount');
+  const doneSpan = document.getElementById('qcagDoneCount');
   if (newSpan) newSpan.textContent = String(newCount);
-  if (warrantySpan) warrantySpan.textContent = String(warrantyCount);
+  if (warrantySpan) {
+    warrantySpan.textContent = String(warrantyCount);
+    // Blink only when there are pending warranties and we're not viewing the 'done' tab
+    const showBlink = (pendingWarrantyCount > 0) && (_qcagDesktopStatusFilter !== 'done');
+    warrantySpan.classList.toggle('qcag-blink', !!showBlink);
+  }
+  if (procSpan) procSpan.textContent = String(processingCount);
+  if (doneSpan) doneSpan.textContent = String(doneCount);
+  // Add visual alert to the Warranty tab when there are pending warranties
+  try {
+    const warrantyBtn = document.getElementById('qcagFilterWarranty');
+    if (warrantyBtn) {
+      // Only show the red outline alert when there are pending warranties AND
+      // the current status filter isn't 'done' — the 'Hoàn thành' view stays normal.
+      warrantyBtn.classList.toggle('qcag-filter-alert', (pendingWarrantyCount > 0) && (_qcagDesktopStatusFilter !== 'done'));
+    }
+  } catch (e) {}
 }
+
+// Debug helper: inject a single pending warranty request for UI testing.
+function qcagDesktopAddTestPendingWarranty() {
+  try {
+    if (typeof allRequests === 'undefined' || !Array.isArray(allRequests)) return null;
+    // avoid duplicating test entries on repeated calls
+    const existing = allRequests.find(r => String(r.__backendId || '').startsWith('test-warranty-'));
+    if (existing) return existing;
+
+    const id = 'test-warranty-' + Date.now();
+    const req = {
+      __backendId: id,
+      code: id,
+      type: 'warranty',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      sale: 'TEST SALE',
+      ss: 'TEST SS',
+      se: 'TEST SE',
+      outlet_name: 'TEST OUTLET',
+      items: JSON.stringify([{ name: 'Test Warranty Item', quantity: 1, width: 100, height: 200 }]),
+      designImages: JSON.stringify([]),
+      comments: JSON.stringify([])
+    };
+
+    // insert at the front so it's visible immediately
+    allRequests.unshift(req);
+    _qcagRequestsVersion = (_qcagRequestsVersion || 0) + 1;
+    try { qcagDesktopCacheRequest(req); } catch (e) {}
+    try { renderQCAGDesktopList(); } catch (e) {}
+    try { qcagDesktopUpdateFilterCounts(); } catch (e) {}
+    try { if (typeof showToast === 'function') showToast('✓ Đã thêm yêu cầu bảo hành thử (pending).'); } catch (e) {}
+    return req;
+  } catch (e) { return null; }
+}
+
 
 function qcagDesktopGoToPage(p) {
   const requests = getQCAGDesktopVisibleRequests();
@@ -1486,7 +1627,7 @@ function renderQCAGDesktopList() {
     const activeCls = req.__backendId === _qcagDesktopCurrentId ? 'active' : '';
     const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
     const requester = qcagDesktopParseJson(req.requester, {});
-    const saleName = requester.saleName || requester.phone || '-';
+      const saleName = (requester.saleName || requester.phone || '-').toUpperCase();
     const region = requester.region || '-';
     const requestKey = req.__backendId || `__${new Date(req.createdAt || 0).getTime()}`;
     const requestCode = requestCodes[requestKey] || '';
@@ -1528,11 +1669,11 @@ function renderQCAGDesktopList() {
     return `
       <div role="button" tabindex="0" class="qcag-request-item ${activeCls}" onclick="openQCAGDesktopRequest('${req.__backendId}')">
         <div class="qcag-request-item-top">
-          <div class="qcag-request-name">${escapeHtml(req.outletName || '-')} • ${escapeHtml(req.outletCode || '-')}</div>
+          <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())} • ${escapeHtml(req.outletCode || '-')}</div>
           <span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>
         </div>
-        <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(saleName)}</span> • ${escapeHtml(region)}</div>
-        <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(ss) : '<span class="qcag-ss-tba">Chức vụ TBA</span>'; })()}</div>
+        <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(String(saleName || '-').toUpperCase())}</span> • ${escapeHtml(region)}</div>
+        <div class="qcag-request-ss">${(() => { const ss = (requester && requester.ssName) || ''; return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-tba">Chức vụ TBA</span>'; })()}</div>
         <div class="qcag-request-footer">
           <div class="qcag-request-footer-left">
             <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
@@ -2076,6 +2217,15 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
             <div>STT</div><div>Loại bảng hiệu</div><div>Hình thức</div><div>Brand</div><div>Kích thước</div><div>Số trụ</div><div>Yêu cầu</div><div></div>
           </div>
       ${items.map((item, idx) => {
+        // Decide type color class for desktop QCAG view
+        let typeClass = '';
+        try {
+          const tt = String(item.type || '').toLowerCase();
+          // Prefer classifying as Bảng if the string contains 'bảng'
+          if (tt.includes('bảng')) typeClass = 'qcag-type-bang';
+          else if (tt.includes('hộp đèn') || tt.includes('hộp') || tt.includes('hop')) typeClass = 'qcag-type-hopden';
+          else if (tt.includes('logo')) typeClass = 'qcag-type-logo';
+        } catch (e) { typeClass = ''; }
         const requestText = item.type === 'Hạng mục khác' ? (item.otherContent || '-') : (item.note || '-');
         let size = '-';
         let sizeExtraNote = '';
@@ -2119,7 +2269,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
           ? `<span class="qcag-edited-badge" title="${escapeHtml('Hạng mục được sửa bởi ' + (item.editedByQCAGBy || 'QCAG') + (item.editedByQCAGAt ? ' lúc ' + new Date(item.editedByQCAGAt).toLocaleString('vi-VN') : ''))}"></span>`
           : '';
         const badgesHtml = `${brandBadge}${addedBadgeHtml}${editedBadgeHtml}`;
-        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div>${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div>${escapeHtml(item.brand || '-')}</div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
+        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div class="qcag-item-type ${typeClass}">${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div>${escapeHtml(item.brand || '-')}</div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
       }).join('')}
     </div>
   `;
@@ -2333,7 +2483,7 @@ function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
   const requester  = qcagDesktopParseJson(entry.requester, {});
   const reqCode    = (codeMap && codeMap[entry.__backendId]) || '-';
   const uploadedBy = entry.designUploadedBy || '-';
-  const saleName   = requester.saleName || requester.phone || '-';
+  const saleName   = (requester.saleName || requester.phone || '-').toUpperCase();
   const requestTime = entry.createdAt      ? new Date(entry.createdAt).toLocaleString('vi-VN')      : '-';
   const uploadTime  = entry.designUpdatedAt ? new Date(entry.designUpdatedAt).toLocaleString('vi-VN') : '-';
 
@@ -2448,11 +2598,11 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
             <div class="qcag-request-time">${request.createdAt ? escapeHtml(new Date(request.createdAt).toLocaleString('vi-VN')) : '-'}</div>
           </div>
           <div class="qcag-requester-grid">
-            <div><span>Tên Sale</span><strong>${escapeHtml(requester.saleName || requester.saleName || requester.phone || '-')}</strong></div>
+            <div><span>Tên Sale</span><strong>${escapeHtml(String(requester.saleName || requester.saleName || requester.phone || '-').toUpperCase())}</strong></div>
             <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || '-')}</strong></div>
             <div><span>SĐT Sale</span><strong>${escapeHtml(requester.phone || '-')}</strong></div>
             <div><span>Khu vực</span><strong>${escapeHtml(requester.region || '-')}</strong></div>
-            <div><span>Tên SS/SE</span><strong>${escapeHtml(requester.ssName || requester.ssName || '-')}</strong></div>
+            <div><span>Tên SS/SE</span><strong>${escapeHtml(String(requester.ssName || requester.ssName || '-').toUpperCase())}</strong></div>
           </div>
         </div>
 
@@ -2462,7 +2612,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
             <button type="button" class="qcag-edit-outlet-btn" onclick="qcagDesktopOpenEditOutletModal()" title="Chỉnh sửa thông tin Outlet"><svg class="qcag-icon-pencil" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Sửa thông tin</button>
           </div>
             <div class="qcag-outlet-grid">
-            <div class="ot-first"><span>Tên Outlet:</span><strong>${escapeHtml(request.outletName || '-')}</strong></div>
+            <div class="ot-first"><span>Tên Outlet:</span><strong>${escapeHtml(String(request.outletName || '-').toUpperCase())}</strong></div>
             <div class="ot-first"><span>Outlet Code:</span><strong class="qcag-outlet-code">${escapeHtml(request.outletCode || '-')}</strong>
               <button type="button" class="qcag-copy-btn qcag-copy-btn-icon" onclick="qcagCopyOutletCode('${escapeHtml(request.outletCode || '')}')" title="Sao chép Outlet Code">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
