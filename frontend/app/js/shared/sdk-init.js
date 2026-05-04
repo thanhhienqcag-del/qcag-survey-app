@@ -195,10 +195,9 @@ async function initHomeAndLoad() {
 }
 
 async function initApp() {
-  // Show loading overlay while waiting for remote data
-  if (typeof showLoadingOverlay === 'function') {
-    showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
-  }
+  // Instead of a blocking fullscreen overlay, mark home stats as loading
+  // so counters show placeholders while data loads.
+  try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(true); } catch (e) {}
 
   // Show cached data instantly so the list is never blank while network loads
   try {
@@ -308,6 +307,7 @@ async function initApp() {
     if (!result.isOk) {
       showToast('Lỗi kết nối dữ liệu');
     }
+    try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
   }
 
   // If no remote data SDK, load from localStorage as a fallback
@@ -325,6 +325,7 @@ async function initApp() {
       renderNotifications();
     }
     if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+    try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
   }
 
   // Only ensure an initial request item when New Request screen is visible.

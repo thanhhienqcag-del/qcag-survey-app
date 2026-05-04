@@ -604,6 +604,17 @@ async function showRequestDetail(id) {
     `;
   }
 
+  // Quotation bridge section (async-filled after render)
+  html += `
+    <div id="quoteBridgeSection" class="bg-indigo-50 rounded-xl p-4 hidden">
+      <div class="flex items-center gap-2 mb-3">
+        <svg class="w-4 h-4 text-indigo-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <h3 class="font-medium text-indigo-900">Báo giá QCAG</h3>
+      </div>
+      <div id="quoteBridgeContent" class="text-sm text-gray-500">Đang tải...</div>
+    </div>
+  `;
+
   html += '</div></div>'; // close .space-y-4 + .detail-main
 
   // Comments column — build chat-bubble HTML
@@ -746,6 +757,80 @@ async function showRequestDetail(id) {
     showMqJumpHintIfNeeded();
   } else {
     hideMqJumpHint();
+  }
+
+  // Load bridge / quotation status asynchronously (non-blocking)
+  _loadBridgeStatus(request.__backendId).catch(function () {});
+}
+
+// ── Bridge / Quotation status loader ─────────────────────────────────
+
+async function _loadBridgeStatus(backendId) {
+  const section = document.getElementById('quoteBridgeSection');
+  const contentEl = document.getElementById('quoteBridgeContent');
+  if (!section || !contentEl || !backendId) return;
+
+  try {
+    // Resolve backend base URL same way data_sdk does
+    const base = (window.__env && window.__env.BACKEND_URL
+      ? String(window.__env.BACKEND_URL).replace(/\/+$/, '')
+      : (window.location && window.location.origin && !/^file:/i.test(window.location.origin)
+          ? window.location.origin
+          : ''));
+    const url = base + '/api/bridge/status/' + encodeURIComponent(backendId);
+    const resp = await fetch(url);
+    if (!resp.ok) return; // silently skip if endpoint fails
+    const json = await resp.json();
+    if (!json.ok || !json.found) return; // no bridge entry — keep section hidden
+
+    const b = json.bridge || {};
+    section.classList.remove('hidden');
+
+    // Status badge
+    const statusMap = {
+      'pending':     { label: 'Chờ báo giá', cls: 'bg-amber-100 text-amber-700' },
+      'in_progress': { label: 'Đang báo giá', cls: 'bg-blue-100 text-blue-700' },
+      'quoted':      { label: 'Đã báo giá', cls: 'bg-green-100 text-green-700' },
+      'confirmed':   { label: 'Đã xác nhận', cls: 'bg-indigo-100 text-indigo-700' },
+    };
+    const st = statusMap[b.quote_status] || { label: b.quote_status || '—', cls: 'bg-gray-100 text-gray-600' };
+    const statusBadge = `<span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${st.cls}">${st.label}</span>`;
+
+    // Format VND
+    const fmtVnd = (n) => {
+      const num = parseFloat(n);
+      if (!n || isNaN(num)) return '—';
+      return num.toLocaleString('vi-VN') + ' đ';
+    };
+
+    // Format date
+    const fmtDate = (d) => {
+      if (!d) return '—';
+      try { return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+      catch (e) { return d; }
+    };
+
+    const viewBtn = b.quote_preview_url
+      ? `<a href="${b.quote_preview_url}" target="_blank" rel="noopener noreferrer"
+           class="inline-flex items-center gap-1 px-3 py-1.5 mt-3 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-sm">
+           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+           Xem báo giá
+         </a>`
+      : '';
+
+    contentEl.innerHTML = `
+      <div class="grid grid-cols-2 gap-2">
+        <div><span class="text-gray-500">Trạng thái:</span> ${statusBadge}</div>
+        ${b.quote_code ? `<div class="truncate"><span class="text-gray-500">Mã BG:</span> <span class="font-medium font-mono">${b.quote_code}</span></div>` : ''}
+        ${b.quote_total ? `<div class="truncate"><span class="text-gray-500">Tổng tiền:</span> <span class="font-medium">${fmtVnd(b.quote_total)}</span></div>` : ''}
+        ${b.quoted_by ? `<div class="truncate"><span class="text-gray-500">Người BG:</span> <span class="font-medium">${b.quoted_by}</span></div>` : ''}
+        ${b.quote_confirmed_at ? `<div class="truncate"><span class="text-gray-500">Ngày xác nhận:</span> <span class="font-medium">${fmtDate(b.quote_confirmed_at)}</span></div>` : ''}
+        ${b.tk_code ? `<div class="truncate"><span class="text-gray-500">Mã TK:</span> <span class="font-medium font-mono">${b.tk_code}</span></div>` : ''}
+      </div>
+      ${viewBtn}
+    `;
+  } catch (e) {
+    // silently ignore errors
   }
 }
 

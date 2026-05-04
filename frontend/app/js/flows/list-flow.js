@@ -7,6 +7,8 @@
 let currentDesignFilter = 'all'; // 'all'|'waiting'|'has_mq'|'editing'
 let currentListSearchQuery = '';  // free-text search
 let currentMobileViewMode = 'gallery'; // 'list' | 'gallery'
+let currentPage = 1;
+const PAGE_SIZE = 12;
 
 const DESIGN_FILTER_LABELS = {
   all:              'Tất cả',
@@ -39,6 +41,7 @@ function getWarrantyState(req) {
 
 function showRequestListWithFilter(filter) {
   currentDesignFilter = filter || 'all';
+  currentPage = 1;
   showRequestList();
 }
 
@@ -59,11 +62,13 @@ function showWarrantyListWithFilter(filter) {
 
 function clearDesignFilter() {
   currentDesignFilter = 'all';
+  currentPage = 1;
   renderRequestList();
 }
 
 function onListSearch(val) {
   currentListSearchQuery = (val || '').trim().toLowerCase();
+  currentPage = 1;
   renderRequestList();
 }
 // Returns: 'waiting' | 'has_mq' | 'editing'
@@ -124,6 +129,16 @@ function updateHomeStats() {
   editingEl.textContent = editing;
   if (wPendEl) wPendEl.textContent = warrantyPending;
   if (wDoneEl) wDoneEl.textContent = warrantyDone;
+  // When initial data is loading, show subtle placeholders instead of zeros.
+  if (window._homeStatsLoading) {
+    const ph = '…';
+    if (allEl) allEl.textContent = ph;
+    if (waitEl) waitEl.textContent = ph;
+    if (hasMqEl) hasMqEl.textContent = ph;
+    if (editingEl) editingEl.textContent = ph;
+    if (wPendEl) wPendEl.textContent = ph;
+    if (wDoneEl) wDoneEl.textContent = ph;
+  }
 }
 
 function updateRequestCount() {
@@ -217,6 +232,12 @@ function renderRequestList() {
 
   emptyState.classList.add('hidden');
 
+  // Pagination: slice to current page
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+  const pageSlice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   // Track which entries need lazy image load (have placeholder ["..."])
   const lazyLoadIds = [];
 
@@ -227,11 +248,16 @@ function renderRequestList() {
     container.className = 'space-y-3';
   }
 
-  container.innerHTML = filtered.map(req => {
+  container.innerHTML = pageSlice.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
     const dsState = req.type === 'warranty' ? getWarrantyState(req) : getRequestDesignState(req);
     const badge = DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.waiting;
+    const tkName = req.designCreatedBy || req.designLastEditedBy || null;
+    const lastUpdated = req.designLastEditedAt ? (() => {
+      const d = new Date(req.designLastEditedAt);
+      return d.toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + d.toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'});
+    })() : null;
     let preview = '';
     let hasDesignPlaceholder = false;
     try {
@@ -278,13 +304,17 @@ function renderRequestList() {
        }
 
        return `
-        <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl relative active:bg-gray-100 cursor-pointer flex flex-col shadow-sm border border-gray-100 overflow-hidden">
+        <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl active:bg-gray-100 cursor-pointer flex flex-col shadow-sm border border-gray-100 overflow-hidden">
           ${thumbHtml}
-          <div class="p-3 flex-1 flex flex-col">
-            <span class="absolute top-2 right-2 flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm z-10 opacity-90">${badge.label}</span>
-            <div class="font-medium text-sm line-clamp-2 leading-snug mb-1">${req.outletName}</div>
-            <div class="text-xs text-gray-500 truncate mb-1">${req.outletCode}</div>
-            <div class="text-[10px] text-gray-400 mt-auto pt-1">${dateStr}</div>
+          <div class="p-2.5 flex-1 flex flex-col gap-0.5">
+            <div class="font-semibold text-sm leading-tight line-clamp-2">${req.outletName}</div>
+            <div class="text-[11px] text-gray-500 font-medium truncate">${req.outletCode}</div>
+            <div class="text-[10px] text-gray-400">Gửi: ${dateStr}</div>
+            ${tkName ? `<div class="text-[10px] text-gray-400 truncate">TK: ${tkName}</div>` : ''}
+            ${lastUpdated ? `<div class="text-[10px] text-blue-500 truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
+            <div class="mt-auto pt-1.5">
+              <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm">${badge.label}</span>
+            </div>
           </div>
         </div>
       `;
@@ -305,17 +335,19 @@ function renderRequestList() {
 
        return `
          <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer">
-           <div class="flex items-center gap-3">
+           <div class="flex items-start gap-3">
              <div class="flex-shrink-0">${thumbHtml}</div>
              <div class="flex-1 min-w-0">
-               <div class="flex items-center gap-2 mb-0.5">
-                 <span class="font-medium truncate">${req.outletName}</span>
-                 <span class="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
+               <div class="font-semibold text-sm leading-tight mb-0.5">${req.outletName}</div>
+               <div class="text-xs text-gray-500 font-medium truncate mb-0.5">${req.outletCode}</div>
+               <div class="text-xs text-gray-400">Gửi: ${dateStr}</div>
+               ${tkName ? `<div class="text-xs text-gray-400 truncate">TK: ${tkName}</div>` : ''}
+               ${lastUpdated ? `<div class="text-xs text-blue-500 truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
+               <div class="mt-1.5">
+                 <span class="text-xs px-1.5 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
                </div>
-               <div class="text-sm text-gray-500 truncate">${req.outletCode}</div>
-               <div class="text-xs text-gray-400 mt-0.5">${dateStr}</div>
              </div>
-             <svg class="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+             <svg class="w-4 h-4 text-gray-300 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
              </svg>
            </div>
@@ -323,6 +355,10 @@ function renderRequestList() {
        `;
     }
   }).join('');
+
+  // Update pagination controls
+  const pgEl = document.getElementById('requestListPagination');
+  if (pgEl) pgEl.innerHTML = totalPages > 1 ? renderPaginationHTML(currentPage, totalPages) : '';
 
   // Store filtered list for gallery swipe-navigation between outlets
   window._dvOutletList = filtered.slice();
@@ -396,6 +432,7 @@ function switchListTab(tab) {
   document.getElementById('listTab2Btn').className = tab === 'warranty' ? 'flex-1 py-3 text-sm font-medium tab-active' : 'flex-1 py-3 text-sm font-medium tab-inactive';
   document.getElementById('newCount').className = tab === 'new' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
   document.getElementById('warrantyCount').className = tab === 'warranty' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
+  currentPage = 1;
   renderRequestList();
 }
 
@@ -412,4 +449,47 @@ function toggleMobileListViewMode() {
     }
   }
   renderRequestList();
+}
+
+function goToPage(page) {
+  currentPage = page;
+  renderRequestList();
+  const c = document.getElementById('requestListContainer');
+  if (c) c.scrollTop = 0;
+}
+
+function renderPaginationHTML(page, total) {
+  const btnBase = 'w-8 h-8 rounded-lg text-sm font-medium flex items-center justify-center';
+  const activeCls = 'bg-gray-900 text-white';
+  const inactiveCls = 'bg-gray-100 text-gray-600 active:bg-gray-200';
+  const disabledCls = 'bg-gray-50 text-gray-300';
+  let start = Math.max(1, page - 2);
+  let end = Math.min(total, page + 2);
+  if (end - start < 4) {
+    if (start === 1) end = Math.min(total, start + 4);
+    else start = Math.max(1, end - 4);
+  }
+  let html = `<div class="flex items-center gap-1.5 py-2">`;
+  html += page > 1
+    ? `<button onclick="goToPage(${page - 1})" class="${btnBase} ${inactiveCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>`
+    : `<div class="${btnBase} ${disabledCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></div>`;
+  if (start > 1) {
+    html += `<button onclick="goToPage(1)" class="${btnBase} ${inactiveCls}">1</button>`;
+    if (start > 2) html += `<span class="text-gray-400 text-sm px-1">…</span>`;
+  }
+  for (let i = start; i <= end; i++) {
+    html += i === page
+      ? `<div class="${btnBase} ${activeCls}">${i}</div>`
+      : `<button onclick="goToPage(${i})" class="${btnBase} ${inactiveCls}">${i}</button>`;
+  }
+  if (end < total) {
+    if (end < total - 1) html += `<span class="text-gray-400 text-sm px-1">…</span>`;
+    html += `<button onclick="goToPage(${total})" class="${btnBase} ${inactiveCls}">${total}</button>`;
+  }
+  html += page < total
+    ? `<button onclick="goToPage(${page + 1})" class="${btnBase} ${inactiveCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button>`
+    : `<div class="${btnBase} ${disabledCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></div>`;
+  html += `<span class="text-xs text-gray-400 ml-1">${page}/${total}</span>`;
+  html += `</div>`;
+  return html;
 }

@@ -36,12 +36,26 @@ function getBrandsForType(type) {
 
 function sanitizeDecimalInput(el) {
   if (!el) return;
-  let v = String(el.value || '');
-  v = v.replace(/,/g, '.');
+  const raw = String(el.value || '');
+  const selStart = (typeof el.selectionStart === 'number') ? el.selectionStart : null;
+
+  let v = raw.replace(/,/g, '.');
   v = v.replace(/[^0-9.]/g, '');
   const parts = v.split('.');
   if (parts.length > 2) v = parts.shift() + '.' + parts.join('');
+
   el.value = v;
+
+  if (selStart !== null) {
+    try {
+      const beforeLeft = raw.slice(0, selStart);
+      const cleanedLeft = beforeLeft.replace(/,/g, '.').replace(/[^0-9.]/g, '');
+      const newPos = cleanedLeft.length;
+      el.setSelectionRange(newPos, newPos);
+    } catch (e) {
+      // ignore — some input types or browsers may not support selection range
+    }
+  }
 }
 
 function sanitizeIntegerInput(el) {

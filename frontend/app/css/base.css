@@ -1357,6 +1357,21 @@ body.dark .qcag-survey-badge,
 #loadingOverlay.active .loading-overlay-card {
   transform: scale(1);
 }
+
+/* ── Home stats loading (non-blocking) ───────────────────────────────── */
+@keyframes qcag-pulse {
+  0% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.03); }
+ 100% { opacity: 0.45; transform: scale(1); }
+}
+.stat-loading {
+  color: inherit !important;
+  opacity: 0.85;
+  display: inline-block;
+  animation: qcag-pulse 1.2s ease-in-out infinite;
+}
+
+/* homeLoadingBanner styles removed */
 /* Three-dot bounce loader */
 .loading-overlay-dots {
   flex-shrink: 0;

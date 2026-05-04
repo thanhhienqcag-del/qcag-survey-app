@@ -139,5 +139,22 @@ async function updateProject(req, res) {
   );
 
   if (!rows.length) return sendJson(res, 404, { error: 'Project not found' });
+
+  // Bridge INSERT khi status chuyển sang ready_for_quote
+  if (status === 'ready_for_quote' && process.env.ENABLE_BRIDGE_INSERT === 'true') {
+    const p = rows[0];
+    try {
+      await query(
+        `INSERT INTO ks_quote_bridge
+           (ks_backend_id, tk_code, outlet_name, outlet_code, address, region, design_created_by, quote_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+         ON CONFLICT (ks_backend_id) DO UPDATE SET quote_status = 'pending', updated_at = NOW()`,
+        ['KS-' + p.id, p.name, p.outlet_name, p.outlet_code, p.address, p.region, p.created_by],
+      );
+    } catch (err) {
+      console.warn('[bridge] skip:', err.message);
+    }
+  }
+
   return sendJson(res, 200, { data: rows[0], message: 'Project updated successfully' });
 }

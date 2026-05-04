@@ -72,6 +72,39 @@ function hideLoadingOverlay() {
   if (el) el.classList.remove('active');
 }
 
+// Toggle per-home-stats loading state (non-blocking). When enabled,
+// dashboard counters show a loading placeholder instead of zero.
+function setHomeStatsLoading(on) {
+  try {
+    window._homeStatsLoading = !!on;
+    // Toggle visual class on stat elements so they show pulse animation
+    var ids = ['statAll','statWaiting','statHasMQ','statEditing','statWarrantyPending','statWarrantyDone','requestCount','newCount','warrantyCount'];
+    ids.forEach(function(id) {
+      try {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (window._homeStatsLoading) {
+          el.classList.add('stat-loading');
+        } else {
+          el.classList.remove('stat-loading');
+        }
+      } catch (e) {}
+    });
+
+    // Show/hide the small home-loading note so users know they can create while data loads
+    try {
+      var note = document.getElementById('homeLoadNote');
+      if (note) note.style.display = window._homeStatsLoading ? '' : 'none';
+    } catch (e) {}
+
+    // banner removed — no-op
+
+    if (typeof updateRequestCount === 'function') updateRequestCount();
+    if (typeof updateHomeStats === 'function') updateHomeStats();
+  } catch (e) {}
+}
+window.setHomeStatsLoading = setHomeStatsLoading;
+
 // ── Push notification helper (frontend → /api/ks/push/send) ───────────
 function sendPushNotification(opts) {
   // opts: { title, body, role, phone, saleCode, data }

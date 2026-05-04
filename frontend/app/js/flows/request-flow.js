@@ -196,20 +196,25 @@ function renderRequestItems() {
             ` : ''}
 
             ${!item.survey ? `
-            <div class="flex items-center justify-between py-2">
-              <span class="text-sm">Kích thước cũ</span>
-              <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} rounded-full p-0.5 relative">
-                <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
-              </button>
-            </div>
-
-            <div class="flex items-center gap-3">
-              <label class="text-sm text-gray-500">Số trụ</label>
-              <div class="flex items-center gap-2">
-                <button onclick="incrementPoles(${item.id}, -1)" class="px-2 py-1 bg-gray-100 rounded">-</button>
-                <input id="poles-${item.id}" type="text" inputmode="numeric" pattern="\\d*" value="${item.poles || 0}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-20 px-2 py-1 border border-gray-200 rounded text-sm text-center">
-                <button onclick="incrementPoles(${item.id}, 1)" class="px-2 py-1 bg-gray-100 rounded">+</button>
-                <span class="text-xs text-gray-500">trụ</span>
+            <div class="py-2">
+              <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
+                <span>Số trụ</span>
+                <span>Kích thước cũ</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-2">
+                    <button onclick="incrementPoles(${item.id}, -1)" class="px-2 py-1 bg-gray-100 rounded">-</button>
+                    <input id="poles-${item.id}" type="text" inputmode="numeric" pattern="\\d*" value="${item.poles || 0}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-12 px-2 py-1 border border-gray-200 rounded text-sm text-center">
+                    <button onclick="incrementPoles(${item.id}, 1)" class="px-2 py-1 bg-gray-100 rounded">+</button>
+                    <span class="text-xs text-gray-500">trụ</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} rounded-full p-0.5 relative">
+                    <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
+                  </button>
+                </div>
               </div>
             </div>
 

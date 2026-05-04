@@ -61,6 +61,11 @@ function qcagDesktopParseJson(raw, fallback) {
     try {
       const btn = ev.target && (ev.target.closest ? ev.target.closest('.toggle-switch') : null);
       if (!btn) return;
+      // If this toggle has its own onclick handler (inline or bound),
+      // skip the global delegated toggle to avoid double-toggle.
+      try {
+        if (btn.getAttribute && btn.getAttribute('onclick')) return;
+      } catch (e) {}
       // Prevent accidental form submissions
       ev.preventDefault();
       btn.classList.toggle('toggle-on');
@@ -590,10 +595,10 @@ function qcagEnsureEditSingleItemModal() {
           </div>
           <div class="qcag-edit-grid-3" style="margin-top:8px">
             <label>Chiều ngang (m)
-              <input id="qcagEditSingleItemWidth" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this)"/>
+              <input id="qcagEditSingleItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this)"/>
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditSingleItemHeight" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this)"/>
+              <input id="qcagEditSingleItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this)"/>
             </label>
             <label>Số trụ
               <input id="qcagEditSingleItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this)"/>
@@ -815,10 +820,10 @@ function qcagEnsureEditItemsModal() {
 
           <div class="qcag-edit-grid-3">
             <label>Chiều ngang (m)
-              <input id="qcagEditItemWidth" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditItemHeight" type="number" step="1" min="0" oninput="sanitizeNoDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Số trụ
               <input id="qcagEditItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this); qcagEditItemsMaybeValidate()" />
@@ -4079,16 +4084,18 @@ function qcagNavRenderMap() {
   container.innerHTML = '';
 
   const defaultCenter = [10.3, 105.5];
-  const map = L.map(container, { center: defaultCenter, zoom: 8 });
+  const map = L.map(container, { center: defaultCenter, zoom: 8, maxZoom: 25 });
   _qcagNavMapInstance = map;
 
   const _osmDesktop = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
-    maxZoom: 18
+    maxZoom: 25,
+    maxNativeZoom: 19
   });
   const _satDesktop = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: '© Esri — Sources: Esri, DigitalGlobe, GeoEye',
-    maxZoom: 18
+    maxZoom: 25,
+    maxNativeZoom: 18
   });
   _osmDesktop.addTo(map);
 

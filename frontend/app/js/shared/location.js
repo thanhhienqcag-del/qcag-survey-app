@@ -11,7 +11,8 @@ let locCurrentTab = 'gps';
 let searchDebounce = null;
 let _osmLayer = null;
 let _satLayer = null;
-let _currentMapMode = 'normal'; // 'normal' or 'satellite'
+// Default map mode: set to 'satellite' so map opens in satellite view
+let _currentMapMode = 'satellite'; // 'normal' or 'satellite'
 
 function openLocationModal() {
   document.getElementById('mapModal').classList.remove('hidden');
@@ -59,13 +60,19 @@ function initLeafletMap() {
   }
 
   const defaultCenter = hasCoords ? [latVal, lngVal] : [10.7769, 106.7009];
-  lMap = L.map('mapContainer', { zoomControl: true }).setView(defaultCenter, hasCoords ? 16 : 14);
+  // Create map with increased maxZoom to allow deeper zoom levels (will upscale tiles
+  // if provider doesn't supply native tiles at that zoom).
+  lMap = L.map('mapContainer', { zoomControl: true, maxZoom: 25 }).setView(defaultCenter, hasCoords ? 18 : 17);
 
   _osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 25,
+    maxNativeZoom: 19
   });
   _satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '&copy; Esri &mdash; Sources: Esri, DigitalGlobe, GeoEye, Earthstar Geographics'
+    attribution: '&copy; Esri &mdash; Sources: Esri, DigitalGlobe, GeoEye, Earthstar Geographics',
+    maxZoom: 25,
+    maxNativeZoom: 18
   });
 
   // Add the default layer

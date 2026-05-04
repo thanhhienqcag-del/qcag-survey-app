@@ -11,6 +11,7 @@ if (!process.env.TZ) {
 const express = require('express');
 const http = require('http');
 const cors = require('cors');
+const zlib = require('zlib');
 const mysql = require('./lib/mysql-compat');
 const crypto = require('crypto');
 const { Storage } = require('@google-cloud/storage');
@@ -261,6 +262,28 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json({ limit: '50mb' }));
+
+// ── Gzip compression for large JSON responses ─────────────────────────────────
+// Cloud Run has a 32 MB response size limit. Some endpoints (e.g. /api/ks/requests)
+// return 40-50 MB of JSON. Gzip reduces this to ~5 MB, well within the limit.
+app.use((req, res, next) => {
+    const ae = String(req.headers['accept-encoding'] || '');
+    if (!ae.includes('gzip')) return next();
+    const _json = res.json.bind(res);
+    res.json = function (obj) {
+        const payload = JSON.stringify(obj);
+        if (payload.length < 4096) return _json(obj); // skip compression for small responses
+        zlib.gzip(Buffer.from(payload, 'utf8'), (err, buf) => {
+            if (err || res.headersSent) return _json(obj);
+            res.setHeader('Content-Encoding', 'gzip');
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.setHeader('Vary', 'Accept-Encoding');
+            res.end(buf);
+        });
+    };
+    next();
+});
+// ──────────────────────────────────────────────────────────────────────────────
 
 // Ensure minimal CORS headers are always present (even on errors)
 app.use((req, res, next) => {
@@ -794,6 +817,34 @@ async function initKsDB() {
         )
     `);
 
+    // Bridge table: kênh giao tiếp trung gian giữa App 2 (KS) và App 1 (Báo Giá)
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS ks_quote_bridge (
+          id                   SERIAL PRIMARY KEY,
+          ks_backend_id        VARCHAR(128) UNIQUE NOT NULL,
+          tk_code              VARCHAR(64),
+          sale_name            VARCHAR(255),
+          sale_code            VARCHAR(64),
+          sale_phone           VARCHAR(64),
+          region               VARCHAR(64),
+          outlet_name          VARCHAR(255),
+          outlet_code          VARCHAR(64),
+          outlet_phone         VARCHAR(64),
+          address              TEXT,
+          design_created_by    VARCHAR(255),
+          quote_status         VARCHAR(32)   NOT NULL DEFAULT 'pending',
+          quote_code           VARCHAR(64),
+          quote_preview_url    TEXT,
+          quote_total          NUMERIC(15,2),
+          quote_confirmed_at   TIMESTAMPTZ,
+          quoted_by            VARCHAR(255),
+          qcag_status          VARCHAR(32),
+          qcag_status_updated_at TIMESTAMPTZ,
+          created_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+          updated_at           TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+        )
+    `);
+
     // Forward-compatible column additions
     const ksCols = [
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS backend_id VARCHAR(128)',
@@ -816,6 +867,9 @@ async function initKsDB() {
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS tk_code VARCHAR(16)',
         // push_subscriptions: add sale_code for reliable per-user targeting
         'ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS sale_code VARCHAR(64)',
+        // ks_quote_bridge: ss name and TBA flag from App-2 requester
+        'ALTER TABLE ks_quote_bridge ADD COLUMN IF NOT EXISTS ss_name VARCHAR(255)',
+        'ALTER TABLE ks_quote_bridge ADD COLUMN IF NOT EXISTS is_tba BOOLEAN NOT NULL DEFAULT FALSE',
     ]
     for (const sql of ksCols) await ensureColumn(sql);
 }
@@ -2783,37 +2837,44 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     targetSaleCode: requesterSaleCode,
                 });
 
-                // ── Send design task to App 1 (QCAG Báo Giá) ──
-                // Fire-and-forget so this PATCH is not blocked by App 1 availability
+                // ── Ghi task vào bridge table (ks_quote_bridge trên Neon) ──
+                // Ghi trực tiếp vào DB, không phụ thuộc vào App 1 có online hay không
                 try {
-                    const app1BaseUrl = process.env.APP1_API_BASE_URL;
-                    if (app1BaseUrl) {
-                        let requesterObj = {};
-                        try { requesterObj = JSON.parse(updated.requester || '{}') || {}; } catch (_) {}
-                        const taskPayload = {
-                            ks_backend_id: updated.backend_id || null,
-                            sale_name: requesterObj.saleName || null,
-                            sale_code: requesterObj.saleCode || null,
-                            sale_phone: requesterObj.phone || null,
-                            region: requesterObj.region || null,
-                            outlet_name: updated.outlet_name || null,
-                            outlet_code: updated.outlet_code || null,
-                            outlet_phone: updated.phone || null,
-                            address: updated.address || null,
-                            tk_code: tkCode || null,
-                            design_created_by: updated.design_created_by || null,
-                        };
-                        fetch(app1BaseUrl.replace(/\/+$/, '') + '/design-tasks', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(taskPayload),
-                        }).then(r => r.json()).then(j => {
-                            if (j && j.ok) console.log('[design-task] Sent to App1, id:', j.id || j.message);
-                            else console.warn('[design-task] App1 response:', JSON.stringify(j));
-                        }).catch(e => console.warn('[design-task] App1 error (non-fatal):', e && e.message ? e.message : e));
+                    let requesterObj = {};
+                    try { requesterObj = JSON.parse(updated.requester || '{}') || {}; } catch (_) {}
+                    await pool.query(
+                        `INSERT INTO ks_quote_bridge
+                         (ks_backend_id, tk_code, sale_name, sale_code, sale_phone, region,
+                          outlet_name, outlet_code, outlet_phone, address, design_created_by,
+                          ss_name, is_tba)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT (ks_backend_id) DO NOTHING`,
+                        [
+                            updated.backend_id || null,
+                            tkCode || null,
+                            requesterObj.saleName || null,
+                            requesterObj.saleCode || null,
+                            requesterObj.phone || null,
+                            requesterObj.region || null,
+                            updated.outlet_name || null,
+                            updated.outlet_code || null,
+                            updated.phone || null,
+                            updated.address || null,
+                            updated.design_created_by || null,
+                            requesterObj.ssName || null,
+                            requesterObj.isTBA ? true : false,
+                        ]
+                    );
+                    // NOTIFY App-1 backend that a new design task is available (realtime push)
+                    try {
+                        await pool.query(`SELECT pg_notify('qcag_bridge_new_task', $1)`,
+                            [JSON.stringify({ ks_backend_id: updated.backend_id || null })]);
+                    } catch (_notifyErr) {
+                        // non-fatal
                     }
+                    console.log('[bridge] Queued task for ks_backend_id:', updated.backend_id, 'tk_code:', tkCode);
                 } catch (dtErr) {
-                    console.warn('[design-task] error (non-fatal):', dtErr && dtErr.message ? dtErr.message : dtErr);
+                    console.warn('[bridge] INSERT error (non-fatal):', dtErr && dtErr.message ? dtErr.message : dtErr);
                 }
             }
 
@@ -2988,6 +3049,42 @@ app.get('/api/ks/settings/:key', async (req, res) => {
         return res.json({ ok: true, key, value: row.setting_value });
     } catch (err) {
         return res.status(500).json({ ok: false, error: 'fetch_failed' });
+    }
+});
+
+// GET /api/bridge-test — kiểm tra bảng bridge có tồn tại và có thể truy cập từ App 2
+app.get('/api/bridge-test', async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const [rows] = await pool.query(`SELECT COUNT(*) AS total FROM ks_quote_bridge`);
+        res.json({
+            ok: true,
+            connected: true,
+            total_records: Number((rows[0] && rows[0].total) || 0),
+            message: 'ks_quote_bridge is accessible from App 2 ✓',
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/bridge/status/:ks_backend_id — App 2 đọc lại trạng thái BG từ bridge
+app.get('/api/bridge/status/:ks_backend_id', async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const [rows] = await pool.query(
+            `SELECT quote_status, quote_code, quote_preview_url, quote_total,
+                    quote_confirmed_at, quoted_by,
+                    qcag_status, qcag_status_updated_at, tk_code
+             FROM ks_quote_bridge
+             WHERE ks_backend_id = ?
+             LIMIT 1`,
+            [req.params.ks_backend_id]
+        );
+        if (!rows || rows.length === 0) return res.json({ ok: true, found: false });
+        res.json({ ok: true, found: true, bridge: rows[0] });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
     }
 });
 
