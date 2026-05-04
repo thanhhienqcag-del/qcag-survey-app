@@ -11,7 +11,7 @@ let locCurrentTab = 'gps';
 let searchDebounce = null;
 let _osmLayer = null;
 let _satLayer = null;
-let _labelsLayer = null; // Transparent POI/place-name overlay on top of satellite
+let _labelsLayer = null; // Transparent POI/label overlay for satellite mode
 // Default map mode: set to 'satellite' so map opens in satellite view
 let _currentMapMode = 'satellite'; // 'normal' or 'satellite'
 
@@ -75,19 +75,19 @@ function initLeafletMap() {
     maxZoom: 25,
     maxNativeZoom: 18
   });
-  // Transparent labels/POI overlay for satellite hybrid mode — shows place names,
-  // roads, school/company labels on top of satellite imagery
+  // Transparent label/POI overlay (tên trường, bệnh viện, công ty,...) cho chế độ vệ tinh
   _labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
     attribution: '',
     maxZoom: 25,
     maxNativeZoom: 19,
-    opacity: 1
+    opacity: 1,
+    pane: 'overlayPane'
   });
 
   // Add the default layer
   if (_currentMapMode === 'satellite') {
     _satLayer.addTo(lMap);
-    _labelsLayer.addTo(lMap); // overlay labels on top of satellite
+    _labelsLayer.addTo(lMap); // labels on top of satellite
   } else {
     _osmLayer.addTo(lMap);
   }
@@ -146,7 +146,7 @@ function toggleMapLayer() {
     _currentMapMode = 'satellite';
     if (_osmLayer) lMap.removeLayer(_osmLayer);
     if (_satLayer) _satLayer.addTo(lMap);
-    if (_labelsLayer) _labelsLayer.addTo(lMap); // overlay labels on satellite
+    if (_labelsLayer) _labelsLayer.addTo(lMap); // labels on top of satellite
   }
   _updateMapLayerToggle();
 }
