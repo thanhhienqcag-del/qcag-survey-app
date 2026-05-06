@@ -128,6 +128,10 @@ function loginQCAGSubmit() {
   currentSession = { role: 'qcag', phone, name: qcName };
   _justLoggedIn = true;
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+  // Only show blocking loading on QCAG desktop login; mobile flow stays unchanged.
+  if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+    showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
+  }
   launchApp();
 }
 
@@ -180,7 +184,7 @@ function launchApp() {
     }
   } catch (e) {}
   if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-    if (typeof openQCAGDesktop === 'function') openQCAGDesktop();
+    showScreen('qcagDesktopScreen'); // show skeleton behind overlay while data loads
     return;
   }
   showScreen('homeScreen');

@@ -56,7 +56,13 @@ function initLeafletMap() {
       else lMarker.setLatLng([latVal, lngVal]);
       pickedLatLng = { lat: latVal, lng: lngVal };
       document.getElementById('pickedCoords').textContent = `${latVal.toFixed(6)}, ${lngVal.toFixed(6)}`;
+    } else {
+      // Chưa có vị trí đã lưu → xóa ghim cũ (chưa save) khỏi bản đồ
+      pickedLatLng = null;
+      if (lMarker) { lMarker.remove(); lMarker = null; }
+      document.getElementById('pickedCoords').textContent = 'Tap vào bản đồ để chọn vị trí';
     }
+    _updateSaveBtn();
     return;
   }
 
@@ -115,6 +121,7 @@ function initLeafletMap() {
     if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
     else lMarker.setLatLng([lat, lng]);
     document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    _updateSaveBtn();
     reverseGeocode(lat, lng, (addr) => {
       document.getElementById('pickedCoords').textContent = addr || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     });
@@ -124,6 +131,21 @@ function initLeafletMap() {
     lMarker = L.marker([latVal, lngVal]).addTo(lMap);
     pickedLatLng = { lat: latVal, lng: lngVal };
     document.getElementById('pickedCoords').textContent = `${latVal.toFixed(6)}, ${lngVal.toFixed(6)}`;
+  } else {
+    pickedLatLng = null;
+  }
+  _updateSaveBtn();
+}
+
+function _updateSaveBtn() {
+  const btn = document.getElementById('saveLocationBtn');
+  if (!btn) return;
+  if (pickedLatLng) {
+    btn.disabled = false;
+    btn.classList.remove('opacity-40', 'cursor-not-allowed');
+  } else {
+    btn.disabled = true;
+    btn.classList.add('opacity-40', 'cursor-not-allowed');
   }
 }
 
@@ -197,6 +219,7 @@ function selectSearchResult(lat, lng, name) {
   document.getElementById('pickedCoords').textContent = name;
   document.getElementById('mapSearchResults').classList.add('hidden');
   document.getElementById('mapSearchInput').value = '';
+  _updateSaveBtn();
 }
 
 function useCurrentLocation() {
@@ -244,7 +267,7 @@ function useCurrentLocation() {
 }
 
 function savePickedLocation() {
-  if (!pickedLatLng) { showToast('Vui lòng chọn một vị trí trên bản đồ'); return; }
+  if (!pickedLatLng) { showToast('Bạn vui lòng chọn định vị điểm bán trước'); return; }
   document.getElementById('outletLat').value = pickedLatLng.lat;
   document.getElementById('outletLng').value = pickedLatLng.lng;
   const displayText = document.getElementById('pickedCoords').textContent;
@@ -321,6 +344,7 @@ function locateMeOnMap() {
     if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
     else lMarker.setLatLng([lat, lng]);
     pickedLatLng = { lat, lng };
+    _updateSaveBtn();
     document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
     reverseGeocode(lat, lng, (addr) => {
       if (addr) document.getElementById('pickedCoords').textContent = addr;

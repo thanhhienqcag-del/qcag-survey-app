@@ -195,6 +195,13 @@ async function initHomeAndLoad() {
 }
 
 async function initApp() {
+  // Desktop QCAG: keep a blocking loading overlay visible until initial data load finishes.
+  try {
+    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof showLoadingOverlay === 'function') {
+      showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
+    }
+  } catch (e) {}
+
   // Instead of a blocking fullscreen overlay, mark home stats as loading
   // so counters show placeholders while data loads.
   try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(true); } catch (e) {}
