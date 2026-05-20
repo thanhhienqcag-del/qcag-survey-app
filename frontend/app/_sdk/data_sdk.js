@@ -116,9 +116,23 @@
             // consistency, but the UI updates in <100ms instead of waiting for
             // the HTTP fetch to return.
             var patched = false;
-            if (payload.data && payload.data.__backendId) {
-              var row = payload.data;
-              var bid = row.__backendId;
+            if (payload.data) {
+              var row = _normalizeRequestRow(payload.data);
+              var bid = row && row.__backendId;
+              if (!bid) {
+                if (action === 'delete' && payload.id) {
+                  for (var di0 = 0; di0 < _store.length; di0++) {
+                    if (String(_store[di0].__backendId || '') === String(payload.id)) {
+                      _store.splice(di0, 1);
+                      patched = true;
+                      break;
+                    }
+                  }
+                  if (patched && _onDataChanged) _onDataChanged(_cloneStoreRows());
+                }
+                _scheduleRefresh(120);
+                return;
+              }
               if (payload.action === 'create') {
                 // New row: add if not already present
                 var exists = false;
@@ -319,7 +333,7 @@
       if (!raw) return;
       var payload = JSON.parse(raw);
       if (payload && Array.isArray(payload.store)) {
-        _store = payload.store.slice(0, _storeMaxRows);
+        _store = _normalizeRequestRows(payload.store).slice(0, _storeMaxRows);
         _storeTruncated = _store.length >= _storeMaxRows;
         _storeTotalHint = _store.length;
       }
@@ -499,7 +513,7 @@
         _logApiRequest(firstUrl, Array.isArray(body.data) ? body.data.length : 0, responseText.length, Date.now() - startTime);
         var etag = res.headers.get('ETag');
         if (etag) _lastEtag = etag;
-        var allRows = Array.isArray(body.data) ? body.data : [];
+        var allRows = Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [];
         var paging = body.paging || null;
         var totalHint = Number(paging && paging.total);
         if (!(totalHint >= 0)) totalHint = allRows.length;
@@ -553,6 +567,47 @@
     if (Array.isArray(value)) return value;
     if (typeof value !== 'string') return [];
     try { return JSON.parse(value) || []; } catch (e) { return []; }
+  }
+
+  function _deriveTkCodeFromRow(row) {
+    if (!row || row.id == null) return null;
+    var idNum = Number(row.id);
+    if (!Number.isFinite(idNum) || idNum <= 0) return null;
+    var tsRaw = row.createdAt || row.created_at || row.updatedAt || row.updated_at;
+    var dt = tsRaw ? new Date(tsRaw) : new Date();
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) dt = new Date();
+    var yy = String(dt.getFullYear()).slice(-2);
+    return 'TK' + yy + '.' + String(Math.floor(idNum)).padStart(5, '0');
+  }
+
+  function _normalizeRequestRow(row) {
+    if (!row || typeof row !== 'object') return row;
+    var normalized = Object.assign({}, row);
+
+    if (!normalized.__backendId) {
+      normalized.__backendId = normalized.backend_id || normalized.backendId || (normalized.id != null ? ('db_' + normalized.id) : '');
+    }
+    if (!normalized.outletCode && normalized.outlet_code != null) normalized.outletCode = normalized.outlet_code;
+    if (!normalized.outletName && normalized.outlet_name != null) normalized.outletName = normalized.outlet_name;
+    if (!normalized.outletLat && normalized.outlet_lat != null) normalized.outletLat = normalized.outlet_lat;
+    if (!normalized.outletLng && normalized.outlet_lng != null) normalized.outletLng = normalized.outlet_lng;
+    if (!normalized.oldContentExtra && normalized.old_content_extra != null) normalized.oldContentExtra = normalized.old_content_extra;
+    if (normalized.oldContent == null && normalized.old_content != null) normalized.oldContent = normalized.old_content;
+    if (!normalized.statusImages && normalized.status_images != null) normalized.statusImages = normalized.status_images;
+    if (!normalized.designImages && normalized.design_images != null) normalized.designImages = normalized.design_images;
+    if (!normalized.acceptanceImages && normalized.acceptance_images != null) normalized.acceptanceImages = normalized.acceptance_images;
+    if (!normalized.editingRequestedAt && normalized.editing_requested_at != null) normalized.editingRequestedAt = normalized.editing_requested_at;
+    if (!normalized.createdAt && normalized.created_at != null) normalized.createdAt = normalized.created_at;
+    if (!normalized.updatedAt && normalized.updated_at != null) normalized.updatedAt = normalized.updated_at;
+    if (!normalized.tkCode) normalized.tkCode = normalized.tk_code || normalized.code || null;
+    if (!normalized.tkCode) normalized.tkCode = _deriveTkCodeFromRow(normalized);
+
+    return normalized;
+  }
+
+  function _normalizeRequestRows(rows) {
+    if (!Array.isArray(rows)) return [];
+    return rows.map(_normalizeRequestRow);
   }
 
   function _shouldPreserveExistingField(key, incoming, existing) {
@@ -640,7 +695,7 @@
         _logApiRequest(url, Array.isArray(body.data) ? body.data.length : 0, responseText.length, Date.now() - startTime);
         if (!body || !body.ok) throw new Error((body && body.error) || 'fetch_failed');
         _activeBase = base;
-        return Array.isArray(body.data) ? body.data : [];
+        return Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [];
       } catch (e) {
         errLast = e;
       }
@@ -660,9 +715,20 @@
         }
         await _ensureActiveBase();
         if (_store.length) {
+          // Always bootstrap from server once to recover from stale/incomplete local cache.
+          // This also refreshes paging.total so init() can pull remaining pages reliably.
+          try {
+            var bootstrapRows = await _fetchStore();
+            if (bootstrapRows && bootstrapRows.length) {
+              _store = _normalizeRequestRows(bootstrapRows);
+              _triggerStoreUpdated();
+            }
+          } catch (bootstrapErr) {
+            console.warn('[dataSdk] bootstrap fetch failed, fallback to incremental refresh:', bootstrapErr);
+          }
           await this.refresh();
         } else {
-          _store = await _fetchStore();
+          _store = _normalizeRequestRows(await _fetchStore());
           _triggerStoreUpdated();
         }
 
@@ -744,7 +810,7 @@
         var body = JSON.parse(responseText);
         _logApiRequest(url, Array.isArray(body.data) ? body.data.length : 0, responseText.length, Date.now() - startTime);
         if (!body || !body.ok) throw new Error((body && body.error) || 'fetch_failed');
-        var pageRows = Array.isArray(body.data) ? body.data : [];
+        var pageRows = Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [];
         if (pageRows.length === 0) {
           return { isOk: true, rows: 0, hasMore: false };
         }
@@ -796,7 +862,7 @@
           console.error('[dataSdk] create failed:', result);
           return { isOk: false };
         }
-        var created = result.data || newItem;
+        var created = _normalizeRequestRow(result.data || newItem);
         // Do not optimistic-push here: SSE invalidate + refresh already patch store.
         // Optimistic push can create temporary duplicates when backend returns a
         // different __backendId than the client pre-generated one.
@@ -828,7 +894,7 @@
           return { isOk: false };
         }
         var idx = _store.findIndex(function (r) { return r.__backendId === updated.__backendId; });
-        var savedRecord = result.data || updated;
+        var savedRecord = _normalizeRequestRow(result.data || updated);
         if (idx !== -1) _store[idx] = savedRecord;
         else _store.push(savedRecord);
         if (_store.length > _storeMaxRows) {

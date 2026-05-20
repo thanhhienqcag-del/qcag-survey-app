@@ -1309,7 +1309,7 @@ function getQCAGDesktopVisibleRequests() {
     });
   }
 
-  if (_qcagDesktopYearFilter !== null) {
+  if (_qcagDesktopYearFilter !== null && !_qcagDesktopSearchQuery) {
     list = list.filter(r => {
       try { return new Date(r.createdAt || 0).getFullYear() === _qcagDesktopYearFilter; }
       catch (e) { return true; }
