@@ -1,0 +1,166 @@
+/* ====================================================================
+   app/css/mobile-qcag.css — dedicated style layer for QCAG mobile mode
+   Applied only when body has class .qcag-mobile-mode
+   ==================================================================== */
+
+@media (max-width: 1023px) {
+  body.qcag-mobile-mode #homeScreen {
+    background: linear-gradient(180deg, #eef6ff 0%, #f8fbff 55%, #ffffff 100%);
+  }
+
+  body.qcag-mobile-mode .top-user-bar {
+    background: rgba(239, 246, 255, 0.92);
+    border-bottom-color: #bfdbfe;
+  }
+
+  body.qcag-mobile-mode #homeActions {
+    background: #ffffff;
+    border: 1px solid #dbeafe;
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-action-btn {
+    border-radius: 12px !important;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+  }
+
+  body.qcag-mobile-mode #homeScreen .text-gray-300.text-\[10px\] {
+    color: #64748b;
+  }
+
+  body.qcag-mobile-mode #detailScreen h2,
+  body.qcag-mobile-mode #listScreen h2,
+  body.qcag-mobile-mode #notificationsScreen h2,
+  body.qcag-mobile-mode #accountScreen h2 {
+    letter-spacing: 0.2px;
+  }
+
+  body.qcag-mobile-mode #detailContent .mq-preview-grid,
+  body.qcag-mobile-mode #detailContent .quote-bridge-section {
+    border-color: #dbeafe;
+  }
+
+  body.qcag-mobile-mode #detailContent .detail-comments-col .bg-white {
+    border: 1px solid #dbeafe;
+    box-shadow: 0 8px 18px rgba(30, 64, 175, 0.06);
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-list-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #f8fbff;
+    border-bottom: 1px solid #dbeafe;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  body.qcag-mobile-mode .qm-chip {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 999px;
+    padding: 6px 11px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  body.qcag-mobile-mode .qm-chip.active {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+    color: #ffffff;
+  }
+
+  body.qcag-mobile-mode .qm-search {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  body.qcag-mobile-mode .qm-meta {
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-card {
+    border: 1px solid #dbeafe;
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 10px 12px;
+    box-shadow: 0 8px 18px rgba(30, 64, 175, 0.06);
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-outlet {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-badge.done {
+    background: #d1fae5;
+    color: #065f46;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-badge.processing,
+  body.qcag-mobile-mode .qcag-mobile-badge.pending-confirm {
+    background: #dbeafe;
+    color: #1e40af;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-badge.pending-design,
+  body.qcag-mobile-mode .qcag-mobile-badge.pending,
+  body.qcag-mobile-mode .qcag-mobile-badge.pending-edit {
+    background: #f1f5f9;
+    color: #334155;
+  }
+
+  body.qcag-mobile-mode .qcag-mobile-code-row,
+  body.qcag-mobile-mode .qcag-mobile-time {
+    color: #475569;
+    font-size: 12px;
+    margin-top: 3px;
+  }
+
+  body.qcag-mobile-mode #mobileMainNav {
+    border-top: 1px solid #bfdbfe;
+    background: #ffffff;
+  }
+
+  body.qcag-mobile-mode #mobileMainNav .main-nav-btn.active {
+    color: #1d4ed8;
+  }
+}

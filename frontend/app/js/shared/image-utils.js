@@ -8,6 +8,64 @@
  */
 var _HEIC_SENTINEL_PREFIX = '__heic__:';
 
+function _isLikelyHeicLikeUrl(url) {
+  var value = String(url || '').toLowerCase();
+  return value.indexOf('data:image/heic') === 0 ||
+    value.indexOf('data:image/heif') === 0 ||
+    /(?:\.heic|\.heif|\.bin)(?:$|[?#])/.test(value) ||
+    value.indexOf('contenttype=image%2fheic') !== -1 ||
+    value.indexOf('content-type=image%2fheic') !== -1 ||
+    value.indexOf('contenttype=image/heic') !== -1 ||
+    value.indexOf('content-type=image/heic') !== -1;
+}
+
+function _copyTextToClipboard(text) {
+  var value = String(text || '');
+  if (!value) return Promise.reject(new Error('empty_text'));
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    return navigator.clipboard.writeText(value);
+  }
+  return new Promise(function (resolve, reject) {
+    try {
+      var textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', 'readonly');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      var ok = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (!ok) throw new Error('copy_failed');
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+function _copyBrokenImageUrl(encodedUrl, event) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+  var rawUrl = '';
+  try {
+    rawUrl = decodeURIComponent(String(encodedUrl || ''));
+  } catch (e) {
+    rawUrl = String(encodedUrl || '');
+  }
+  if (!rawUrl) {
+    if (typeof showToast === 'function') showToast('Không có URL để copy');
+    return false;
+  }
+  _copyTextToClipboard(rawUrl).then(function () {
+    if (typeof showToast === 'function') showToast('Đã copy URL ảnh');
+  }).catch(function () {
+    if (typeof showToast === 'function') showToast('Không thể copy URL ảnh');
+  });
+  return false;
+}
+
 function _detectImageMimeByMagic(file) {
   return new Promise(function(resolve) {
     var reader = new FileReader();
@@ -284,28 +342,45 @@ function _escapeHtmlAttr(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function _renderBrokenImageFallbackHtml(src) {
+  var rawSrc = String(src || '');
+  var encodedSrc = encodeURIComponent(rawSrc);
+  var label = _isLikelyHeicLikeUrl(rawSrc) ? 'HEIC / .bin' : 'Ảnh lỗi';
+  return '<div style="' +
+    'width:100%;height:80px;background:#1e293b;border-radius:8px;' +
+    'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+    'gap:4px;padding:8px;box-sizing:border-box;border:1px solid #334155;">' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">' +
+    '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
+    '<circle cx="8.5" cy="8.5" r="1.5"/>' +
+    '<polyline points="21 15 16 10 5 21"/>' +
+    '<line x1="2" y1="2" x2="22" y2="22"/>' +
+    '</svg>' +
+    '<span style="font-size:10px;color:#94a3b8;">' + _escapeHtmlAttr(label) + '</span>' +
+    '<button type="button" onclick="return _copyBrokenImageUrl(\'' + encodedSrc + '\', event)" style="' +
+      'margin-top:2px;padding:2px 8px;border-radius:999px;border:1px solid #475569;' +
+      'background:#0f172a;color:#e2e8f0;font-size:10px;font-weight:600;cursor:pointer;">' +
+      'Copy URL' +
+    '</button>' +
+    '</div>';
+}
+
 // Fallback for images that cannot be rendered (e.g. old .bin HEIC files stored on GCS).
 // Replaces the broken img with a simple grey placeholder icon.
 function _imgBrokenFallback(el) {
   if (!el) return;
   el.onerror = null;
+  var originalSrc = String(el.currentSrc || el.src || '');
   var parent = el.parentNode;
   if (parent) {
     var placeholder = document.createElement('div');
-    placeholder.style.cssText =
-      'width:100%;height:80px;background:#1e293b;border-radius:8px;' +
-      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1px solid #334155;';
-    placeholder.innerHTML =
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">' +
-      '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
-      '<circle cx="8.5" cy="8.5" r="1.5"/>' +
-      '<polyline points="21 15 16 10 5 21"/>' +
-      '<line x1="2" y1="2" x2="22" y2="22"/>' +
-      '</svg>' +
-      '<span style="font-size:10px;color:#64748b;">Không hiển thị được</span>';
+    placeholder.style.cssText = 'width:100%;height:80px;';
+    placeholder.innerHTML = _renderBrokenImageFallbackHtml(originalSrc);
     parent.replaceChild(placeholder, el);
   }
 }
+
+window._copyBrokenImageUrl = _copyBrokenImageUrl;
 
 function removeImage(type, idx) {
   if (type === 'oldContent') {
