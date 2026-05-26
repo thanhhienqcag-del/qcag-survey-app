@@ -844,31 +844,7 @@ async function _loadBridgeStatus(backendId) {
     } catch (e) { /* ignore */ }
 
     if (!bridgeData) {
-      for (let i = 0; i < baseCandidates.length; i++) {
-        const base = baseCandidates[i];
-        const url = (base || '') + '/api/bridge/status/' + encodeURIComponent(backendId);
-        try {
-          const resp = await fetch(url);
-          if (!resp.ok) continue;
-          const json = await resp.json();
-          if (!json || !json.ok) continue;
-          hasEndpointResponse = true;
-          if (!json.found) {
-            showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
-            return;
-          }
-          bridgeData = json.bridge || {};
-          break;
-        } catch (e) {
-          // try next candidate
-        }
-      }
-    }
-
-    if (!bridgeData) {
-      showFallback(hasEndpointResponse
-        ? 'QCAG chưa cập nhật báo giá cho yêu cầu này.'
-        : 'Không tải được dữ liệu báo giá.');
+      showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
       return;
     }
 
@@ -879,9 +855,38 @@ async function _loadBridgeStatus(backendId) {
       b.quote_deleted === true
     );
     const effectiveStatus = isDeletedInApp1 ? 'deleted' : String(b.quote_status || '').toLowerCase();
-    const renderPreviewData = (!isDeletedInApp1 && b.quote_render_data && typeof b.quote_render_data === 'object')
+    let renderPreviewData = (!isDeletedInApp1 && b.quote_render_data && typeof b.quote_render_data === 'object')
       ? b.quote_render_data
       : null;
+    const previewCandidateUrl = isDeletedInApp1
+      ? ''
+      : String(b.quote_image_url || b.quote_preview_url || '');
+
+    // If App1 didn't provide a full render payload, synthesize a lightweight
+    // renderPreviewData from available bridge fields so App2 can render a
+    // consistent preview without extra network calls.
+    if (!renderPreviewData && previewCandidateUrl) {
+      renderPreviewData = {
+        quoteCode: b.quote_code || '',
+        outletCode: b.outlet_code || '',
+        outletName: b.outlet_name || '',
+        area: b.region || b.area || '',
+        address: b.address || '',
+        outletPhone: b.outlet_phone || '',
+        saleCode: b.sale_code || '',
+        saleName: b.sale_name || '',
+        salePhone: b.sale_phone || '',
+        ssName: b.ss_name || '',
+        saleType: b.sale_type || 'Sale (SR)',
+        spoName: b.spo_name || '',
+        totalAmount: b.quote_total != null ? b.quote_total : (b.quote_total_amount || 0),
+        items: Array.isArray(b.items) ? b.items : [],
+        primaryImage: { data: previewCandidateUrl, name: 'Preview' },
+        createdAt: b.quote_confirmed_at || b.created_at || null,
+        updatedAt: b.updated_at || null,
+      };
+    }
+
     const hasRenderPreview = !!(renderPreviewData && (
       String(renderPreviewData.quoteCode || '').trim() ||
       (Array.isArray(renderPreviewData.items) && renderPreviewData.items.length > 0) ||
@@ -891,9 +896,6 @@ async function _loadBridgeStatus(backendId) {
       window.__ksQuoteRenderPreviewCache = window.__ksQuoteRenderPreviewCache || {};
       window.__ksQuoteRenderPreviewCache[String(backendId)] = renderPreviewData;
     }
-    const previewCandidateUrl = isDeletedInApp1
-      ? ''
-      : String(b.quote_image_url || b.quote_preview_url || '');
 
     // Status badge
     const statusMap = {
