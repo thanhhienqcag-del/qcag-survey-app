@@ -2459,6 +2459,23 @@ function qcagDesktopRenderCommentPreview() {
 // ── Old design carousel helpers ─────────────────────────────────────
 
 /**
+ * Builds a map of { backendId → tkCode } for all loaded requests.
+ * Uses _qcagRequestCodeCache to avoid re-building on every render;
+ * the cache is invalidated whenever _qcagRequestsVersion changes.
+ */
+function qcagDesktopComputeRequestCodes() {
+  if (_qcagRequestCodeCache.version === _qcagRequestsVersion) {
+    return _qcagRequestCodeCache.codes;
+  }
+  const codes = {};
+  (allRequests || []).forEach(function(r) {
+    if (r.__backendId) codes[r.__backendId] = r.tkCode || '';
+  });
+  _qcagRequestCodeCache = { version: _qcagRequestsVersion, codes: codes };
+  return codes;
+}
+
+/**
  * Returns all completed requests for the same outlet that have MQ images,
  * excluding the current request. Sorted oldest first.
  */
@@ -2810,11 +2827,16 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
               <div class="qcag-card-title">Những thiết kế cũ của Outlet</div>
               <div class="qcag-subcard-body" id="qcagOldDesignSection">
                 ${(() => {
-                  _qcagOldDesignIdx = 0;
-                  const oldList = ksGetOldDesignsForOutlet(request);
-                  if (oldList.length === 0) return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
-                  const codeMap = qcagDesktopComputeRequestCodes();
-                  return qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
+                  try {
+                    _qcagOldDesignIdx = 0;
+                    const oldList = ksGetOldDesignsForOutlet(request);
+                    if (oldList.length === 0) return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
+                    const codeMap = qcagDesktopComputeRequestCodes();
+                    return qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
+                  } catch(e) {
+                    console.error('qcagOldDesignSection render error', e);
+                    return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
+                  }
                 })()}
               </div>
             </div>
