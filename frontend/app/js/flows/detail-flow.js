@@ -832,26 +832,36 @@ async function _loadBridgeStatus(backendId) {
       return unique(c);
     })();
 
+    // Fast-path: if the current detail request already contains embedded bridge
+    // data from the backend `GET /api/ks/requests/:id`, use it and avoid extra
+    // network calls. This prevents extra egress and loading flicker on mobile.
     let bridgeData = null;
     let hasEndpointResponse = false;
+    try {
+      if (currentDetailRequest && currentDetailRequest.bridge) {
+        bridgeData = currentDetailRequest.bridge;
+      }
+    } catch (e) { /* ignore */ }
 
-    for (let i = 0; i < baseCandidates.length; i++) {
-      const base = baseCandidates[i];
-      const url = (base || '') + '/api/bridge/status/' + encodeURIComponent(backendId);
-      try {
-        const resp = await fetch(url);
-        if (!resp.ok) continue;
-        const json = await resp.json();
-        if (!json || !json.ok) continue;
-        hasEndpointResponse = true;
-        if (!json.found) {
-          showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
-          return;
+    if (!bridgeData) {
+      for (let i = 0; i < baseCandidates.length; i++) {
+        const base = baseCandidates[i];
+        const url = (base || '') + '/api/bridge/status/' + encodeURIComponent(backendId);
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) continue;
+          const json = await resp.json();
+          if (!json || !json.ok) continue;
+          hasEndpointResponse = true;
+          if (!json.found) {
+            showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
+            return;
+          }
+          bridgeData = json.bridge || {};
+          break;
+        } catch (e) {
+          // try next candidate
         }
-        bridgeData = json.bridge || {};
-        break;
-      } catch (e) {
-        // try next candidate
       }
     }
 
