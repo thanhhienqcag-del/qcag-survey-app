@@ -69,13 +69,41 @@ function getCurrentSessionOwnedRequests() {
 	});
 }
 
+function updateNotifBadge() {
+	const badge = document.getElementById('notifCountBadge');
+	if (!badge) return;
+	let count = 0;
+	const requests = getCurrentSessionOwnedRequests();
+	requests.forEach(req => {
+		let comments = [];
+		try { comments = JSON.parse(req.comments || '[]'); } catch (e) { comments = []; }
+		comments.forEach(comment => {
+			if (!comment || !comment.text) return;
+			if ((comment.authorRole || '').toLowerCase() !== 'qcag') return;
+			count++;
+		});
+	});
+	const saleCode = currentSession && currentSession.saleCode;
+	if (saleCode) {
+		try {
+			const delLog = JSON.parse(localStorage.getItem('ks_qcag_del_log_' + saleCode) || '[]');
+			count += delLog.length;
+		} catch (e) { /* ignore */ }
+	}
+	if (count > 0) {
+		badge.textContent = count > 99 ? '99+' : String(count);
+		badge.style.display = 'flex';
+	} else {
+		badge.style.display = 'none';
+	}
+}
+
 function renderNotifications() {
 	const list = document.getElementById('notificationsList');
 	const empty = document.getElementById('notificationsEmpty');
 	if (!list || !empty) return;
 
 	const notifications = [];
-	const sessionRole = (currentSession && currentSession.role) || '';
 	const requests = getCurrentSessionOwnedRequests();
 
 	requests.forEach(req => {
@@ -84,20 +112,53 @@ function renderNotifications() {
 		comments.forEach(comment => {
 			if (!comment || !comment.text) return;
 			const authorRole = (comment.authorRole || '').toLowerCase();
-			if (authorRole && authorRole === sessionRole) return;
+			// Sale chỉ thấy bình luận từ QCAG (lọc bỏ heineken/system/other)
+			if (authorRole !== 'qcag') return;
 			notifications.push({
 				requestId: req.__backendId,
 				outletName: req.outletName || '-',
 				outletCode: req.outletCode || '-',
 				text: String(comment.text || '').trim(),
-				author: comment.authorName || (authorRole === 'qcag' ? 'QCAG Admin' : 'Heineken'),
-				authorRole: authorRole,
+				author: comment.authorName || 'QCAG Admin',
+				authorRole: 'qcag',
+				isDeleted: false,
 				createdAt: comment.createdAt || req.updatedAt || req.createdAt
 			});
 		});
 	});
 
+	// Thêm thông báo yêu cầu đã bị xóa bởi QCAG (lưu trong localStorage)
+	const saleCode = currentSession && currentSession.saleCode;
+	if (saleCode) {
+		try {
+			const delLog = JSON.parse(localStorage.getItem('ks_qcag_del_log_' + saleCode) || '[]');
+			delLog.forEach(evt => {
+				notifications.push({
+					requestId: null,
+					outletName: evt.outletName || '-',
+					outletCode: evt.outletCode || '-',
+					text: evt.reason ? 'QCAG đã xóa yêu cầu. Lý do: ' + evt.reason : 'QCAG đã xóa yêu cầu',
+					author: 'Admin QCAG',
+					authorRole: 'qcag',
+					isDeleted: true,
+					createdAt: evt.deletedAt || new Date().toISOString()
+				});
+			});
+		} catch (e) { /* ignore */ }
+	}
+
 	notifications.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+	// Cập nhật badge đếm thông báo
+	const badge = document.getElementById('notifCountBadge');
+	if (badge) {
+		if (notifications.length > 0) {
+			badge.textContent = notifications.length > 99 ? '99+' : String(notifications.length);
+			badge.style.display = 'flex';
+		} else {
+			badge.style.display = 'none';
+		}
+	}
 
 	if (!notifications.length) {
 		empty.classList.remove('hidden');
@@ -111,12 +172,23 @@ function renderNotifications() {
 		const dateLabel = date && !Number.isNaN(date.getTime())
 			? date.toLocaleString('vi-VN', { hour12: false })
 			: '';
-		const roleLabel = item.authorRole === 'qcag' ? 'Admin QCAG' : 'Sale Heineken';
+		if (item.isDeleted) {
+			return `
+				<div class="bg-red-50 rounded-xl p-3 border border-red-200">
+					<div class="flex items-center justify-between gap-3">
+						<div class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(item.outletName)} (${escapeHtml(item.outletCode)})</div>
+						<span class="text-[11px] px-2 py-0.5 rounded-full bg-red-500 text-white flex-shrink-0">Đã xóa</span>
+					</div>
+					<div class="text-sm text-red-700 mt-1 line-clamp-2">${escapeHtml(item.text)}</div>
+					<div class="text-xs text-gray-400 mt-2">${escapeHtml(item.author)} · ${dateLabel}</div>
+				</div>
+			`;
+		}
 		return `
 			<div class="bg-gray-50 rounded-xl p-3 border border-gray-200 active:bg-gray-100 cursor-pointer" onclick="showRequestDetail('${item.requestId}')">
 				<div class="flex items-center justify-between gap-3">
-					<div class="text-sm font-semibold text-gray-900 truncate">${item.outletName} (${item.outletCode})</div>
-					<span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-900 text-white flex-shrink-0">${roleLabel}</span>
+					<div class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(item.outletName)} (${escapeHtml(item.outletCode)})</div>
+					<span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-900 text-white flex-shrink-0">Admin QCAG</span>
 				</div>
 				<div class="text-sm text-gray-600 mt-1 line-clamp-2">${escapeHtml(item.text)}</div>
 				<div class="text-xs text-gray-400 mt-2">${escapeHtml(item.author)} · ${dateLabel}</div>

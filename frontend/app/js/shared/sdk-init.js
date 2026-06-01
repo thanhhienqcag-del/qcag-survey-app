@@ -305,6 +305,7 @@ async function initApp() {
         if (document.getElementById('listScreen').classList.contains('flex')) {
           renderRequestList();
         }
+        if (typeof updateNotifBadge === 'function') updateNotifBadge();
         const notifyEl = document.getElementById('notificationsScreen');
         if (notifyEl && notifyEl.classList.contains('flex') && typeof renderNotifications === 'function') {
           renderNotifications();
@@ -347,6 +348,7 @@ async function initApp() {
     if (document.getElementById('listScreen').classList.contains('flex')) {
       renderRequestList();
     }
+    if (typeof updateNotifBadge === 'function') updateNotifBadge();
     const notifyEl = document.getElementById('notificationsScreen');
     if (notifyEl && notifyEl.classList.contains('flex') && typeof renderNotifications === 'function') {
       renderNotifications();

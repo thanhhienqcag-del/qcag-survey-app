@@ -266,6 +266,58 @@ function useCurrentLocation() {
   }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
 }
 
+// Copy current map center/zoom to clipboard as a permalink
+function copyMapUrl() {
+  try {
+    if (!lMap) {
+      showToast && showToast('Bản đồ chưa sẵn sàng');
+      return;
+    }
+    // Prefer the user-picked pin if available, otherwise use map center
+    let lat, lng;
+    if (typeof pickedLatLng === 'object' && pickedLatLng && pickedLatLng.lat && pickedLatLng.lng) {
+      lat = Number(pickedLatLng.lat).toFixed(6);
+      lng = Number(pickedLatLng.lng).toFixed(6);
+    } else {
+      const center = lMap.getCenter();
+      lat = Number(center.lat).toFixed(6);
+      lng = Number(center.lng).toFixed(6);
+    }
+    const z = Number(lMap.getZoom());
+    // Use Google Maps search permalink which shows a pin at the lat,lng
+    const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&zoom=${z}`;
+    // Try modern clipboard API first
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(url).then(function () {
+        showToast && showToast('Đã sao chép liên kết Google Maps');
+      }).catch(function () {
+        _fallbackCopy(url);
+      });
+    } else {
+      _fallbackCopy(url);
+    }
+  } catch (e) {
+    console.warn('copyMapUrl error', e);
+    showToast && showToast('Không thể sao chép URL');
+  }
+}
+
+function _fallbackCopy(text) {
+  try {
+    var ta = document.createElement('textarea');
+    ta.style.position = 'fixed'; ta.style.left = '-99999px'; ta.value = text;
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (ok) showToast && showToast('Đã sao chép liên kết Google Maps');
+    else showToast && showToast('Không thể sao chép liên kết Google Maps');
+  } catch (e) {
+    console.warn('fallback copy failed', e);
+    showToast && showToast('Không thể sao chép URL');
+  }
+}
+
 function savePickedLocation() {
   if (!pickedLatLng) { showToast('Bạn vui lòng chọn định vị điểm bán trước'); return; }
   document.getElementById('outletLat').value = pickedLatLng.lat;

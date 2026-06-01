@@ -64,11 +64,15 @@
 }
 
 /* Region selection buttons */
+.region-btn { box-sizing: border-box; }
 .region-btn.selected {
+  /* In light theme keep background white and highlight with a darker, thicker border
+     so the selected state is clear without creating a heavy dark block. */
   border-color: #111827;
-  background: #111827;
-  color: #ffffff !important;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+  border-width: 2px;
+  background: #ffffff; /* keep white in light theme */
+  color: #111827 !important;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);
 }
 
 .tab-active { border-bottom: 2px solid #1a1a1a; color: #1a1a1a; }
@@ -344,6 +348,31 @@ body.modal-open .fixed.z-60 {
   background-color: var(--primary-bg) !important;
   color: var(--primary-text) !important;
 }
+
+/* Home actions (three primary buttons on home screen) — theme aware
+   Light theme: white background, black border, black text
+   Dark theme: dark background, white border, white text */
+#homeActions > button.home-action-btn {
+  /* Light theme: slightly darker gray background, dark border/text */
+  background: #e5e7eb !important; /* gray-200 - darker than before */
+  color: #111827 !important;
+  border: 1px solid #111827 !important;
+  box-shadow: none !important;
+}
+
+.theme-dark #homeActions > button.home-action-btn,
+[data-theme="dark"] #homeActions > button.home-action-btn {
+  /* Dark theme: use a muted dark surface matching the 'Thêm vào màn hình chính' button */
+  background: #1f2937 !important; /* slate/dark-gray */
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important; /* revert to thin border */
+}
+
+/* Keep the drafts count (absolute) visible in both themes */
+#draftsButtonCount { color: #111827; }
+.theme-dark #draftsButtonCount, [data-theme="dark"] #draftsButtonCount { color: #ffffff !important; }
+/* Ensure draft count inside the drafts button is white in dark mode with higher specificity */
+.theme-dark #draftsListBtn #draftsButtonCount, [data-theme="dark"] #draftsListBtn #draftsButtonCount { color: #ffffff !important; }
 
 /* Override blue requester card in dark mode to match other surface cards */
 .theme-dark .bg-blue-50 {

@@ -55,6 +55,24 @@ function qcagDesktopParseJson(raw, fallback) {
   try { return JSON.parse(raw || ''); } catch (e) { return fallback; }
 }
 
+// Normalize phone numbers: keep digits, convert +84 or leading 84 to leading 0
+function qcagNormalizePhone(raw) {
+  if (!raw && raw !== 0) return '';
+  let s = String(raw || '').trim();
+  if (!s) return '';
+  // remove common separators
+  s = s.replace(/[^+\d]/g, '');
+  // Handle +84 or 84 country code -> replace with 0
+  if (/^\+?84(\d{8,9})$/.test(s)) {
+    s = s.replace(/^\+?84/, '0');
+  }
+  // If starts with '84' followed by digits and no plus
+  if (/^84(\d{8,9})$/.test(s)) s = s.replace(/^84/, '0');
+  // If it now starts with digits but missing leading zero (length 9 and starts with 9/1 etc.), prefix 0
+  if (/^[1-9]\d{8}$/.test(s)) s = '0' + s;
+  return s;
+}
+
 function qcagDesktopIsImagePlaceholder(value) {
   const v = String(value == null ? '' : value).trim();
   return /^\[["']\.+["']\]$/.test(v);
@@ -1873,6 +1891,50 @@ function qcagDesktopYearPickerStep(dir) {
 
 // Delete request from desktop list (only allowed for non-completed requests)
 // Programmatic confirm dialog — works in PWA standalone mode (window.confirm is unreliable).
+function _qcagDeleteWithReasonDialog(message) {
+  return new Promise((resolve) => {
+    const isDark = document.documentElement.classList.contains('theme-dark')
+                || document.documentElement.getAttribute('data-theme') === 'dark';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center';
+    const cardBg     = isDark ? '#0b1220' : '#ffffff';
+    const cardBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)';
+    const textColor  = isDark ? '#e6eef8' : '#111827';
+    const subColor   = isDark ? '#9ca3af' : '#6b7280';
+    const cancelBg   = isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6';
+    const cancelClr  = isDark ? '#e6eef8' : '#374151';
+    const cancelBdr  = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb';
+    const inputBg    = isDark ? '#1e293b' : '#f9fafb';
+    const inputBdr   = isDark ? 'rgba(255,255,255,0.12)' : '#e5e7eb';
+    overlay.innerHTML =
+      `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:16px;padding:24px 20px 20px;max-width:440px;width:88%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
+        `<div style="width:48px;height:48px;border-radius:12px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">` +
+          `<svg width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>` +
+        `</div>` +
+        `<p style="margin-bottom:6px;font-size:15px;font-weight:600;color:${textColor};line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${message}</p>` +
+        `<p style="margin-bottom:12px;font-size:12px;color:${subColor}">Vui lòng nhập lý do xóa để thông báo cho Sale.</p>` +
+        `<textarea id="_qcagDelReasonInput" placeholder="Nhập lý do xóa (bắt buộc)..." rows="3" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;background:${inputBg};border:1px solid ${inputBdr};color:${textColor};font-size:13px;resize:none;margin-bottom:12px;outline:none;font-family:inherit"></textarea>` +
+        `<div style="display:flex;gap:8px">` +
+          `<button id="_qcagCancelBtn" style="flex:1;padding:11px;border-radius:10px;background:${cancelBg};border:${cancelBdr};cursor:pointer;font-size:14px;font-weight:500;color:${cancelClr}">Hủy</button>` +
+          `<button id="_qcagConfirmBtn" style="flex:1;padding:11px;border-radius:10px;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:600">Xóa</button>` +
+        `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+    const cleanup = (result, reason) => { document.body.removeChild(overlay); resolve({ confirmed: result, reason: reason || '' }); };
+    overlay.querySelector('#_qcagConfirmBtn').onclick = () => {
+      const reasonInput = overlay.querySelector('#_qcagDelReasonInput');
+      const reason = (reasonInput ? reasonInput.value : '').trim();
+      if (!reason) {
+        if (reasonInput) { reasonInput.style.borderColor = '#ef4444'; reasonInput.focus(); }
+        return;
+      }
+      cleanup(true, reason);
+    };
+    overlay.querySelector('#_qcagCancelBtn').onclick  = () => cleanup(false, '');
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(false, ''); };
+  });
+}
+
 function _qcagConfirmDialog(message) {
   return new Promise((resolve) => {
     const isDark = document.documentElement.classList.contains('theme-dark')
@@ -1915,7 +1977,7 @@ async function qcagDesktopDeleteRequest(backendId) {
       showToast('Không thể xóa request đã hoàn thành');
       return;
     }
-    const confirmed = await _qcagConfirmDialog('Bạn có chắc muốn xóa yêu cầu này?');
+    const { confirmed, reason } = await _qcagDeleteWithReasonDialog('Bạn có chắc muốn xóa yêu cầu này?');
     if (!confirmed) return;
 
     if (window.dataSdk && typeof window.dataSdk.delete === 'function') {
@@ -1935,6 +1997,30 @@ async function qcagDesktopDeleteRequest(backendId) {
         showToast('Đã xóa yêu cầu');
       }
     }
+
+    // Lưu log xóa vào localStorage và gửi push notification cho Sale
+    try {
+      const reqObj = (() => { try { return JSON.parse(req.requester || '{}'); } catch (_) { return {}; } })();
+      const saleCode = reqObj.saleCode || null;
+      const outletLabel = req.outletName || req.outletCode || 'Outlet';
+      if (saleCode) {
+        const logKey = 'ks_qcag_del_log_' + saleCode;
+        let delLog = [];
+        try { delLog = JSON.parse(localStorage.getItem(logKey) || '[]'); } catch (_) { delLog = []; }
+        delLog.unshift({ outletName: req.outletName || '-', outletCode: req.outletCode || '-', reason: reason, deletedAt: new Date().toISOString() });
+        if (delLog.length > 30) delLog = delLog.slice(0, 30);
+        localStorage.setItem(logKey, JSON.stringify(delLog));
+      }
+      if (typeof sendPushNotification === 'function') {
+        sendPushNotification({
+          title: 'Yêu cầu đã bị xóa',
+          body: outletLabel + ' — Lý do: ' + reason,
+          phone: reqObj.phone || null,
+          saleCode: saleCode,
+          data: { type: 'qcag_deleted', backendId: backendId }
+        });
+      }
+    } catch (e) { /* non-fatal */ }
 
     // Update UI
     try { _qcagRequestsVersion += 1; _qcagRequestCodeCache.version = 0; } catch (e) {}
@@ -4026,7 +4112,7 @@ function qcagNavListExportCSV() {
   }
   if (exportList.length === 0) { showToast && showToast('Không có dữ liệu để xuất'); return; }
 
-  const header = ['STT', 'Mã TK', 'Khu vực', 'Tên Sale', 'Tên SS', 'Outlet Code', 'Tên Outlet', 'Brand', 'SL hạng mục', 'Trạng thái', 'Định vị (Google Maps)'];
+  const header = ['STT', 'Mã TK', 'Khu vực', 'Tên Sale', 'SĐT Sale', 'Tên SS', 'Outlet Code', 'Tên Outlet', 'SĐT Outlet', 'Brand', 'SL hạng mục', 'Trạng thái', 'Định vị (Google Maps)'];
   const csvRows = [header];
 
   exportList.forEach(({ r, idx }) => {
@@ -4038,14 +4124,33 @@ function qcagNavListExportCSV() {
     const gpsUrl = (r.outletLat && r.outletLng)
       ? `https://www.google.com/maps?q=${parseFloat(r.outletLat)},${parseFloat(r.outletLng)}`
       : '';
+    // Sale phone: try common requester fields
+    const rawSalePhone = (requester && (requester.salePhone || requester.sale_phone || requester.phone || '')) || '';
+    const salePhone = qcagNormalizePhone(rawSalePhone);
+    const salePhoneCell = salePhone ? `="${salePhone}"` : '';
+
+    // Outlet phone: try multiple locations (row fields, requester fields, nested outlet JSON)
+    let rawOutletPhone = (r && (r.outletPhone || r.outlet_phone || r.phone || r.contact_phone || r.mobile)) || '';
+    if (!rawOutletPhone && requester) rawOutletPhone = requester.outletPhone || requester.outlet_phone || requester.phone || requester.contact_phone || '';
+    // Try parsing a nested outlet JSON block if present
+    try {
+      const parsedOutlet = qcagDesktopParseJson(r.outlet || r.outletData || r.outlet_block || '', null);
+      if (parsedOutlet && typeof parsedOutlet === 'object') {
+        rawOutletPhone = rawOutletPhone || parsedOutlet.phone || parsedOutlet.outlet_phone || parsedOutlet.contact_phone || parsedOutlet.mobile || parsedOutlet.phoneNumber || '';
+      }
+    } catch (e) {}
+    const outletPhone = qcagNormalizePhone(rawOutletPhone);
+    const outletPhoneCell = outletPhone ? `="${outletPhone}"` : '';
     csvRows.push([
       idx + 1,
       r.tkCode || '',
       requester.region || '',
-      requester.saleName || requester.phone || '',
+      requester.saleName || '',
+      salePhoneCell,
       requester.ssName || '',
       r.outletCode || '',
       r.outletName || '',
+      outletPhoneCell,
       brands || '-',
       itemArr.length,
       status.label,

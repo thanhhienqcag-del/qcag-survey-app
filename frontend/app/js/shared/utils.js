@@ -134,6 +134,7 @@ function chooseCustomOption(id, field, value) {
       }
     }
   } catch (e) {}
+  try { if (typeof window.scheduleDraftSave === 'function') window.scheduleDraftSave(800); } catch (e) {}
 }
 
 function closeAllCustomSelects() {

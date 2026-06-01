@@ -69,9 +69,16 @@
   }
 
   function _scheduleRefresh(delayMs) {
+    // Debounced refresh: coalesce bursts of invalidate events and avoid
+    // scheduling a refresh while one is already in-flight. Use a larger
+    // default delay to reduce aggressive polling during event storms.
     var ms = Number(delayMs);
-    if (!(ms >= 0)) ms = 250;
-    try { if (_refreshTimer) clearTimeout(_refreshTimer); } catch (e) {}
+    if (!(ms >= 0)) ms = 1000; // default 1s debounce
+    try {
+      // If a refresh is already scheduled or currently running, skip scheduling
+      // to prevent repeated HTTP fetches during high-frequency events.
+      if (_refreshTimer || _refreshInFlight) return;
+    } catch (e) {}
     _refreshTimer = setTimeout(function () {
       _refreshTimer = null;
       try {

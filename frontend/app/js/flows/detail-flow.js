@@ -855,38 +855,9 @@ async function _loadBridgeStatus(backendId) {
       b.quote_deleted === true
     );
     const effectiveStatus = isDeletedInApp1 ? 'deleted' : String(b.quote_status || '').toLowerCase();
-    let renderPreviewData = (!isDeletedInApp1 && b.quote_render_data && typeof b.quote_render_data === 'object')
+    const renderPreviewData = (!isDeletedInApp1 && b.quote_render_data && typeof b.quote_render_data === 'object')
       ? b.quote_render_data
       : null;
-    const previewCandidateUrl = isDeletedInApp1
-      ? ''
-      : String(b.quote_image_url || b.quote_preview_url || '');
-
-    // If App1 didn't provide a full render payload, synthesize a lightweight
-    // renderPreviewData from available bridge fields so App2 can render a
-    // consistent preview without extra network calls.
-    if (!renderPreviewData && previewCandidateUrl) {
-      renderPreviewData = {
-        quoteCode: b.quote_code || '',
-        outletCode: b.outlet_code || '',
-        outletName: b.outlet_name || '',
-        area: b.region || b.area || '',
-        address: b.address || '',
-        outletPhone: b.outlet_phone || '',
-        saleCode: b.sale_code || '',
-        saleName: b.sale_name || '',
-        salePhone: b.sale_phone || '',
-        ssName: b.ss_name || '',
-        saleType: b.sale_type || 'Sale (SR)',
-        spoName: b.spo_name || '',
-        totalAmount: b.quote_total != null ? b.quote_total : (b.quote_total_amount || 0),
-        items: Array.isArray(b.items) ? b.items : [],
-        primaryImage: { data: previewCandidateUrl, name: 'Preview' },
-        createdAt: b.quote_confirmed_at || b.created_at || null,
-        updatedAt: b.updated_at || null,
-      };
-    }
-
     const hasRenderPreview = !!(renderPreviewData && (
       String(renderPreviewData.quoteCode || '').trim() ||
       (Array.isArray(renderPreviewData.items) && renderPreviewData.items.length > 0) ||
@@ -896,6 +867,9 @@ async function _loadBridgeStatus(backendId) {
       window.__ksQuoteRenderPreviewCache = window.__ksQuoteRenderPreviewCache || {};
       window.__ksQuoteRenderPreviewCache[String(backendId)] = renderPreviewData;
     }
+    const previewCandidateUrl = isDeletedInApp1
+      ? ''
+      : String(b.quote_image_url || b.quote_preview_url || '');
 
     // Status badge
     const statusMap = {
@@ -1241,7 +1215,20 @@ async function openQuotePreviewImageFromBridgeCache(backendId) {
     if (typeof showLoadingOverlay === 'function') {
       showLoadingOverlay('Đang mở preview báo giá...', 'Đang render ảnh');
     }
-    src = await ksBuildQuotePreviewImageDataUrl(data);
+    // Prefer lightweight SVG rendering on mobile devices to avoid html2canvas
+    // and heavy canvas work. SVG fallback is fast and more stable on mobile.
+    const ua = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(ua);
+    if (isMobile && typeof ksBuildQuotePreviewSvgDataUrl === 'function') {
+      try {
+        src = ksBuildQuotePreviewSvgDataUrl(data);
+      } catch (e) {
+        // Fallback to full image render if SVG build fails
+        src = await ksBuildQuotePreviewImageDataUrl(data);
+      }
+    } else {
+      src = await ksBuildQuotePreviewImageDataUrl(data);
+    }
     window.__ksQuoteRenderImageCache = window.__ksQuoteRenderImageCache || {};
     window.__ksQuoteRenderImageCache[key] = src;
     if (typeof hideLoadingOverlay === 'function') {
@@ -2209,10 +2196,25 @@ async function confirmDelete() {
     closeDeleteModal();
     return;
   }
-  const result = await window.dataSdk.delete(currentDetailRequest);
+  const reqSnapshot = currentDetailRequest;
+  const result = await window.dataSdk.delete(reqSnapshot);
   if (result.isOk) {
     showToast('Đã xóa yêu cầu');
     closeDeleteModal();
+    // Gửi push notification cho QCAG để biết Sale đã xóa yêu cầu
+    try {
+      if (typeof sendPushNotification === 'function') {
+        const reqObj = (() => { try { return JSON.parse(reqSnapshot.requester || '{}'); } catch (_) { return {}; } })();
+        const saleName = reqObj.saleName || reqObj.saleCode || 'Sale';
+        const outletLabel = reqSnapshot.outletName || reqSnapshot.outletCode || 'Outlet';
+        sendPushNotification({
+          title: 'Sale đã xóa yêu cầu',
+          body: saleName + ' đã xóa: ' + outletLabel,
+          role: 'qcag',
+          data: { type: 'sale_deleted', outletName: reqSnapshot.outletName, outletCode: reqSnapshot.outletCode }
+        });
+      }
+    } catch (e) { /* non-fatal */ }
     backToList();
   } else {
     showToast('Lỗi xóa yêu cầu');

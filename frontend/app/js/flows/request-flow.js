@@ -11,15 +11,269 @@ let userConfirmedTakeover = false;  // user chose "Đúng, tôi quản lý" for 
 
 // ── Request item management ──────────────────────────────────────────
 
+const NEW_REQUEST_DRAFTS_KEY = 'ks_new_request_drafts';
+let _currentNewRequestDraftId = null;
+// Session-scoped auto-saved draft id to avoid creating a new draft on every
+// keystroke. This is used only for transient auto-saves when the user is
+// composing a new request and hasn't explicitly opened/edited an existing draft.
+let _sessionAutoDraftId = null;
+
 function addRequestItem() {
   const id = Date.now();
   currentRequestItems.push({ id, type: '', brand: '', width: '', height: '', useOldSize: false, otherContent: '', poles: 0, action: '', note: '', survey: false });
   renderRequestItems();
+  saveNewRequestDraft();
   setTimeout(() => {
     const el = document.getElementById(`requestItem-${id}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 80);
 }
+
+function getNewRequestDrafts() {
+  try {
+    const raw = localStorage.getItem(NEW_REQUEST_DRAFTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setNewRequestDrafts(drafts) {
+  try {
+    localStorage.setItem(NEW_REQUEST_DRAFTS_KEY, JSON.stringify(Array.isArray(drafts) ? drafts : []));
+  } catch (e) {}
+}
+
+function getNewRequestDraftById(id) {
+  const drafts = getNewRequestDrafts();
+  return drafts.find(d => d.id === id) || null;
+}
+
+function saveNewRequestDraft() {
+  try {
+    if (!window.localStorage) return;
+    const outletCode = (document.getElementById('outletCode') || { value: '' }).value.trim();
+    const outletName = (document.getElementById('outletName') || { value: '' }).value.trim();
+    const address = (document.getElementById('address') || { value: '' }).value.trim();
+    const phone = (document.getElementById('phone') || { value: '' }).value.trim();
+    const outletLat = (document.getElementById('outletLat') || { value: '' }).value;
+    const outletLng = (document.getElementById('outletLng') || { value: '' }).value;
+    const locationPreview = outletLat && outletLng ? ((document.getElementById('locationPreview') || {}).textContent || '').trim() : '';
+    const signContent = (document.getElementById('signContent') || { value: '' }).value.trim();
+    const oldContentExtra = (document.getElementById('oldContentExtra') || { value: '' }).value.trim();
+    const draftItems = Array.isArray(currentRequestItems) ? currentRequestItems : [];
+    const isEmpty = !outletCode && !outletName && !address && !phone && !signContent && !oldContentExtra && (!draftItems.length || draftItems.every(i => !i.type && !i.brand && !i.width && !i.height && !i.note));
+    if (isEmpty) return; // do not save an empty draft
+
+    const drafts = getNewRequestDrafts();
+    // If we're editing an existing draft, reuse its id. Otherwise reuse a
+    // session-scoped auto id if present (prevents creating many drafts while
+    // typing), or generate a fresh unique id.
+    const id = _currentNewRequestDraftId || _sessionAutoDraftId || `draft-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    const existing = getNewRequestDraftById(id);
+    const now = new Date().toISOString();
+    const draft = {
+      id,
+      label: outletName ? `Outlet: ${outletName}` : (outletCode ? `Outlet: ${outletCode}` : 'Nháp chưa có tên'),
+      outletCode,
+      outletName,
+      address,
+      phone,
+      outletLat,
+      outletLng,
+      locationPreview,
+      signContent,
+      isOldContent: !!isOldContent,
+      oldContentExtra,
+      currentRequestItems: draftItems,
+      createdAt: existing ? existing.createdAt : now,
+      updatedAt: now,
+    };
+    // Put newest draft at the front
+    const nextDrafts = [draft].concat(drafts.filter(d => d.id !== id));
+    setNewRequestDrafts(nextDrafts);
+    // If editing an existing draft, set the current draft id so future saves
+    // update the same draft. If this was an auto-save of a new draft, keep
+    // it as the session auto id so subsequent auto-saves update it (and do
+    // not create a new draft every keystroke).
+    if (existing) {
+      _currentNewRequestDraftId = id;
+      _sessionAutoDraftId = null;
+    } else {
+      _sessionAutoDraftId = id;
+    }
+    updateDraftsButton();
+  } catch (e) {}
+}
+
+function clearNewRequestDraft(id) {
+  try {
+    const drafts = getNewRequestDrafts().filter(d => d.id !== id);
+    setNewRequestDrafts(drafts);
+    if (_currentNewRequestDraftId === id) _currentNewRequestDraftId = null;
+    // If the removed draft matches the session auto id, clear it
+    if (_sessionAutoDraftId === id) _sessionAutoDraftId = null;
+    updateDraftsButton();
+  } catch (e) {}
+}
+
+function clearAllNewRequestDrafts() {
+  try {
+    setNewRequestDrafts([]);
+    _currentNewRequestDraftId = null;
+    _sessionAutoDraftId = null;
+    updateDraftsButton();
+  } catch (e) {}
+}
+
+function updateDraftsButton() {
+  try {
+    const btn = document.getElementById('draftsListBtn');
+    const drafts = getNewRequestDrafts();
+    if (!btn) return;
+    const countEl = document.getElementById('draftsButtonCount');
+    const headerCountEl = document.getElementById('newRequestDraftCount');
+    const countText = drafts.length;
+    if (countEl) countEl.textContent = countText;
+    if (headerCountEl) headerCountEl.textContent = countText;
+    // Always keep the button clickable so it can show a toast when there are no drafts.
+    btn.disabled = false;
+  } catch (e) {}
+}
+
+function renderDraftsList() {
+  try {
+    const container = document.getElementById('draftsListContainer');
+    const noDrafts = document.getElementById('noDraftsMessage');
+    if (!container || !noDrafts) return;
+    const drafts = getNewRequestDrafts();
+    container.innerHTML = '';
+    if (!drafts.length) {
+      noDrafts.textContent = 'Chưa có nháp lưu trữ.';
+      return;
+    }
+    noDrafts.textContent = '';
+    drafts.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    // Render all drafts so the container can scroll to show them all.
+    // The modal container limits visible height with CSS (max-h) and
+    // enables scrolling; previously we sliced to 5 which prevented
+    // scrolling to older drafts.
+    drafts.forEach((draft, idx) => {
+      const item = document.createElement('div');
+      item.className = 'rounded-2xl border border-gray-200 p-3 bg-gray-50';
+      // Determine display label: use outletName when present, otherwise "Nháp X" where X is ordinal in this list
+      const displayLabel = (draft.outletName && String(draft.outletName).trim()) ? String(draft.outletName).trim() : `Nháp ${idx + 1}`;
+      item.innerHTML = `
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2 text-sm font-semibold text-gray-900 truncate">
+              <svg class="w-4 h-4 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 11l3 3L22 4" />
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11" />
+              </svg>
+              <span>${escapeHtml(displayLabel)}</span>
+            </div>
+            <div class="text-[11px] text-gray-500 mt-0.5">${new Date(draft.updatedAt).toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit' })} · ${escapeHtml(draft.outletCode || draft.address || '')}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="loadNewRequestDraft('${escapeHtml(draft.id)}')" class="px-3 py-1.5 bg-green-600 text-white text-[11px] font-semibold rounded-lg">Tiếp tục</button>
+            <button type="button" onclick="deleteNewRequestDraft('${escapeHtml(draft.id)}')" class="px-3 py-1.5 bg-white text-red-600 border border-red-200 text-[11px] font-semibold rounded-lg">Xóa</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(item);
+    });
+    // (no footer note needed — all drafts are rendered and container scrolls)
+  } catch (e) {}
+}
+
+function openDraftsModal() {
+  try {
+    const drafts = getNewRequestDrafts();
+    if (!drafts.length) {
+      showToast('Chưa có bản nháp lưu');
+      return;
+    }
+    renderDraftsList();
+    const modal = document.getElementById('draftsModal');
+    if (modal) modal.classList.remove('hidden');
+    try { enableModalBackdrop(); } catch (e) {}
+  } catch (e) {}
+}
+
+function closeDraftsModal() {
+  try {
+    const modal = document.getElementById('draftsModal');
+    if (modal) modal.classList.add('hidden');
+    try { disableModalBackdrop(); } catch (e) {}
+  } catch (e) {}
+}
+
+function deleteNewRequestDraft(id) {
+  try {
+    clearNewRequestDraft(id);
+    renderDraftsList();
+  } catch (e) {}
+}
+
+function loadNewRequestDraft(id) {
+  try {
+    const draft = getNewRequestDraftById(id);
+    if (!draft) {
+      showToast('Không tìm thấy nháp');
+      return;
+    }
+    _currentNewRequestDraftId = draft.id;
+    resetNewRequestForm();
+    document.getElementById('outletCode').value = draft.outletCode || '';
+    document.getElementById('outletName').value = draft.outletName || '';
+    document.getElementById('address').value = draft.address || '';
+    document.getElementById('phone').value = draft.phone || '';
+    document.getElementById('outletLat').value = draft.outletLat || '';
+    document.getElementById('outletLng').value = draft.outletLng || '';
+    document.getElementById('signContent').value = draft.signContent || '';
+    document.getElementById('oldContentExtra').value = draft.oldContentExtra || '';
+    isOldContent = !!draft.isOldContent;
+    try {
+      const oldEl = document.getElementById('oldContentSection');
+      const newEl = document.getElementById('newContentSection');
+      const toggle = document.getElementById('oldContentToggle');
+      if (isOldContent) {
+        if (oldEl) oldEl.classList.remove('hidden');
+        if (newEl) newEl.classList.add('hidden');
+        if (toggle) toggle.className = 'toggle-switch bg-gray-900 toggle-on rounded-full p-0.5 relative';
+      } else {
+        if (oldEl) oldEl.classList.add('hidden');
+        if (newEl) newEl.classList.remove('hidden');
+        if (toggle) toggle.className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
+      }
+    } catch (e) {}
+    if (Array.isArray(draft.currentRequestItems) && draft.currentRequestItems.length > 0) {
+      currentRequestItems = draft.currentRequestItems.map(i => ({ ...i, id: Number.isNaN(Number(i.id)) ? Date.now() + Math.random() : i.id }));
+    } else {
+      currentRequestItems = [];
+      addRequestItem();
+    }
+    renderRequestItems();
+    updateNewRequestHeaderOutletName();
+    updateDraftsButton();
+    closeDraftsModal();
+    // When loading an existing draft, clear the session auto-id so
+    // subsequent auto-saves update the loaded draft (via _currentNewRequestDraftId)
+    _sessionAutoDraftId = null;
+    showScreen('newRequestScreen');
+    switchTab(1);
+  } catch (e) {
+    showToast('Không thể mở nháp');
+  }
+}
+
+function saveDraftsOnPageUnload() {
+  try { saveNewRequestDraft(); } catch (e) {}
+}
+
+window.addEventListener('beforeunload', saveDraftsOnPageUnload);
 
 function removeRequestItem(id) {
   if (currentRequestItems.length > 1) {
@@ -58,6 +312,7 @@ function updateRequestItem(id, field, value) {
     const layoutFields = ['type','brand','survey','useOldSize','action'];
     const shouldRender = layoutFields.includes(field);
     if (shouldRender) renderRequestItems();
+    try { saveNewRequestDraft(); } catch (e) {}
   }
 }
 
@@ -68,6 +323,7 @@ function setPolesSilent(id, value) {
   item.poles = Number.isNaN(v) ? 0 : v;
   const el = document.getElementById(`poles-${id}`);
   if (el) el.value = item.poles;
+  try { saveNewRequestDraft(); } catch (e) {}
 }
 
 function incrementPoles(id, delta) {
@@ -81,6 +337,7 @@ function toggleOldSize(id) {
   if (item) {
     item.useOldSize = !item.useOldSize;
     renderRequestItems();
+    try { saveNewRequestDraft(); } catch (e) {}
   }
 }
 
@@ -95,6 +352,7 @@ function toggleSurvey(id) {
     item.useOldSize = false;
   }
   renderRequestItems();
+  try { saveNewRequestDraft(); } catch (e) {}
 }
 
 function renderRequestItems() {
@@ -136,9 +394,9 @@ function renderRequestItems() {
           <div>
             <label class="block text-xs text-gray-500 mb-1">Loại bảng hiệu</label>
               <div class="custom-select" data-id="${item.id}" data-field="type">
-              <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')"><span class="cs-label">${item.type || 'Chọn loại bảng hiệu'}</span></button>
+              <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')"><span class="cs-label">${item.type ? (item.type === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' : escapeHtml(item.type)) : 'Chọn loại bảng hiệu'}</span></button>
               <div class="cs-options hidden ${index >= 1 ? 'dropup' : ''}">
-                ${signTypes.map(t => `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
+                ${signTypes.map(t => t === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml('Bảng hiflex 2 mặt ')}<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span></div>` : `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
               </div>
             </div>
           </div>
@@ -309,12 +567,45 @@ function attachValidationClearing() {
     if (statusInput) {
       statusInput.addEventListener('change', () => { try { document.getElementById('statusUploadLabel')?.classList.remove('field-error'); } catch (e) {} });
     }
+    // Save drafts when basic fields change
+    const autosaveIds = ['outletCode','outletName','address','phone','signContent','oldContentExtra'];
+    autosaveIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const saver = () => { try { saveNewRequestDraft(); } catch (e) {} };
+      el.removeEventListener('input', saver);
+      el.removeEventListener('change', saver);
+      el.addEventListener('input', saver);
+      el.addEventListener('change', saver);
+    });
     // oldContent image upload removed — no oldInput listener needed
   } catch (e) {}
 }
 
 // Run once after load to attach handlers for static fields
 try { setTimeout(attachValidationClearing, 120); } catch (e) {}
+try { setTimeout(updateDraftsButton, 120); } catch (e) {}
+
+// Update the New Request header to show the Outlet name when provided
+function updateNewRequestHeaderOutletName() {
+  try {
+    const el = document.getElementById('newRequestOutletName');
+    const name = (document.getElementById('outletName') || { value: '' }).value || '';
+    if (!el) return;
+    el.textContent = name ? ('Outlet: ' + name) : '';
+  } catch (e) {}
+}
+
+// keep header in sync when user types outlet name
+try {
+  const on = document.getElementById('outletName');
+  if (on) {
+    on.removeEventListener('input', updateNewRequestHeaderOutletName);
+    on.addEventListener('input', updateNewRequestHeaderOutletName);
+    on.removeEventListener('change', updateNewRequestHeaderOutletName);
+    on.addEventListener('change', updateNewRequestHeaderOutletName);
+  }
+} catch (e) {}
 
 // ── Old content toggle ────────────────────────────────────────────────
 
@@ -703,6 +994,7 @@ async function submitNewRequest() {
       // Reset form immediately so that if the user dismisses the modal via the
       // OS back gesture (instead of the official modal buttons) they land on a
       // clean, empty form — preventing accidental duplicate submissions.
+      try { if (typeof clearNewRequestDraft === 'function') clearNewRequestDraft(_currentNewRequestDraftId); } catch (e) {}
       resetNewRequestForm();
 
       hideLoadingOverlay();
@@ -724,6 +1016,7 @@ async function submitNewRequest() {
     updateRequestCount();
     lastCreatedRequestId = request.__backendId;
     try { blurActiveInput(); } catch (e) {}
+    try { if (typeof clearNewRequestDraft === 'function') clearNewRequestDraft(_currentNewRequestDraftId); } catch (e) {}
     resetNewRequestForm();
     hideLoadingOverlay();
     document.getElementById('confirmModal').classList.remove('hidden');
@@ -871,6 +1164,7 @@ function resetNewRequestForm() {
     if (sb) { sb.disabled = false; sb.textContent = 'Xác nhận yêu cầu'; }
   } catch (e) {}
   switchTab(1);
+  try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
 }
 
 // Return true when we have at least one signage-related item
@@ -1123,6 +1417,7 @@ function fillOutletFieldsFromExisting(ex) {
         const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí';
       }
     } catch (e) {}
+    try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
   } catch (e) {}
 }
 
@@ -1186,6 +1481,7 @@ function closeDuplicateOutletModal() {
     // ensure paste button visible
     try { const pb = document.getElementById('outletPasteBtn'); if (pb) pb.style.display = ''; } catch (e) {}
   } catch (e) {}
+  try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
 }
 
 function continueWithNewOutlet() {

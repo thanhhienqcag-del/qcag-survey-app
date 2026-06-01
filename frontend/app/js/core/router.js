@@ -97,6 +97,7 @@ function showScreen(screenId) {
 // ── Navigation ────────────────────────────────────────────────────────
 
 function goHome() {
+  try { if (typeof saveNewRequestDraft === 'function') saveNewRequestDraft(); } catch (e) {}
   resetForms();
   showScreen('homeScreen');
   try { if (typeof updateHomePushBtn === 'function') updateHomePushBtn(); } catch (_) {}
@@ -168,6 +169,8 @@ function switchTab(tab) {
     const parentVisible = !document.getElementById('newRequestScreen').classList.contains('hidden');
     bubble.classList.toggle('hidden', !(parentVisible && tab === 2));
   }
+
+  try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
   // Update Tab 3 UI depending on items in Tab 2 (some logic lives in request-flow)
   if (tab === 3) {
     try { if (typeof updateTab3UI === 'function') updateTab3UI(); } catch (e) {}

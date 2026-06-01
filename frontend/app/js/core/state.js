@@ -40,7 +40,7 @@ const defaultConfig = {
 // ── Sign types & brand rules ─────────────────────────────────────────
 const signTypes = [
   'Bảng hiflex 1 mặt',
-  'Bảng hiflex 2 mặt dạng hộp',
+  'Bảng hiflex 2 mặt (KHÔNG ĐÈN)',
   'Hộp đèn hiflex 1 mặt',
   'Hộp đèn hiflex 2 mặt',
   'Logo indoor',
