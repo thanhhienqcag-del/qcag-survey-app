@@ -21,7 +21,7 @@
   // Backend đã cho phép tối đa 300 records/page. storeMaxRows = 2000
   // để chứa đủ khi data tiếp tục tăng.
   var _requestsPageSize = 300;
-  var _storeMaxRows = 2000;
+  var _storeMaxRows = 999999;
   var _storeTruncated = false;
   var _storeTotalHint = 0;
   var _lastSyncIso = '';
@@ -43,7 +43,7 @@
         }
         var maxRowsOverride = Number(localStorage.getItem('ks_requests_max_rows'));
         if (Number.isFinite(maxRowsOverride) && maxRowsOverride > 0) {
-          _storeMaxRows = Math.max(100, Math.min(5000, Math.floor(maxRowsOverride)));
+          _storeMaxRows = Math.max(100, Math.floor(maxRowsOverride));
         }
       }
     } catch (_) {}

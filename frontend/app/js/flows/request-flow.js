@@ -847,7 +847,6 @@ async function submitNewRequest() {
     showToast('Vui lòng điền đầy đủ nội dung bắt buộc');
     return;
   }
-  if (allRequests.length >= 999) { showToast('Đã đạt giới hạn 999 yêu cầu'); return; }
 
   const btn = document.getElementById('submitNewBtn');
   _isNewRequestSubmitting = true;
