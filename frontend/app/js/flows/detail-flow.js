@@ -1994,12 +1994,13 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
   overlay.innerHTML = `
     <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false" style="opacity:0;transition:opacity .18s ease" decoding="async">
     <button class="dv-zoom-close">✕</button>
-    <button class="dv-zoom-rotate-btn" title="Xoay ảnh">↻</button>
+    <button class="dv-zoom-rotate-btn rotate-right" title="Xoay phải ↻">↻</button>
+    <button class="dv-zoom-rotate-btn rotate-left" title="Xoay trái ↺">↺</button>
     <button class="dv-zoom-dvhc-btn" onclick="(function(e){e.stopPropagation();if(typeof qcagDesktopToggleDVHCLookup==='function')qcagDesktopToggleDVHCLookup();})(event)" title="Tra cứu ĐVHC">🗺️</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>
     ${imgs.length > 1 ? `
-    <button id="dvZoomPrevBtn" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:44px;height:44px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;font-size:20px;z-index:9999;border:none;pointer-events:auto;display:flex;align-items:center;justify-content:center;">❮</button>
-    <button id="dvZoomNextBtn" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);width:44px;height:44px;background:rgba(0,0,0,0.5);color:#fff;border-radius:50%;font-size:20px;z-index:9999;border:none;pointer-events:auto;display:flex;align-items:center;justify-content:center;">❯</button>
+    <button id="dvZoomPrevBtn" class="dv-zoom-nav-btn prev">❮</button>
+    <button id="dvZoomNextBtn" class="dv-zoom-nav-btn next">❯</button>
     ` : ''}`;
   if (showContent) {
     const showContentBar = document.createElement('div');
@@ -2129,11 +2130,19 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     if (nextBtn) nextBtn.onclick = (e) => { e.stopPropagation(); navigateZoom(1); };
   }
 
-  const rotateBtn = overlay.querySelector('.dv-zoom-rotate-btn');
-  if (rotateBtn) {
-    rotateBtn.onclick = (e) => {
+  const rotateRightBtn = overlay.querySelector('.dv-zoom-rotate-btn.rotate-right');
+  if (rotateRightBtn) {
+    rotateRightBtn.onclick = (e) => {
       e.stopPropagation();
       rotationAngle = (rotationAngle + 90) % 360;
+      apply(true);
+    };
+  }
+  const rotateLeftBtn = overlay.querySelector('.dv-zoom-rotate-btn.rotate-left');
+  if (rotateLeftBtn) {
+    rotateLeftBtn.onclick = (e) => {
+      e.stopPropagation();
+      rotationAngle = (rotationAngle - 90 + 360) % 360;
       apply(true);
     };
   }

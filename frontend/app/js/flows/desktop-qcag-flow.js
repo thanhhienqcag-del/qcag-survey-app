@@ -2894,13 +2894,13 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                   <div id="qcagStatusThumbGrid">
                     ${(() => {
                       if (statusImgs.length === 0) return '<span class="qcag-detail-muted">Đang trống</span>';
+                      const enc = encodeURIComponent(JSON.stringify(statusImgs));
                       const first = statusImgs[0];
                       const more = statusImgs.length - 1;
                       if (statusImgs.length === 1) {
                         return `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"></div>`;
                       }
-                      const statusImgsJson = escapeHtml(JSON.stringify(statusImgs));
-                      return `<div class="qcag-gallery-rep" onclick="showImageFull(JSON.parse(this.dataset.imgs),false,0)" data-imgs="${statusImgsJson}"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${more}</div></div>`;
+                      return `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${more}</div></div>`;
                     })()}
                   </div>
                   ${isWarranty && request.warrantyOutOfScope && request.warrantyOutOfScopeNote
@@ -3089,12 +3089,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         if (newSImgs.length === 0) {
           statusThumbEl.innerHTML = '<span class="qcag-detail-muted">Đang trống</span>';
         } else {
+          const enc = encodeURIComponent(JSON.stringify(newSImgs));
           const first = newSImgs[0];
           if (newSImgs.length === 1) {
             statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"></div>`;
           } else {
-            const newSImgsJson = escapeHtml(JSON.stringify(newSImgs));
-            statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull(JSON.parse(this.dataset.imgs),false,0)" data-imgs="${newSImgsJson}"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${newSImgs.length - 1}</div></div>`;
+            statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${newSImgs.length - 1}</div></div>`;
           }
         }
       }
@@ -3201,13 +3201,13 @@ async function qcagDesktopUploadStatusImage(input) {
       if (newImgs.length === 0) {
         thumbGrid.innerHTML = '<span class="qcag-detail-muted">Đang trống</span>';
       } else {
+        const enc = encodeURIComponent(JSON.stringify(newImgs));
         const first = newImgs[0];
         const more = newImgs.length - 1;
         if (newImgs.length === 1) {
           thumbGrid.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"></div>`;
         } else {
-          const newImgsJson = escapeHtml(JSON.stringify(newImgs));
-          thumbGrid.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull(JSON.parse(this.dataset.imgs),false,0)" data-imgs="${newImgsJson}"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${more}</div></div>`;
+          thumbGrid.innerHTML = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${more}</div></div>`;
         }
       }
     }
@@ -3776,7 +3776,7 @@ function qcagOpenGallery(images, startIndex) {
     const img = document.createElement('img');
     img.src = src;
     img.alt = 'Ảnh ' + (i + 1);
-    img.onclick = function (e) { e.stopPropagation(); try { showImageFull(src, false); } catch (err) { console.error(err); } };
+    img.onclick = function (e) { e.stopPropagation(); try { showImageFull(images, false, i); } catch (err) { console.error(err); } };
     t.appendChild(img);
     // Copy button removed — feature disabled per request
     thumbs.appendChild(t);

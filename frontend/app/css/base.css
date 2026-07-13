@@ -1635,41 +1635,55 @@ body.dark .qcag-survey-badge,
   pointer-events: auto;
 }
 .dv-zoom-img.grabbing { cursor: grabbing; }
-.dv-zoom-close {
-  position: absolute; top: 16px; right: 16px; z-index: 5001;
-  background: rgba(255,255,255,0.15);
-  border: none; color: #fff;
-  width: 44px; height: 44px;
-  border-radius: 50%; font-size: 20px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-}
-/* DVHC lookup button in fullscreen zoom overlay — sits left of the close button */
-.dv-zoom-dvhc-btn {
-  position: absolute; top: 16px; right: 70px; z-index: 5001;
-  background: rgba(255,255,255,0.15);
-  border: none; color: #fff;
-  width: 44px; height: 44px;
-  border-radius: 50%; font-size: 20px;
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  transition: background .15s;
-}
-.dv-zoom-dvhc-btn:hover { background: rgba(255,255,255,0.28); }
+.dv-zoom-close,
+.dv-zoom-dvhc-btn,
 .dv-zoom-rotate-btn {
-  position: absolute; top: 16px; right: 124px; z-index: 5001;
-  background: rgba(255,255,255,0.15);
-  border: none; color: #fff;
+  position: absolute; top: 16px; z-index: 5001;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
   width: 44px; height: 44px;
   border-radius: 50%; font-size: 20px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  transition: background .15s;
+  transition: all .15s ease-in-out;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
-.dv-zoom-rotate-btn:hover { background: rgba(255,255,255,0.28); }
+.dv-zoom-close:hover,
+.dv-zoom-dvhc-btn:hover,
+.dv-zoom-rotate-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+  border-color: #fff;
+}
+
+.dv-zoom-close { right: 16px; }
+.dv-zoom-dvhc-btn { right: 70px; }
+.dv-zoom-rotate-btn.rotate-right { right: 124px; }
+.dv-zoom-rotate-btn.rotate-left { right: 178px; }
+
+/* Navigation buttons (prev/next) on zoom */
+.dv-zoom-nav-btn {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 50px; height: 50px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  color: #fff;
+  border-radius: 50%; font-size: 22px;
+  z-index: 9999; cursor: pointer; pointer-events: auto;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+.dv-zoom-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #000;
+  border-color: #fff;
+  transform: translateY(-50%) scale(1.1);
+}
+.dv-zoom-nav-btn.prev { left: 16px; }
+.dv-zoom-nav-btn.next { right: 16px; }
 .dv-zoom-scale {
   position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
   color: rgba(255,255,255,0.55); font-size: 12px; font-weight: 600;
