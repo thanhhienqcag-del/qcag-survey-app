@@ -329,6 +329,19 @@ async function initApp() {
             console.warn('mobile detail in-place refresh failed', e);
           }
         }
+
+        // In-place refresh design modal comments if it's currently open
+        try {
+          const designModal = document.getElementById('designModal');
+          if (designModal && !designModal.classList.contains('hidden') && typeof currentDetailRequest !== 'undefined' && currentDetailRequest) {
+            const modalUpdated = (allRequests || []).find(r => r.__backendId === currentDetailRequest.__backendId);
+            if (modalUpdated && typeof window.qcagRefreshDesignModalComments === 'function') {
+              window.qcagRefreshDesignModalComments(modalUpdated);
+            }
+          }
+        } catch (e) {
+          console.warn('design modal comments in-place refresh failed', e);
+        }
       }
     });
     if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();

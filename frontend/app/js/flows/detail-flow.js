@@ -1644,6 +1644,28 @@ async function uploadAcceptance(input) {
 
 // ── Design viewer (modal) ─────────────────────────────────────────────
 
+function qcagRefreshDesignModalComments(request) {
+  try {
+    const comments = JSON.parse(request.comments || '[]');
+    const commentsEl = document.getElementById('designComments');
+    if (commentsEl) {
+      if (!comments || comments.length === 0) {
+        commentsEl.innerHTML = '<div class="text-sm text-gray-400">Chưa có bình luận</div>';
+      } else {
+        commentsEl.innerHTML = comments.map(c => `
+          <div class="comment-item">
+            <div class="comment-meta"><strong>${escapeHtml(c.authorName || c.authorRole || 'Người dùng')}</strong> <span class="comment-role">${escapeHtml(c.authorRole || '')}</span> <span class="comment-time">${new Date(c.createdAt).toLocaleString('vi-VN')}</span></div>
+            <div class="comment-body">${escapeHtml(c.text)}</div>
+          </div>
+        `).join('');
+      }
+      // auto-scroll to bottom of comments
+      setTimeout(() => { if (commentsEl) commentsEl.scrollTop = commentsEl.scrollHeight; }, 30);
+    }
+  } catch (e) { /* ignore */ }
+}
+window.qcagRefreshDesignModalComments = qcagRefreshDesignModalComments;
+
 async function viewDesign(id) {
   let request = allRequests.find(r => r.__backendId === id);
   if (!request) return;
@@ -1772,22 +1794,7 @@ async function viewDesign(id) {
     </div>`;
 
   // Render existing comments
-  try {
-    const comments = JSON.parse(request.comments || '[]');
-    const commentsEl = document.getElementById('designComments');
-    if (commentsEl) {
-      if (!comments || comments.length === 0) {
-        commentsEl.innerHTML = '<div class="text-sm text-gray-400">Chưa có bình luận</div>';
-      } else {
-        commentsEl.innerHTML = comments.map(c => `
-          <div class="comment-item">
-            <div class="comment-meta"><strong>${escapeHtml(c.authorName || c.authorRole || 'Người dùng')}</strong> <span class="comment-role">${escapeHtml(c.authorRole || '')}</span> <span class="comment-time">${new Date(c.createdAt).toLocaleString('vi-VN')}</span></div>
-            <div class="comment-body">${escapeHtml(c.text)}</div>
-          </div>
-        `).join('');
-      }
-    }
-  } catch (e) { /* ignore */ }
+  qcagRefreshDesignModalComments(request);
 
   // Set current request so showImageFull can use it
   window._dv_currentDesignReq = request;
