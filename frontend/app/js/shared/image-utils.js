@@ -205,7 +205,10 @@ async function _compressImageFiles(files, maxDim, quality) {
 
 function _processImageFile(file) {
   return _detectImageMimeByMagic(file).then(function (realMime) {
-    return checkHasExif(file).then(function (hasExif) {
+    // HEIC does not support standard EXIF extraction / piexif injection,
+    // so we force it to bypass the EXIF block.
+    var canCheckExif = (realMime !== 'image/heic');
+    return (canCheckExif ? checkHasExif(file) : Promise.resolve(false)).then(function (hasExif) {
       if (hasExif) {
         console.log('[EXIF] Photo contains EXIF data. Compressing as JPEG and keeping EXIF.');
         return readRawDataUrl(file).then(function (rawDataUrl) {
@@ -243,7 +246,7 @@ function _processImageFile(file) {
         });
       }
 
-      if (_isBrowserRenderable(realMime)) {
+      if (_isBrowserRenderable(realMime) || realMime === 'image/heic') {
         return _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
           return { previewValue: dataUrl, uploadValue: dataUrl };
         }).catch(function () {
@@ -251,7 +254,13 @@ function _processImageFile(file) {
             var reader = new FileReader();
             reader.onload = function (e) {
               var raw = e.target.result || '';
-              resolve({ previewValue: raw, uploadValue: raw });
+              if (realMime === 'image/heic') {
+                var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
+                var label = file.name || 'ảnh';
+                resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
+              } else {
+                resolve({ previewValue: raw, uploadValue: raw });
+              }
             };
             reader.onerror = function () { resolve(null); };
             reader.readAsDataURL(file);
