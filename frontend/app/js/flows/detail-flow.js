@@ -1987,7 +1987,8 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     }
   } catch (e) { /* ignore */ }
 
-  let rotationAngle = 0;
+  window._zoomRotationCache = window._zoomRotationCache || {};
+  let rotationAngle = window._zoomRotationCache[src] || 0;
 
   const overlay = document.createElement('div');
   overlay.id = 'dvZoomOverlay';
@@ -2063,6 +2064,9 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
 
   const img = document.getElementById('dvZoomImg');
   const scaleEl = document.getElementById('dvZoomScale');
+  if (img) {
+    apply(false);
+  }
 
   // Fade in once loaded (cache-hit = nearly instant, network = smooth reveal)
   if (img) {
@@ -2111,9 +2115,9 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
 
   function navigateZoom(dir) {
     if (imgs.length <= 1) return;
-    rotationAngle = 0; // reset rotation on slide change
-    if (scale > 1) { scale = 1; tx = 0; ty = 0; }
     currentIndex = (currentIndex + dir + imgs.length) % imgs.length;
+    rotationAngle = window._zoomRotationCache[imgs[currentIndex]] || 0; // Load from cache
+    if (scale > 1) { scale = 1; tx = 0; ty = 0; }
     img.style.opacity = '0';
     setTimeout(() => {
       img.onload = () => { img.style.opacity = '1'; }; // Ensure we re-attach just in case
@@ -2135,6 +2139,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     rotateRightBtn.onclick = (e) => {
       e.stopPropagation();
       rotationAngle = (rotationAngle + 90) % 360;
+      window._zoomRotationCache[imgs[currentIndex]] = rotationAngle; // Save to cache
       apply(true);
     };
   }
@@ -2143,6 +2148,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     rotateLeftBtn.onclick = (e) => {
       e.stopPropagation();
       rotationAngle = (rotationAngle - 90 + 360) % 360;
+      window._zoomRotationCache[imgs[currentIndex]] = rotationAngle; // Save to cache
       apply(true);
     };
   }
