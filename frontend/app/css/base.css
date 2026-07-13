@@ -2540,3 +2540,9 @@ body.dark .qcag-survey-badge,
 .theme-dark #draftsButtonCount, [data-theme="dark"] #draftsButtonCount { color: #ffffff !important; }
 /* Ensure draft count inside the drafts button is white in dark mode with higher specificity */
 .theme-dark #draftsListBtn #draftsButtonCount, [data-theme="dark"] #draftsListBtn #draftsButtonCount { color: #ffffff !important; }
+
+/* Map Modal z-index fix - must be above fixed footers (z-index: 60) */
+#mapModal {
+  z-index: 10000 !important;
+}
+
