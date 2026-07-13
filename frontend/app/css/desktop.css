@@ -1488,6 +1488,21 @@
   .qcag-complete-btn--disabled:hover,
   .qcag-complete-btn:disabled:hover { opacity: 1 !important; }
 
+  .qcag-desktop-edit-btn {
+    position: static;
+    background: #e11d48;
+    color: #fff;
+    border: none;
+    padding: 3px 9px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(225,29,72,0.14);
+    align-self: flex-end;
+  }
+  .qcag-desktop-edit-btn:hover { opacity: 0.95; }
+
   /* Dark theme adjustments so the + is visible */
   .theme-dark .qcag-upload-square,
   [data-theme="dark"] .qcag-upload-square {
@@ -4036,5 +4051,51 @@
   background: transparent;
   color: #fde68a;
   font-weight: 600;
+}
+
+/* Dark theme: button adjustments with border and opacity background */
+.theme-dark .qcag-item-delete-btn,
+[data-theme="dark"] .qcag-item-delete-btn {
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #f87171 !important;
+}
+.theme-dark .qcag-item-delete-btn:hover,
+[data-theme="dark"] .qcag-item-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+}
+
+.theme-dark .qcag-thumb-remove,
+[data-theme="dark"] .qcag-thumb-remove {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #ffffff !important;
+}
+.theme-dark .qcag-thumb-remove:hover,
+[data-theme="dark"] .qcag-thumb-remove:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.theme-dark .qcag-add-item-btn,
+[data-theme="dark"] .qcag-add-item-btn {
+  border: 1px solid rgba(59, 130, 246, 0.4) !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+  color: #60a5fa !important;
+}
+.theme-dark .qcag-add-item-btn:hover,
+[data-theme="dark"] .qcag-add-item-btn:hover {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+.theme-dark .qcag-desktop-edit-btn,
+[data-theme="dark"] .qcag-desktop-edit-btn {
+  border: 1px solid rgba(244, 63, 94, 0.4) !important;
+  background: rgba(244, 63, 94, 0.1) !important;
+  color: #fb7185 !important;
+  box-shadow: none !important;
+}
+.theme-dark .qcag-desktop-edit-btn:hover,
+[data-theme="dark"] .qcag-desktop-edit-btn:hover {
+  background: rgba(244, 63, 94, 0.2) !important;
 }
 

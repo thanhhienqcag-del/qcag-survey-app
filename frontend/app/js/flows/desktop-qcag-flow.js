@@ -1,4 +1,4 @@
-﻿﻿// ====================================================================
+// ====================================================================
 // js/flows/desktop-qcag-flow.js — dedicated desktop UI for QCAG users
 // ====================================================================
 'use strict';
@@ -1968,6 +1968,55 @@ function _qcagConfirmDialog(message) {
   });
 }
 
+// Custom Delete Reason Dialog
+function _qcagDeleteReasonDialog(message) {
+  return new Promise((resolve) => {
+    const isDark = document.documentElement.classList.contains('theme-dark')
+                || document.documentElement.getAttribute('data-theme') === 'dark';
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);backdrop-filter:blur(2px);z-index:9999;display:flex;align-items:center;justify-content:center';
+    const cardBg     = isDark ? '#0b1220' : '#ffffff';
+    const cardBorder = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.04)';
+    const textColor  = isDark ? '#e6eef8' : '#111827';
+    const subColor   = isDark ? '#9ca3af' : '#6b7280';
+    const cancelBg   = isDark ? 'rgba(255,255,255,0.06)' : '#f3f4f6';
+    const cancelClr  = isDark ? '#e6eef8' : '#374151';
+    const cancelBdr  = isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb';
+    const textareaBg = isDark ? '#1e293b' : '#f9fafb';
+    const textareaBdr= isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e5e7eb';
+
+    overlay.innerHTML =
+      `<div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:16px;padding:24px 20px 20px;max-width:440px;width:88%;box-shadow:0 20px 60px rgba(0,0,0,0.4)">` +
+        `<div style="width:48px;height:48px;border-radius:12px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;margin:0 auto 14px">` +
+          `<svg width="22" height="22" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>` +
+        `</div>` +
+        `<p style="margin-bottom:6px;font-size:15px;font-weight:600;color:${textColor};text-align:center;line-height:1.2">${message}</p>` +
+        `<p style="margin-bottom:14px;font-size:12px;color:${subColor};text-align:center">Hành động này không thể hoàn tác. Vui lòng ghi rõ lý do xóa:</p>` +
+        `<div style="margin-bottom:18px">` +
+          `<textarea id="_qcagDeleteReasonInput" rows="3" style="width:100%;padding:10px;border-radius:8px;background:${textareaBg};border:${textareaBdr};color:${textColor};font-size:14px;resize:none" placeholder="Nhập lý do xóa yêu cầu..."></textarea>` +
+        `</div>` +
+        `<div style="display:flex;gap:8px">` +
+          `<button id="_qcagCancelBtn" style="flex:1;padding:11px;border-radius:10px;background:${cancelBg};border:${cancelBdr};cursor:pointer;font-size:14px;font-weight:500;color:${cancelClr}">Hủy</button>` +
+          `<button id="_qcagConfirmBtn" style="flex:1;padding:11px;border-radius:10px;background:#ef4444;color:#fff;border:none;cursor:pointer;font-size:14px;font-weight:600">Xóa</button>` +
+        `</div>` +
+      `</div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#_qcagDeleteReasonInput').focus();
+
+    const cleanup = (result) => { document.body.removeChild(overlay); resolve(result); };
+    overlay.querySelector('#_qcagConfirmBtn').onclick = () => {
+      const reason = overlay.querySelector('#_qcagDeleteReasonInput').value.trim();
+      if (!reason) {
+        showToast('Vui lòng nhập lý do xóa');
+        return;
+      }
+      cleanup(reason);
+    };
+    overlay.querySelector('#_qcagCancelBtn').onclick  = () => cleanup(null);
+    overlay.onclick = (e) => { if (e.target === overlay) cleanup(null); };
+  });
+}
+
 async function qcagDesktopDeleteRequest(backendId) {
   try {
     const req = (allRequests || []).find(r => r.__backendId === backendId);
@@ -1981,7 +2030,7 @@ async function qcagDesktopDeleteRequest(backendId) {
     if (!confirmed) return;
 
     if (window.dataSdk && typeof window.dataSdk.delete === 'function') {
-      const res = await window.dataSdk.delete(req);
+      const res = await window.dataSdk.delete(req, reason);
       if (res && res.isOk) {
         showToast('Đã xóa yêu cầu');
       } else {
@@ -2708,6 +2757,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   const requester = qcagDesktopParseJson(request.requester, {});
   const statusBadge = qcagDesktopStatusBadge(request);
 
+  const showCompleteBtn = _qcagDesktopStatusFilter !== 'done';
+  const editBtn = `<button onclick="window._editRequestOrigin='desktop'; openEditRequestSheet();" class="qcag-desktop-edit-btn">Yêu cầu chỉnh sửa</button>`;
+
   detailEl.innerHTML = `
     <div class="qcag-detail-layout${_qcagCommentsCollapsed ? ' qcag-chat-collapsed' : ''}" id="qcagDetailLayout">
       <div class="qcag-detail-left">
@@ -2790,7 +2842,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
               </div>
 
             <div class="qcag-subcard">
-              <div class="qcag-card-title">Hiện trạng Outlet</div>
+              <div class="qcag-card-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span>Hiện trạng Outlet</span>
+                ${editBtn}
+              </div>
               <div class="qcag-subcard-body qcag-content-images">
                 <div class="qcag-action-block">
                   <label class="qcag-upload-square qcag-status-upload-square" title="Thêm ảnh hiện trạng">

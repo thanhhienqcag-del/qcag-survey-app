@@ -645,10 +645,6 @@ function isTab1Complete() {
     const address = (document.getElementById('address') || {}).value || '';
     const phone = (document.getElementById('phone') || {}).value || '';
     if (!code || !name || !address || !phone) return false;
-    // require selected location (lat/lng) before allowing Tab2
-    const lat = (document.getElementById('outletLat') || { value: '' }).value || '';
-    const lng = (document.getElementById('outletLng') || { value: '' }).value || '';
-    if (!lat || !lng) return false;
     if (code !== 'New Outlet' && !/^\d{8}$/.test(code)) return false;
     // phone normalization
     const digits = (typeof normalizeVietnamPhone === 'function') ? normalizeVietnamPhone(phone) : String(phone || '').replace(/\D/g, '');
@@ -755,15 +751,7 @@ function validateTab1() {
   if (otherOutletState && !userConfirmedTakeover) {
     return;
   }
-  // Require outlet location selected before moving to Tab 2
-  const latVal = (document.getElementById('outletLat')||{value:''}).value || '';
-  const lngVal = (document.getElementById('outletLng')||{value:''}).value || '';
-  if (!latVal || !lngVal) {
-    try { markFieldError(document.getElementById('locationActionBtn') || document.getElementById('locationPreview') || document.getElementById('btn-locate-outlet')); } catch (e) {}
-    showToast('Vui lòng chọn vị trí outlet trước khi tiếp tục');
-    try { if (typeof openLocationModal === 'function') openLocationModal(); } catch (e) {}
-    return;
-  }
+  // Bypassed: Require outlet location selected before moving to Tab 2 (will validate on submit instead)
   switchTab(2);
 }
 
@@ -836,12 +824,18 @@ async function submitNewRequest() {
     markFieldError(document.getElementById('statusUploadLabel'));
     hasError = true;
   }
-  // Require outlet location (lat/lng) to be set
+  // Require outlet location (lat/lng) to be set. If missing, show warning, display location container, and open manual location modal.
   const latVal = (document.getElementById('outletLat')||{value:''}).value || '';
   const lngVal = (document.getElementById('outletLng')||{value:''}).value || '';
   if (!latVal || !lngVal) {
-    try { markFieldError(document.getElementById('locationActionBtn') || document.getElementById('locationPreview') || document.getElementById('btn-locate-outlet')); } catch (e) {}
-    hasError = true;
+    try {
+      const container = document.getElementById('outletLocationContainer');
+      if (container) container.classList.remove('hidden');
+      markFieldError(document.getElementById('btn-locate-outlet') || document.getElementById('locationPreviewText'));
+    } catch (e) {}
+    showToast('Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng bật định vị hoặc chọn vị trí thủ công.');
+    try { if (typeof openLocationModal === 'function') openLocationModal(); } catch (e) {}
+    return;
   }
   if (hasError) {
     showToast('Vui lòng điền đầy đủ nội dung bắt buộc');
@@ -903,6 +897,7 @@ async function submitNewRequest() {
     address: document.getElementById('address').value.trim(),
     outletLat: document.getElementById('outletLat').value || '',
     outletLng: document.getElementById('outletLng').value || '',
+    locationSource: (document.getElementById('locationSource') || {}).value || 'manual',
     phone: document.getElementById('phone').value.trim(),
     items: JSON.stringify(currentRequestItems),
     content: isOldContent ? '' : content,
@@ -1137,6 +1132,12 @@ function resetNewRequestForm() {
   document.getElementById('statusImagesPreview').innerHTML = '';
   document.getElementById('outletLat').value = '';
   document.getElementById('outletLng').value = '';
+  try {
+    const locSourceEl = document.getElementById('locationSource');
+    if (locSourceEl) locSourceEl.value = 'manual';
+    const locContainer = document.getElementById('outletLocationContainer');
+    if (locContainer) locContainer.classList.add('hidden');
+  } catch (e) {}
   try { if (typeof clearLocationPreview === 'function') clearLocationPreview(); else document.getElementById('locationPreview').textContent = 'Chưa có vị trí'; } catch (e) {}
   // ensure quick-fill UI is in initial (expanded) state
   try { if (typeof updateQuickFillCollapsed === 'function') updateQuickFillCollapsed(); } catch (e) {}
@@ -1301,6 +1302,7 @@ function toggleNewOutlet() {
       btn.classList.remove('toggle-on');
       btn.classList.remove('bg-gray-900');
       btn.classList.add('bg-gray-300');
+      window.isOutletLockedLocation = false;
       // if it was set by toggle, clear it
       if ((input.value || '').trim() === 'New Outlet') input.value = '';
       // unlock input: remove visual locked class and re-enable paste button
@@ -1408,6 +1410,9 @@ function fillOutletFieldsFromExisting(ex) {
     setIf('phone', ex.phone || '');
     if (ex.outletLat) setIf('outletLat', ex.outletLat);
     if (ex.outletLng) setIf('outletLng', ex.outletLng);
+    if (ex.outletLat && ex.outletLng) {
+      window.isOutletLockedLocation = true;
+    }
     // update location preview if possible
     try {
       if (ex.outletLat && ex.outletLng && typeof setLocationPreview === 'function') {
@@ -1464,6 +1469,7 @@ function closeDuplicateOutletModal() {
     otherOutletState = null;
     userConfirmedTakeover = false;
     // clear Tab 1 fields
+    window.isOutletLockedLocation = false;
     try { document.getElementById('outletCode').value = ''; } catch (e) {}
     try { document.getElementById('outletName').value = ''; } catch (e) {}
     try { document.getElementById('address').value = ''; } catch (e) {}

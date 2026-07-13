@@ -2515,3 +2515,28 @@ body.dark .qcag-survey-badge,
   text-overflow: ellipsis;
   animation: loaderPulse 1.8s ease-in-out infinite;
 }
+
+/* Home actions (three primary buttons on home screen) — theme aware
+   Light theme: white background, black border, black text
+   Dark theme: dark background, white border, white text */
+#homeActions > button.home-action-btn {
+  /* Light theme: slightly darker gray background, dark border/text */
+  background: #e5e7eb !important; /* gray-200 - darker than before */
+  color: #111827 !important;
+  border: 1px solid #111827 !important;
+  box-shadow: none !important;
+}
+
+.theme-dark #homeActions > button.home-action-btn,
+[data-theme="dark"] #homeActions > button.home-action-btn {
+  /* Dark theme: use a muted dark surface matching the 'Thêm vào màn hình chính' button */
+  background: #1f2937 !important; /* slate/dark-gray */
+  color: #ffffff !important;
+  border: 1px solid #ffffff !important; /* revert to thin border */
+}
+
+/* Keep the drafts count (absolute) visible in both themes */
+#draftsButtonCount { color: #111827; }
+.theme-dark #draftsButtonCount, [data-theme="dark"] #draftsButtonCount { color: #ffffff !important; }
+/* Ensure draft count inside the drafts button is white in dark mode with higher specificity */
+.theme-dark #draftsListBtn #draftsButtonCount, [data-theme="dark"] #draftsListBtn #draftsButtonCount { color: #ffffff !important; }

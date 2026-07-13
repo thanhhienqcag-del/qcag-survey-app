@@ -491,9 +491,9 @@
     return _activeBase;
   }
 
-  async function _fetchStore() {
+  async function _fetchStore(forceFresh) {
     var headers = {};
-    if (_lastEtag) headers['If-None-Match'] = _lastEtag;
+    if (!forceFresh && _lastEtag) headers['If-None-Match'] = _lastEtag;
     var errLast = null;
     var candidates = _unique([_activeBase].concat(_getBaseCandidates()).filter(function (x) { return x != null; }));
     _storeTruncated = false;
@@ -721,36 +721,38 @@
           _onDataChanged(_cloneStoreRows());
         }
         await _ensureActiveBase();
-
         if (_store.length) {
-          // Do not rehydrate the entire dataset on every reload. A single
-          // incremental refresh is enough to surface newly created/updated rows
-          // while keeping transfer volume low.
+          // Force a fresh bootstrap from the backend on cold start so we never
+          // trust a stale 304/ETag response or a truncated cache snapshot.
           try {
-            var refreshResult = await this.refresh();
-            if (!refreshResult || !refreshResult.isOk) {
-              var bootstrapRows = await _fetchStore();
-              if (bootstrapRows && bootstrapRows.length) {
-                _store = _normalizeRequestRows(bootstrapRows);
-                _triggerStoreUpdated();
-              }
+            var bootstrapRows = await _fetchStore(true);
+            if (bootstrapRows && bootstrapRows.length) {
+              _store = _normalizeRequestRows(bootstrapRows);
+              _triggerStoreUpdated();
             }
           } catch (bootstrapErr) {
-            console.warn('[dataSdk] incremental bootstrap failed, fallback to one-shot fetch:', bootstrapErr);
+            console.warn('[dataSdk] bootstrap fetch failed, fallback to incremental refresh:', bootstrapErr);
+          }
+          await this.refresh();
+        } else {
+          _store = _normalizeRequestRows(await _fetchStore(true));
+          _triggerStoreUpdated();
+        }
+
+        // Load đủ toàn bộ dữ liệu trước khi trả về — đảm bảo search/filter
+        // hoạt động chính xác ngay từ lần đầu, không bị thiếu records.
+        if (_storeTotalHint > _store.length) {
+          var guard = 0;
+          while (_storeTotalHint > _store.length && guard < 20) {
+            guard++;
             try {
-              var fallbackRows = await _fetchStore();
-              if (fallbackRows && fallbackRows.length) {
-                _store = _normalizeRequestRows(fallbackRows);
-                _triggerStoreUpdated();
-              }
-            } catch (fallbackErr) {
-              console.warn('[dataSdk] fallback bootstrap fetch failed:', fallbackErr);
+              var moreRes = await window.dataSdk.loadMore();
+              if (!moreRes || !moreRes.isOk || !moreRes.hasMore) break;
+            } catch (e) {
+              console.warn('[dataSdk] init loadMore failed:', e);
+              break;
             }
           }
-        } else {
-          var bootstrapRows = await _fetchStore();
-          _store = _normalizeRequestRows(bootstrapRows);
-          _triggerStoreUpdated();
         }
 
         // Setup SSE listener for realtime invalidation events (with reconnect).
@@ -954,12 +956,13 @@
       }
     },
 
-    async delete(req) {
+    async delete(req, reason) {
       if (!req || !req.__backendId) return { isOk: false };
       try {
         var response = await _fetchJsonWithRetry('/api/ks/requests/' + encodeURIComponent(req.__backendId), {
           method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason || '' })
         });
         var idx = _store.findIndex(function (r) { return r.__backendId === req.__backendId; });
         if (idx !== -1) _store.splice(idx, 1);

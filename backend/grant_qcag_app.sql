@@ -1,0 +1,2 @@
+GRANT ALL PRIVILEGES ON `qcag`.* TO 'qcag_app'@'%';
+FLUSH PRIVILEGES;

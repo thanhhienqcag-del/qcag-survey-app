@@ -141,6 +141,25 @@ function loginTogglePwd() {
 }
 
 function logout() {
+  const modal = document.getElementById('logoutModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  } else {
+    if (confirm('Bạn có chắc chắn muốn đăng xuất không?')) executeLogout();
+  }
+}
+
+function closeLogoutModal() {
+  const modal = document.getElementById('logoutModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+}
+
+function executeLogout() {
+  closeLogoutModal();
   localStorage.removeItem(SESSION_KEY);
   currentSession = null;
   const loginEl = document.getElementById('loginScreen');

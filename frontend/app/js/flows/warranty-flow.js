@@ -23,7 +23,6 @@ async function submitWarrantyRequest() {
 
   if (!content) { showToast('Vui lòng nhập nội dung yêu cầu'); return; }
   if (warrantyImages.length === 0) { showToast('Vui lòng upload ảnh hiện trạng'); return; }
-  if (allRequests.length >= 999) { showToast('Đã đạt giới hạn 999 yêu cầu'); return; }
 
   const btn = document.getElementById('submitWarrantyBtn');
   btn.disabled = true;

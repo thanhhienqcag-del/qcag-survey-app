@@ -112,7 +112,7 @@ async function _convertHeicToJpeg(heicFile) {
 // ── Compress a File/Blob to a smaller data URL (WebP preferred, JPEG fallback) ──
 // Default: max 1600px on longest side, quality 0.82 (~100-300KB per image).
 // WebP is 30-50% smaller than JPEG at similar quality.
-function _compressImageFile(file, maxDim, quality) {
+function _compressImageFile(file, maxDim, quality, forceJpeg) {
   maxDim  = maxDim  || 1600;
   quality = quality || 0.82;
   return new Promise(function (resolve, reject) {
@@ -145,11 +145,15 @@ function _compressImageFile(file, maxDim, quality) {
           var ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
           var dataUrl = '';
-          try {
-            dataUrl = canvas.toDataURL('image/webp', quality);
-            if (!dataUrl || dataUrl.indexOf('data:image/webp') !== 0) throw new Error('webp unsupported');
-          } catch (_e) {
+          if (forceJpeg) {
             dataUrl = canvas.toDataURL('image/jpeg', quality);
+          } else {
+            try {
+              dataUrl = canvas.toDataURL('image/webp', quality);
+              if (!dataUrl || dataUrl.indexOf('data:image/webp') !== 0) throw new Error('webp unsupported');
+            } catch (_e) {
+              dataUrl = canvas.toDataURL('image/jpeg', quality);
+            }
           }
           resolve(dataUrl);
         } catch (e) {
@@ -201,32 +205,71 @@ async function _compressImageFiles(files, maxDim, quality) {
 
 function _processImageFile(file) {
   return _detectImageMimeByMagic(file).then(function (realMime) {
-    if (_isBrowserRenderable(realMime)) {
-      return _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
-        return { previewValue: dataUrl, uploadValue: dataUrl };
-      }).catch(function () {
-        return new Promise(function (resolve) {
-          var reader = new FileReader();
-          reader.onload = function (e) {
-            var raw = e.target.result || '';
-            resolve({ previewValue: raw, uploadValue: raw });
-          };
-          reader.onerror = function () { resolve(null); };
-          reader.readAsDataURL(file);
+    return checkHasExif(file).then(function (hasExif) {
+      if (hasExif) {
+        console.log('[EXIF] Photo contains EXIF data. Compressing as JPEG and keeping EXIF.');
+        return readRawDataUrl(file).then(function (rawDataUrl) {
+          // Nén ảnh nhưng giữ EXIF bằng piexifjs
+          // Phải bắt buộc xuất ra định dạng JPEG để piexifjs có thể chèn dữ liệu EXIF
+          return _compressImageFile(file, 1600, 0.82, true).then(function (compressedUrl) {
+            var uploadUrl = compressedUrl;
+            if (typeof piexif !== 'undefined') {
+              try {
+                // Đọc EXIF từ ảnh gốc (chưa nén)
+                var exifObj = piexif.load(rawDataUrl);
+                // Bỏ đi các dữ liệu hình thu nhỏ cũ nếu có để giảm kích thước
+                delete exifObj["thumbnail"];
+                var exifStr = piexif.dump(exifObj);
+                // Chèn EXIF vào ảnh đã nén
+                uploadUrl = piexif.insert(exifStr, compressedUrl);
+                console.log('[EXIF] EXIF data successfully injected into compressed image.');
+              } catch (e) {
+                console.warn('[EXIF] Failed to inject EXIF data:', e);
+              }
+            } else {
+              console.warn('[EXIF] piexif library not found, EXIF cannot be retained.');
+            }
+            
+            // Generate a smaller preview to keep UI fast
+            return _compressImageFile(file, 800, 0.75).then(function (previewUrl) {
+              return { previewValue: previewUrl, uploadValue: uploadUrl };
+            }).catch(function () {
+              return { previewValue: uploadUrl, uploadValue: uploadUrl };
+            });
+          }).catch(function () {
+            // Fallback to raw if compression fails
+            return { previewValue: rawDataUrl, uploadValue: rawDataUrl };
+          });
         });
-      });
-    }
+      }
 
-    return new Promise(function (resolve) {
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        var raw = e.target.result || '';
-        var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
-        var label = file.name || 'ảnh';
-        resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
-      };
-      reader.onerror = function () { resolve(null); };
-      reader.readAsDataURL(file);
+      if (_isBrowserRenderable(realMime)) {
+        return _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
+          return { previewValue: dataUrl, uploadValue: dataUrl };
+        }).catch(function () {
+          return new Promise(function (resolve) {
+            var reader = new FileReader();
+            reader.onload = function (e) {
+              var raw = e.target.result || '';
+              resolve({ previewValue: raw, uploadValue: raw });
+            };
+            reader.onerror = function () { resolve(null); };
+            reader.readAsDataURL(file);
+          });
+        });
+      }
+
+      return new Promise(function (resolve) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var raw = e.target.result || '';
+          var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
+          var label = file.name || 'ảnh';
+          resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
+        };
+        reader.onerror = function () { resolve(null); };
+        reader.readAsDataURL(file);
+      });
     });
   });
 }
@@ -250,7 +293,10 @@ function handleStatusImages(input) {
   }
   input.value = '';
 
+  processBatchLocations(filesToProcess);
+
   filesToProcess.forEach(function (file) {
+
     var idx = statusImages.length;
     statusImages.push(_HEIC_SENTINEL_PREFIX + (file.name || 'ảnh'));
     _statusImageFiles.push('');
@@ -397,3 +443,192 @@ function removeImage(type, idx) {
     renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
   }
 }
+
+// ── GPS and EXIF metadata extraction helper functions ──
+function getHaversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // meters
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function applyLocationToForm(loc) {
+  const latInput = document.getElementById('outletLat');
+  const lngInput = document.getElementById('outletLng');
+  const sourceInput = document.getElementById('locationSource');
+  if (latInput) latInput.value = loc.lat;
+  if (lngInput) lngInput.value = loc.lng;
+  if (sourceInput) sourceInput.value = loc.source;
+
+  if (typeof setLocationPreview === 'function') {
+    const labelText = loc.source === 'device_gps' ? 'GPS Thiết bị' : 'Đọc từ ảnh (EXIF)';
+    setLocationPreview(labelText, loc.lat, loc.lng);
+  }
+  if (typeof showToast === 'function') {
+    showToast('Đã tự động lấy vị trí từ ' + (loc.source === 'device_gps' ? 'GPS thiết bị' : 'GPS ảnh'));
+  }
+}
+
+function processBatchLocations(files) {
+  // 1. Check if Outlet Code already set the location (locked)
+  if (window.isOutletLockedLocation) {
+    console.log('[GPS] Location is locked by Outlet Code, skipping EXIF.');
+    return;
+  }
+  
+  // 2. Or if coordinates are manually set already
+  const currentLat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
+  const currentLng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
+  if (currentLat && currentLng) {
+    console.log('[GPS] Coordinates already set, skipping auto-fetch.');
+    return;
+  }
+
+  const promises = files.map(function(file) {
+    const isCaptured = (Date.now() - file.lastModified) < 30000;
+    if (isCaptured) {
+      return getDeviceLocation().then(function(loc) {
+        if (loc) return loc;
+        return getExifLocation(file);
+      });
+    } else {
+      return getExifLocation(file);
+    }
+  });
+
+  Promise.all(promises).then(function(results) {
+    const validLocs = results.filter(function(l) { return l && l.lat && l.lng; });
+    if (validLocs.length === 0) return; // No EXIF, leaving blank
+
+    // Clustering logic (radius 300m)
+    let clusters = [];
+    validLocs.forEach(function(loc) {
+      let added = false;
+      for (var i = 0; i < clusters.length; i++) {
+        const center = clusters[i][0];
+        if (getHaversineDistance(loc.lat, loc.lng, center.lat, center.lng) <= 300) {
+          clusters[i].push(loc);
+          added = true;
+          break;
+        }
+      }
+      if (!added) {
+        clusters.push([loc]);
+      }
+    });
+
+    if (clusters.length === 1) {
+      applyLocationToForm(clusters[0][0]);
+    } else if (clusters.length > 1) {
+      const centerCoords = clusters.map(function(c) { return c[0]; });
+      if (typeof showMultiLocationPicker === 'function') {
+        showMultiLocationPicker(centerCoords);
+      } else {
+        // Fallback if not implemented yet
+        applyLocationToForm(clusters[0][0]);
+      }
+    }
+  }).catch(function(err) {
+    console.warn('[GPS] Batch location extraction error:', err);
+  });
+}
+
+function getDeviceLocation() {
+  return new Promise(function (resolve) {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      function (pos) {
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          source: 'device_gps'
+        });
+      },
+      function (err) {
+        console.warn('[GPS] Device Geolocation error:', err);
+        resolve(null);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+}
+
+function getExifLocation(file) {
+  return new Promise(function (resolve) {
+    if (typeof EXIF === 'undefined') {
+      console.warn('[GPS] EXIF library is not loaded');
+      return resolve(null);
+    }
+    try {
+      EXIF.getData(file, function () {
+        const lat = EXIF.getTag(this, "GPSLatitude");
+        const lon = EXIF.getTag(this, "GPSLongitude");
+        const latRef = EXIF.getTag(this, "GPSLatitudeRef") || "N";
+        const lonRef = EXIF.getTag(this, "GPSLongitudeRef") || "E";
+
+        if (lat && lon) {
+          const convertDMSToDD = function (dms, ref) {
+            const parseVal = function(v) {
+              if (v && v.numerator !== undefined && v.denominator !== undefined) {
+                return v.denominator === 0 ? 0 : (v.numerator / v.denominator);
+              }
+              return Number(v) || 0;
+            };
+            let dd = parseVal(dms[0]) + parseVal(dms[1])/60 + parseVal(dms[2])/3600;
+            if (ref === "S" || ref === "W") {
+              dd = -dd;
+            }
+            return dd;
+          };
+          try {
+            const decimalLat = convertDMSToDD(lat, latRef);
+            const decimalLng = convertDMSToDD(lon, lonRef);
+            resolve({
+              lat: decimalLat,
+              lng: decimalLng,
+              source: 'photo_exif'
+            });
+          } catch (err) {
+            console.warn('[GPS] Failed to convert EXIF DMS to DD:', err);
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      });
+    } catch (e) {
+      console.warn('[GPS] EXIF.getData failed:', e);
+      resolve(null);
+    }
+  });
+}
+
+function checkHasExif(file) {
+  return new Promise(function (resolve) {
+    if (typeof EXIF === 'undefined') return resolve(false);
+    try {
+      EXIF.getData(file, function () {
+        const allTags = EXIF.getAllTags(this);
+        resolve(allTags && Object.keys(allTags).length > 0);
+      });
+    } catch (e) {
+      console.warn('[GPS] EXIF tags check failed:', e);
+      resolve(false);
+    }
+  });
+}
+
+function readRawDataUrl(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function (e) { resolve(e.target.result); };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+

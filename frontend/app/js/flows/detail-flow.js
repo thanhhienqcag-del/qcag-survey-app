@@ -1,4 +1,4 @@
-﻿// ====================================================================
+// ====================================================================
 // js/flows/detail-flow.js — request detail view, comments, design viewer,
 //                           zoom overlay, upload handlers
 // ====================================================================
@@ -843,7 +843,20 @@ async function _loadBridgeStatus(backendId) {
       }
     } catch (e) { /* ignore */ }
 
-    if (!bridgeData) {
+    if (!bridgeData && typeof currentSession !== 'undefined' && currentSession && currentSession.saleCode && backendId) {
+      try {
+        const baseUrl = (window.__env && window.__env.BACKEND_URL) ? window.__env.BACKEND_URL.replace(/\/+$/, '') : '';
+        const url = baseUrl + '/quotations/view?sale_code=' + encodeURIComponent(currentSession.saleCode) + '&quote_code=' + encodeURIComponent(backendId);
+        const res = await fetch(url);
+        if (res.ok) {
+          bridgeData = await res.json();
+        }
+      } catch (e) {
+        console.warn('Failed to fetch quotation view directly', e);
+      }
+    }
+
+    if (!bridgeData || Object.keys(bridgeData).length === 0) {
       showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
       return;
     }
@@ -2269,6 +2282,34 @@ async function handleEditRequestImagePick(input) {
   _renderEditRequestImgPreview();
 }
 
+function attachEditRequestPaste() {
+  const ta = document.getElementById('editRequestInput');
+  if (!ta || ta._pasteAttached) return;
+  ta._pasteAttached = true;
+  ta.addEventListener('paste', async (e) => {
+    const items = (e.clipboardData || {}).items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        try {
+          const dataUrl = await _compressImageFile(file, 1600, 0.82);
+          _editRequestPendingImages.push(dataUrl);
+        } catch (_) {
+          const dataUrl = await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = ev => resolve(ev.target.result);
+            reader.readAsDataURL(file);
+          });
+          _editRequestPendingImages.push(dataUrl);
+        }
+        _renderEditRequestImgPreview();
+      }
+    }
+  });
+}
+
 function openEditRequestSheet() {
   _editRequestCategories = [];
   _editRequestPendingImages = [];
@@ -2281,14 +2322,20 @@ function openEditRequestSheet() {
   // reset textarea
   const ta = document.getElementById('editRequestInput');
   if (ta) ta.value = '';
-  // show step 1, hide step 2
+  // show step 2 directly, hide step 1 (bypassed)
   const s1 = document.getElementById('editSheetStep1');
   const s2 = document.getElementById('editSheetStep2');
-  if (s1) s1.classList.remove('hidden');
-  if (s2) s2.classList.add('hidden');
+  if (s1) s1.classList.add('hidden');
+  if (s2) s2.classList.remove('hidden');
+  const label = document.getElementById('editSheetCategLabel');
+  if (label) label.textContent = 'Nhập nội dung chỉnh sửa:';
   // open overlay
   const overlay = document.getElementById('editRequestSheet');
   if (overlay) { overlay.classList.remove('hidden'); requestAnimationFrame(() => overlay.classList.add('sheet-open')); }
+  // attach clipboard paste listener
+  attachEditRequestPaste();
+  // auto-focus textarea
+  setTimeout(() => { if (ta) ta.focus(); }, 150);
 }
 
 function closeEditRequestSheet() {
@@ -2346,11 +2393,18 @@ async function submitEditRequest() {
   try { comments = JSON.parse(request.comments || '[]'); } catch (e) { comments = []; }
 
   const authorRole = (currentSession && currentSession.role) || 'unknown';
-  const authorName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Người dùng';
+  const authorName = (currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Người dùng';
+
+  let finalText = text;
+  if (String(authorRole).toLowerCase() === 'qcag') {
+    const qcName = (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG';
+    finalText = `Yêu cầu chỉnh sửa được gửi từ ${qcName}\n\n${text}`;
+  }
+
   const comment = {
     authorRole,
     authorName,
-    text,
+    text: finalText,
     commentType: 'edit-request',
     editCategories: [..._editRequestCategories],
     ...(_editRequestPendingImages.length > 0 ? { images: [..._editRequestPendingImages] } : {}),
@@ -2359,9 +2413,9 @@ async function submitEditRequest() {
   _editRequestPendingImages = [];
   comments.push(comment);
 
-  // Heineken edit-request must pull request back to processing and clear MQ
+  // Heineken and QCAG edit-requests must pull request back to processing and clear MQ
   let extraFields = {};
-  if (String(authorRole || '').toLowerCase() === 'heineken') {
+  if (['heineken', 'qcag'].includes(String(authorRole || '').toLowerCase())) {
     const existingDesignImgs = (() => {
       try { return JSON.parse(request.designImages || '[]'); } catch (e) { return []; }
     })();
@@ -2394,18 +2448,25 @@ async function submitEditRequest() {
       // Merge changes into existing record (don't replace — updated is partial)
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) Object.assign(allRequests[idx], updated);
-      showRequestDetail(backendId);
-        // If QCAG desktop UI is open in this session, force it back to 'processing'
+      if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
         try {
-          if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-            if (typeof window !== 'undefined') {
-              window._qcagDesktopStatusFilter = 'processing';
-              window._qcagRequestsVersion = (window._qcagRequestsVersion || 0) + 1;
-              if (window._qcagRequestCodeCache) window._qcagRequestCodeCache.version = 0;
-              if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+          if (typeof window !== 'undefined') {
+            window._qcagDesktopStatusFilter = 'processing';
+            window._qcagRequestsVersion = (window._qcagRequestsVersion || 0) + 1;
+            if (window._qcagRequestCodeCache) window._qcagRequestCodeCache.version = 0;
+            if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
+              delete _qcagDesktopFullRequestCache[backendId];
+            }
+            if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+            if (typeof openQCAGDesktopRequest === 'function') {
+              window._qcagDesktopCurrentId = null;
+              openQCAGDesktopRequest(backendId);
             }
           }
         } catch (e) { /* non-fatal */ }
+      } else {
+        showRequestDetail(backendId);
+      }
     } else {
       hideLoadingOverlay();
       showToast('Lỗi gửi yêu cầu');
@@ -2415,7 +2476,14 @@ async function submitEditRequest() {
     saveAllRequestsToStorage();
     hideLoadingOverlay();
     showToast('Đã gửi yêu cầu chỉnh sửa (lưu local)');
-    showRequestDetail(backendId);
+    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+      if (typeof openQCAGDesktopRequest === 'function') {
+        window._qcagDesktopCurrentId = null;
+        openQCAGDesktopRequest(backendId);
+      }
+    } else {
+      showRequestDetail(backendId);
+    }
   }
 }
 
