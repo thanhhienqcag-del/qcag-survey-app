@@ -670,20 +670,36 @@ function qcagEditSingleItemOnTypeChange() {
   const selectedType = typeEl.value || '';
   if (!selectedType) return;
 
+  const previousBrand = brandEl.value || '';
+  const previousAction = actionEl ? (actionEl.value || '') : '';
+
   const brands = getBrandsForType(selectedType);
   if (Array.isArray(brands) && brands.length > 0) {
     brandEl.innerHTML = `<option value="">Chọn brand</option>${brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
-    if (brands.length === 1) brandEl.value = brands[0];
+    if (brands.includes(previousBrand)) {
+      brandEl.value = previousBrand;
+    } else if (brands.length === 1) {
+      brandEl.value = brands[0];
+    } else {
+      brandEl.value = '';
+    }
   } else {
     brandEl.innerHTML = '<option value="">Chọn brand</option>';
+    brandEl.value = '';
   }
   try {
     if (actionEl) {
       const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
+      const validActions = isLogoType ? ["Làm mới", "Sửa chữa"] : ["Làm mới", "Thay bạt"];
       if (isLogoType) {
         actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
       } else {
         actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
+      }
+      if (validActions.includes(previousAction)) {
+        actionEl.value = previousAction;
+      } else {
+        actionEl.value = '';
       }
     }
   } catch (e) {}
@@ -952,6 +968,10 @@ function qcagDesktopEditItemsOnTypeChange() {
     return;
   }
 
+  const previousBrand = brandEl.value || '';
+  const actionEl = document.getElementById('qcagEditItemAction');
+  const previousAction = actionEl ? (actionEl.value || '') : '';
+
   // If user selected "Hạng mục khác" → show only the other-content textarea and return early
   const otherBlock = modal ? modal.querySelector('.qcag-edit-other') : null;
   if (String(selectedType || '') === 'Hạng mục khác') {
@@ -972,7 +992,9 @@ function qcagDesktopEditItemsOnTypeChange() {
     return;
   }
   brandEl.innerHTML = `<option value="">Chọn brand</option>${brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
-  if (brands.length === 1) {
+  if (brands.includes(previousBrand)) {
+    brandEl.value = previousBrand;
+  } else if (brands.length === 1) {
     brandEl.value = brands[0];
   } else {
     brandEl.value = '';
@@ -980,16 +1002,21 @@ function qcagDesktopEditItemsOnTypeChange() {
 
   // Hide action for Logo types (logos don't require an action)
   try {
-    const actionEl = document.getElementById('qcagEditItemAction');
-    const actionLabel = actionEl ? actionEl.parentElement : null;
     if (actionEl) {
+      const actionLabel = actionEl.parentElement;
       const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
+      const validActions = isLogoType ? ["Làm mới", "Sửa chữa"] : ["Làm mới", "Thay bạt"];
       if (isLogoType) {
         actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
         if (actionLabel) actionLabel.style.display = '';
       } else {
         actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
         if (actionLabel) actionLabel.style.display = '';
+      }
+      if (validActions.includes(previousAction)) {
+        actionEl.value = previousAction;
+      } else {
+        actionEl.value = '';
       }
     }
   } catch (e) {}
