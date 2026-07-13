@@ -1,4 +1,4 @@
-﻿<!-- Tập trung phát triển UX và UI của phần công ty Heineken (khách hàng), còn lại không đúng tới và phát triển sau khi hoàn thành phần của khách hàng -->
+<!-- Tập trung phát triển UX và UI của phần công ty Heineken (khách hàng), còn lại không đúng tới và phát triển sau khi hoàn thành phần của khách hàng -->
 <!doctype html>
 <html lang="vi" class="h-full">
  <head>
@@ -485,7 +485,7 @@
             <span class="qcag-nav-icon">&#x1F4CA;</span> Thống kê <span class="qcag-nav-soon">Coming soon</span>
           </button></li>
         </ul>
-        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.5.0 &nbsp;·&nbsp; 2026-07-12</div>
+        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.5.0 &nbsp;·&nbsp; 2026-07-11</div>
       </nav>
 
       <!-- Nav Overlay Panels -->
@@ -724,7 +724,7 @@
         <span>Thêm vào màn hình chính</span>
       </button>
      </div>
-     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.5.0 · 2026-07-12</p>
+     <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.5.0 · 2026-07-11</p>
     </div>
     <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
 
@@ -776,14 +776,9 @@
       </div>
       <div><label class="block text-sm font-medium mb-1.5 text-gray-700">Số điện thoại <span class="text-red-500">*</span></label> <input type="tel" id="phone" inputmode="tel" pattern="\d*" oninput="sanitizeIntegerInput(this)" class="w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50" placeholder="Nhập số điện thoại">
       </div>
-      <div>
-        <label class="block text-sm font-medium mb-1.5 text-gray-700">Vị trí cửa hàng</label>
-        <div class="flex items-center gap-3 w-full location-row">
-          <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0" onclick="openLocationModal()" title="Chọn định vị Outlet">Chọn định vị Outlet</button>
-        </div>
-        <input type="hidden" id="outletLat">
-        <input type="hidden" id="outletLng">
-      </div>
+      <input type="hidden" id="outletLat">
+      <input type="hidden" id="outletLng">
+      <input type="hidden" id="locationSource" value="manual">
      </div>
      <div class="mt-6"><button onclick="validateTab1()" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Tiếp tục </button>
      </div>
@@ -840,6 +835,14 @@
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg> Upload ảnh hiện trạng <input type="file" accept="image/*" multiple class="hidden" onchange="handleStatusImages(this)"> </label>
       </div>
+      <!-- Fallback Location Picker (shown only if coordinates are missing on submit) -->
+      <div id="outletLocationContainer" class="hidden pt-4 border-t border-gray-100 mb-4">
+        <label class="block text-sm font-medium mb-1.5 text-red-600 font-semibold">Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:</label>
+        <div class="flex items-center gap-3 w-full location-row">
+          <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0" onclick="openLocationModal()" title="Chọn định vị Outlet">Chọn định vị Outlet</button>
+          <span id="locationPreviewText" class="text-xs text-gray-500 truncate">Chưa có vị trí</span>
+        </div>
+      </div>
      </div>
      <div class="mt-6 pt-4 border-t border-gray-100"><button onclick="submitNewRequest()" id="submitNewBtn" class="w-full py-4 bg-gray-900 text-white font-medium rounded-xl active:bg-gray-800 transition-colors"> Xác nhận yêu cầu </button>
      </div>
@@ -847,13 +850,13 @@
    </div><!-- Warranty Check Form -->
    <div id="draftsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-2">
      <div class="absolute inset-0 bg-black/35" onclick="closeDraftsModal()" aria-hidden="true"></div>
-    <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-lg">
+     <div class="relative w-full max-w-sm bg-white rounded-2xl shadow-lg overflow-hidden">
        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
          <h3 class="text-base font-semibold text-gray-900">Danh sách nháp</h3>
          <button type="button" onclick="closeDraftsModal()" class="text-gray-500 hover:text-gray-700 text-xl leading-none">×</button>
        </div>
        <div class="p-4 space-y-3">
-         <div id="draftsListContainer" class="space-y-2 max-h-[48vh] overflow-y-auto" style="-webkit-overflow-scrolling: touch;"></div>
+         <div id="draftsListContainer" class="space-y-2"></div>
          <div id="noDraftsMessage" class="text-sm text-gray-500"></div>
        </div>
      </div>
@@ -1163,8 +1166,8 @@
   <div id="editRequestSheet" class="edit-request-sheet-overlay hidden" onclick="closeEditRequestSheetOnBackdrop(event)">
     <div class="edit-request-sheet">
       <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5"></div>
-      <!-- Step 1: category selection -->
-      <div id="editSheetStep1">
+      <!-- Step 1: category selection (bypassed) -->
+      <div id="editSheetStep1" class="hidden">
         <h3 class="font-semibold text-base mb-1">Yêu cầu chỉnh sửa</h3>
         <p class="text-sm text-gray-500 mb-4">Chọn nội dung cần chỉnh sửa <span class="text-xs">(có thể chọn nhiều)</span></p>
         <div class="space-y-3 mb-5" id="editCategoryList">
@@ -1186,10 +1189,6 @@
       </div>
       <!-- Step 2: write edit details -->
       <div id="editSheetStep2" class="hidden">
-        <button onclick="backToEditCategories()" class="flex items-center gap-1 text-sm text-gray-500 mb-4 -ml-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-          Quay lại
-        </button>
         <h3 class="font-semibold text-base mb-1">Nội dung chỉnh sửa</h3>
         <p id="editSheetCategLabel" class="text-xs text-gray-500 mb-3"></p>
         <textarea id="editRequestInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-2" placeholder="Mô tả chi tiết nội dung cần chỉnh sửa..."></textarea>
@@ -1205,6 +1204,22 @@
       </div>
     </div>
   </div>
+  <div id="logoutModal" class="fixed inset-0 hidden z-60 items-end sm:items-center justify-center" onclick="if(event.target===this)closeLogoutModal()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)">
+   <div class="center-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 fade-in shadow-2xl" onclick="event.stopPropagation()">
+     <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5 sm:hidden"></div>
+     <div class="flex flex-col items-center text-center mb-6">
+      <div class="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style="background:rgba(239,68,68,0.1)">
+       <svg class="w-7 h-7" fill="none" stroke="#ef4444" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      </div>
+      <h3 class="text-base font-semibold mb-1">Đăng xuất tài khoản?</h3>
+      <p class="text-sm" style="color:#6b7280">Bạn sẽ cần đăng nhập lại để tiếp tục sử dụng ứng dụng.</p>
+     </div>
+     <div class="space-y-2.5">
+      <button onclick="executeLogout()" class="w-full py-3 rounded-xl font-medium text-sm text-white" style="background:#ef4444">Đăng xuất</button>
+      <button onclick="closeLogoutModal()" class="w-full py-3 rounded-xl font-medium text-sm border border-gray-200" style="background:transparent">Hủy</button>
+     </div>
+    </div>
+   </div>
   <div id="deleteModal" class="fixed inset-0 hidden z-60 flex items-end sm:items-center justify-center" onclick="if(event.target===this)closeDeleteModal()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)">
   <div class="center-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 fade-in shadow-2xl" onclick="event.stopPropagation()">
      <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5"></div>
@@ -1241,6 +1256,8 @@
   </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
   <script src="app/js/core/state.js?v=20260506c"></script>
   <script src="app/js/shared/utils.js?v=20260506c"></script>
   <script src="app/js/shared/ui.js?v=20260506c"></script>
@@ -1257,7 +1274,7 @@
   <script src="app/js/flows/mobile-qcag-flow.js?v=20260520a"></script>
   <script src="app/js/core/router.js?v=20260506c"></script>
   <script src="app/js/app.js?v=20260506c"></script>
-  <!-- v2.5.0 | 2026-07-12 -->
+  <!-- v2.5.0 | 2026-07-11 -->
   <script>
     // ── Service Worker registration + auto-update ───────────────────────────────
     (function () {
