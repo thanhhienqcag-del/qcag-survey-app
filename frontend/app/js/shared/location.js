@@ -335,7 +335,12 @@ function setLocationPreview(displayText, lat, lng) {
   document.getElementById('outletLng').value = lng;
   const previewText = document.getElementById('locationPreviewText');
   const actionBtn = document.getElementById('locationActionBtn');
-  if (previewText) previewText.classList.add('hidden');
+  if (previewText) {
+    previewText.textContent = displayText;
+    previewText.classList.remove('hidden');
+    previewText.classList.remove('text-gray-500');
+    previewText.classList.add('text-green-600', 'font-semibold');
+  }
   if (actionBtn) {
     actionBtn.textContent = displayText;
     actionBtn.onclick = function () { openSavedLocation(lat, lng); };
@@ -347,6 +352,12 @@ function setLocationPreview(displayText, lat, lng) {
     outletBtn.textContent = displayText;
     outletBtn.title = displayText;
   }
+  const locLabel = document.getElementById('outletLocationLabel');
+  if (locLabel) {
+    locLabel.textContent = 'Đã xác định vị trí thành công:';
+    locLabel.classList.remove('text-red-600');
+    locLabel.classList.add('text-green-600');
+  }
 }
 
 function clearLocationPreview() {
@@ -356,9 +367,20 @@ function clearLocationPreview() {
     const previewText = document.getElementById('locationPreviewText');
     const actionBtn = document.getElementById('locationActionBtn');
     if (actionBtn) { actionBtn.classList.add('hidden'); actionBtn.textContent = ''; }
-    if (previewText) { previewText.classList.remove('hidden'); previewText.textContent = 'Chưa có vị trí'; }
+    if (previewText) {
+      previewText.classList.remove('hidden');
+      previewText.textContent = 'Chưa có vị trí';
+      previewText.classList.remove('text-green-600', 'font-semibold');
+      previewText.classList.add('text-gray-500');
+    }
     const outletBtn = document.getElementById('btn-locate-outlet');
     if (outletBtn) { outletBtn.textContent = 'Chọn định vị Outlet'; outletBtn.title = 'Chọn định vị Outlet'; }
+    const locLabel = document.getElementById('outletLocationLabel');
+    if (locLabel) {
+      locLabel.textContent = 'Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:';
+      locLabel.classList.remove('text-green-600');
+      locLabel.classList.add('text-red-600');
+    }
   } catch (e) {}
 }
 

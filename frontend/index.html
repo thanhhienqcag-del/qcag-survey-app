@@ -837,7 +837,7 @@
       </div>
       <!-- Fallback Location Picker (shown only if coordinates are missing on submit) -->
       <div id="outletLocationContainer" class="hidden pt-4 border-t border-gray-100 mb-4">
-        <label class="block text-sm font-medium mb-1.5 text-red-600 font-semibold">Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:</label>
+        <label id="outletLocationLabel" class="block text-sm font-medium mb-1.5 text-red-600 font-semibold">Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:</label>
         <div class="flex items-center gap-3 w-full location-row">
           <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0" onclick="openLocationModal()" title="Chọn định vị Outlet">Chọn định vị Outlet</button>
           <span id="locationPreviewText" class="text-xs text-gray-500 truncate">Chưa có vị trí</span>
