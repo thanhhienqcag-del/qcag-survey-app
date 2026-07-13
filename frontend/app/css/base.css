@@ -1637,7 +1637,8 @@ body.dark .qcag-survey-badge,
 .dv-zoom-img.grabbing { cursor: grabbing; }
 .dv-zoom-close,
 .dv-zoom-dvhc-btn,
-.dv-zoom-rotate-btn {
+.dv-zoom-rotate-btn,
+.dv-zoom-copy-btn {
   position: absolute; top: 16px; z-index: 5001;
   background: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.35);
@@ -1652,7 +1653,8 @@ body.dark .qcag-survey-badge,
 }
 .dv-zoom-close:hover,
 .dv-zoom-dvhc-btn:hover,
-.dv-zoom-rotate-btn:hover {
+.dv-zoom-rotate-btn:hover,
+.dv-zoom-copy-btn:hover {
   background: rgba(255, 255, 255, 0.95);
   color: #000;
   border-color: #fff;
@@ -1662,6 +1664,7 @@ body.dark .qcag-survey-badge,
 .dv-zoom-dvhc-btn { right: 70px; }
 .dv-zoom-rotate-btn.rotate-right { right: 124px; }
 .dv-zoom-rotate-btn.rotate-left { right: 178px; }
+.dv-zoom-copy-btn { right: 232px; font-size: 18px; }
 
 /* Navigation buttons (prev/next) on zoom */
 .dv-zoom-nav-btn {

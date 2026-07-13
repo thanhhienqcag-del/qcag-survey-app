@@ -1997,6 +1997,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     <button class="dv-zoom-close">✕</button>
     <button class="dv-zoom-rotate-btn rotate-right" title="Xoay phải ↻">↻</button>
     <button class="dv-zoom-rotate-btn rotate-left" title="Xoay trái ↺">↺</button>
+    <button class="dv-zoom-copy-btn" title="Sao chép hình ảnh">📋</button>
     <button class="dv-zoom-dvhc-btn" onclick="(function(e){e.stopPropagation();if(typeof qcagDesktopToggleDVHCLookup==='function')qcagDesktopToggleDVHCLookup();})(event)" title="Tra cứu ĐVHC">🗺️</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>
     ${imgs.length > 1 ? `
@@ -2150,6 +2151,58 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       rotationAngle = (rotationAngle - 90 + 360) % 360;
       window._zoomRotationCache[imgs[currentIndex]] = rotationAngle; // Save to cache
       apply(true);
+    };
+  }
+
+  const copyBtn = overlay.querySelector('.dv-zoom-copy-btn');
+  if (copyBtn) {
+    copyBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const currentSrc = imgs[currentIndex];
+      try {
+        copyBtn.textContent = '...';
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          showToast('Trình duyệt không hỗ trợ sao chép hình ảnh.');
+          copyBtn.textContent = '✗';
+          setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
+          return;
+        }
+
+        const blob = await new Promise((resolve, reject) => {
+          const imgObj = new Image();
+          imgObj.crossOrigin = 'anonymous';
+          imgObj.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = imgObj.naturalWidth || imgObj.width || 100;
+              canvas.height = imgObj.naturalHeight || imgObj.height || 100;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(imgObj, 0, 0);
+              canvas.toBlob(b => {
+                if (b) resolve(b);
+                else reject(new Error('Canvas to Blob failed.'));
+              }, 'image/png');
+            } catch (err) { reject(err); }
+          };
+          imgObj.onerror = () => {
+            reject(new Error('CORS hoặc mạng lỗi.'));
+          };
+          const sep = currentSrc.includes('?') ? '&' : '?';
+          imgObj.src = currentSrc + sep + '_nocache=' + Date.now();
+        });
+
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        copyBtn.textContent = '✓';
+        showToast('Đã sao chép hình ảnh vào Clipboard');
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
+      } catch (err) {
+        console.warn('Copy image error:', err);
+        showToast('Không hỗ trợ copy tự động, vui lòng chuột phải -> Copy Image');
+        copyBtn.textContent = '✗';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
+      }
     };
   }
 
