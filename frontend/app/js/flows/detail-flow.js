@@ -1987,11 +1987,14 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     }
   } catch (e) { /* ignore */ }
 
+  let rotationAngle = 0;
+
   const overlay = document.createElement('div');
   overlay.id = 'dvZoomOverlay';
   overlay.innerHTML = `
     <img id="dvZoomImg" src="${src}" class="dv-zoom-img" draggable="false" style="opacity:0;transition:opacity .18s ease" decoding="async">
     <button class="dv-zoom-close">✕</button>
+    <button class="dv-zoom-rotate-btn" title="Xoay ảnh">↻</button>
     <button class="dv-zoom-dvhc-btn" onclick="(function(e){e.stopPropagation();if(typeof qcagDesktopToggleDVHCLookup==='function')qcagDesktopToggleDVHCLookup();})(event)" title="Tra cứu ĐVHC">🗺️</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>
     ${imgs.length > 1 ? `
@@ -2071,7 +2074,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
 
   function apply(animated) {
     img.style.transition = animated ? 'transform 0.2s ease' : 'none';
-    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale}) rotate(${rotationAngle}deg)`;
     scaleEl.textContent = Math.round(scale * 100) + '%';
   }
   function clamp() {
@@ -2107,12 +2110,14 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
 
   function navigateZoom(dir) {
     if (imgs.length <= 1) return;
-    if (scale > 1) { scale = 1; tx = 0; ty = 0; apply(true); }
+    rotationAngle = 0; // reset rotation on slide change
+    if (scale > 1) { scale = 1; tx = 0; ty = 0; }
     currentIndex = (currentIndex + dir + imgs.length) % imgs.length;
     img.style.opacity = '0';
     setTimeout(() => {
       img.onload = () => { img.style.opacity = '1'; }; // Ensure we re-attach just in case
       img.src = imgs[currentIndex];
+      apply(true);
       if (img.complete) { img.style.opacity = '1'; }
     }, 150);
   }
@@ -2122,6 +2127,15 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     const nextBtn = document.getElementById('dvZoomNextBtn');
     if (prevBtn) prevBtn.onclick = (e) => { e.stopPropagation(); navigateZoom(-1); };
     if (nextBtn) nextBtn.onclick = (e) => { e.stopPropagation(); navigateZoom(1); };
+  }
+
+  const rotateBtn = overlay.querySelector('.dv-zoom-rotate-btn');
+  if (rotateBtn) {
+    rotateBtn.onclick = (e) => {
+      e.stopPropagation();
+      rotationAngle = (rotationAngle + 90) % 360;
+      apply(true);
+    };
   }
 
   let touchStartX = 0, touchStartY = 0, zoomSwipeThreshold = 50;
