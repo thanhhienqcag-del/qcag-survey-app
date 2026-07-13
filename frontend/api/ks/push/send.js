@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
 
   // Same-origin fetch() does NOT send Origin header → check referer instead
   const checkUrl = reqOrigin || reqReferer;
-  const isLocalUrl = checkUrl.startsWith('http://localhost') || checkUrl.startsWith('https://localhost') || checkUrl.startsWith('http://127.0.0.1');
+  const isLocalUrl = checkUrl.startsWith('http://localhost') || checkUrl.startsWith('https://localhost') || checkUrl.startsWith('http://127.0.0.1') || checkUrl.startsWith('http://192.168.') || checkUrl.startsWith('file://') || checkUrl === 'null' || !checkUrl;
   const isConfiguredUrl = configuredOrigins.some(prefix => checkUrl.startsWith(prefix));
   const isVercelUrl = /^https:\/\/[a-z0-9-]+\.vercel\.app/i.test(checkUrl);
   // Also allow when no Origin AND no Referer (Vercel server-to-server or direct API calls)

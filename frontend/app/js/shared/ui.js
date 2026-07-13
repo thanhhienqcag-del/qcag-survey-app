@@ -110,9 +110,9 @@ function sendPushNotification(opts) {
   // opts: { title, body, role, phone, saleCode, data }
   // Best-effort, never blocks UI
   try {
-    var pushUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-      ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
-      : '/api/ks/push/send';
+    var pushUrl = (location.hostname === 'qcag-survey-app.vercel.app')
+      ? '/api/ks/push/send'
+      : 'https://qcag-survey-app.vercel.app/api/ks/push/send';
     fetch(pushUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
