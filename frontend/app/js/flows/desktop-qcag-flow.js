@@ -2422,8 +2422,20 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
         const editedBadgeHtml = item && item.editedByQCAG
           ? `<span class="qcag-edited-badge" title="${escapeHtml('Hạng mục được sửa bởi ' + (item.editedByQCAGBy || 'QCAG') + (item.editedByQCAGAt ? ' lúc ' + new Date(item.editedByQCAGAt).toLocaleString('vi-VN') : ''))}"></span>`
           : '';
+        let brandClass = 'brand-default';
+        try {
+          const bb = String(item.brand || '').toLowerCase().trim();
+          if (bb.indexOf('heineken') !== -1) brandClass = 'brand-heineken';
+          else if (bb.indexOf('tiger') !== -1) brandClass = 'brand-tiger';
+          else if (bb.indexOf('bivina') !== -1) brandClass = 'brand-bivina';
+          else if (bb.indexOf('bia việt') !== -1 || bb.indexOf('bia viet') !== -1) brandClass = 'brand-biaviet';
+          else if (bb.indexOf('larue') !== -1) brandClass = 'brand-larue';
+          else if (bb.indexOf('strongbow') !== -1) brandClass = 'brand-strongbow';
+          else if (bb.indexOf('shopname') !== -1) brandClass = 'brand-shopname';
+        } catch (e) {}
+
         const badgesHtml = `${brandBadge}${addedBadgeHtml}${editedBadgeHtml}`;
-        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div class="qcag-item-type ${typeClass}">${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div>${escapeHtml(item.brand || '-')}</div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
+        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div class="qcag-item-type ${typeClass}">${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div><span class="qcag-brand-badge ${brandClass}">${escapeHtml(item.brand || '-')}</span></div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
       }).join('')}
     </div>
   `;

@@ -4098,4 +4098,97 @@
 [data-theme="dark"] .qcag-desktop-edit-btn:hover {
   background: rgba(244, 63, 94, 0.2) !important;
 }
+/* Brand Badges style rules */
+.qcag-brand-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
 
+/* Light mode brand styles */
+.qcag-brand-badge.brand-heineken {
+  border: 2px solid #008240;
+  background-color: #e6f3eb;
+  color: #008240;
+}
+.qcag-brand-badge.brand-tiger {
+  border: 2px solid #002f6c;
+  background-color: #e6eff8;
+  color: #002f6c;
+}
+.qcag-brand-badge.brand-bivina {
+  border: 2px solid #8b0000;
+  background-color: #f9ebeb;
+  color: #8b0000;
+}
+.qcag-brand-badge.brand-biaviet {
+  border: 2px solid #ff0000;
+  background-color: #ffebeb;
+  color: #ff0000;
+}
+.qcag-brand-badge.brand-larue {
+  border: 2px solid #d97706;
+  background-color: #fef3c7;
+  color: #b45309;
+}
+.qcag-brand-badge.brand-strongbow {
+  border: 2px solid #111827;
+  background-color: #f3f4f6;
+  color: #111827;
+}
+.qcag-brand-badge.brand-shopname,
+.qcag-brand-badge.brand-default {
+  border: 2px solid #9ca3af;
+  background-color: #f9fafb;
+  color: #4b5563;
+}
+
+/* Dark mode brand styles (bright border, opacity bg, text matching border) */
+.theme-dark .qcag-brand-badge.brand-heineken,
+[data-theme="dark"] .qcag-brand-badge.brand-heineken {
+  border: 2px solid #00a852;
+  background-color: rgba(0, 168, 82, 0.15);
+  color: #00a852;
+}
+.theme-dark .qcag-brand-badge.brand-tiger,
+[data-theme="dark"] .qcag-brand-badge.brand-tiger {
+  border: 2px solid #3b82f6;
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+.theme-dark .qcag-brand-badge.brand-bivina,
+[data-theme="dark"] .qcag-brand-badge.brand-bivina {
+  border: 2px solid #ef4444;
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.theme-dark .qcag-brand-badge.brand-biaviet,
+[data-theme="dark"] .qcag-brand-badge.brand-biaviet {
+  border: 2px solid #f87171;
+  background-color: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+.theme-dark .qcag-brand-badge.brand-larue,
+[data-theme="dark"] .qcag-brand-badge.brand-larue {
+  border: 2px solid #f59e0b;
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.theme-dark .qcag-brand-badge.brand-strongbow,
+[data-theme="dark"] .qcag-brand-badge.brand-strongbow {
+  border: 2px solid #e5e7eb;
+  background-color: rgba(229, 231, 235, 0.15);
+  color: #e5e7eb;
+}
+.theme-dark .qcag-brand-badge.brand-shopname,
+.theme-dark .qcag-brand-badge.brand-default,
+[data-theme="dark"] .qcag-brand-badge.brand-shopname,
+[data-theme="dark"] .qcag-brand-badge.brand-default {
+  border: 2px solid #9ca3af;
+  background-color: rgba(156, 163, 175, 0.15);
+  color: #d1d5db;
+}
