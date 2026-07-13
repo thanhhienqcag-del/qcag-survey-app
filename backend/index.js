@@ -2389,7 +2389,36 @@ app.get('/api/ks/health', async (req, res) => {
             ...snapshot,
         });
     }
-    return res.json({ ok: true, service: 'ks-mobile', ts: Date.now(), ...snapshot });
+});
+
+// GET /api/ks/proxy-image
+// Proxies GCS image requests to bypass browser CORS headers for clipboard copying.
+app.get('/api/ks/proxy-image', async (req, res) => {
+    try {
+        const url = req.query.url;
+        if (!url) return res.status(400).send('Missing url parameter');
+        
+        if (!url.startsWith('https://storage.googleapis.com/')) {
+            return res.status(403).send('Forbidden URL domain');
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
+        }
+        
+        const contentType = response.headers.get('content-type') || 'image/png';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        
+        return res.send(buffer);
+    } catch (error) {
+        console.error('proxy-image error:', error);
+        return res.status(500).send(error.message);
+    }
 });
 
 // GET /api/ks/requests

@@ -2162,7 +2162,52 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       try {
         copyBtn.textContent = '...';
 
-        // Layer 1: Contenteditable temp div image copy (Highly reliable, CORS-free, works on HTTP)
+        // Check if Clipboard API is supported
+        if (!navigator.clipboard || !window.ClipboardItem) {
+          throw new Error('Clipboard API not supported');
+        }
+
+        // Determine backend base URL for proxying image to bypass CORS limitations
+        const backendBase = (window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-493469512136.asia-southeast1.run.app';
+        const useProxy = currentSrc.startsWith('http') && !currentSrc.includes('localhost') && !currentSrc.includes('127.0.0.1');
+        const targetSrc = useProxy
+          ? `${backendBase}/api/ks/proxy-image?url=${encodeURIComponent(currentSrc)}`
+          : currentSrc;
+
+        const blob = await new Promise((resolve, reject) => {
+          const imgObj = new Image();
+          imgObj.crossOrigin = 'anonymous';
+          imgObj.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = imgObj.naturalWidth || imgObj.width || 100;
+              canvas.height = imgObj.naturalHeight || imgObj.height || 100;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(imgObj, 0, 0);
+              canvas.toBlob(b => {
+                if (b) resolve(b);
+                else reject(new Error('Canvas to Blob failed.'));
+              }, 'image/png');
+            } catch (err) { reject(err); }
+          };
+          imgObj.onerror = () => {
+            reject(new Error('CORS or network error.'));
+          };
+          const sep = targetSrc.includes('?') ? '&' : '?';
+          imgObj.src = useProxy ? targetSrc : targetSrc + sep + '_nocache=' + Date.now();
+        });
+
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        copyBtn.textContent = '✓';
+        showToast('Đã sao chép hình ảnh vào Clipboard');
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
+        return;
+      } catch (err) {
+        console.warn('Canvas clipboard copy failed, trying selection copy fallback...', err);
+        
+        // Fallback: Contenteditable copy (works for Word/Slack, doesn't need CORS/HTTPS)
         const imgEl = document.getElementById('dvZoomImg');
         if (imgEl) {
           try {
@@ -2189,76 +2234,15 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
             
             if (ok) {
               copyBtn.textContent = '✓';
-              showToast('Đã sao chép hình ảnh vào Clipboard');
+              showToast('Đã copy định dạng web (Word, Slack)');
               setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
               return;
             }
           } catch (selErr) {
-            console.warn('Contenteditable copy failed, trying direct select...', selErr);
-          }
-
-          // Layer 2: Direct image element select copy
-          try {
-            imgEl.style.userSelect = 'auto';
-            imgEl.style.webkitUserSelect = 'auto';
-            const range = document.createRange();
-            range.selectNode(imgEl);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            const ok = document.execCommand('copy');
-            selection.removeAllRanges();
-            imgEl.style.userSelect = '';
-            imgEl.style.webkitUserSelect = '';
-            if (ok) {
-              copyBtn.textContent = '✓';
-              showToast('Đã sao chép hình ảnh vào Clipboard');
-              setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
-              return;
-            }
-          } catch (directErr) {
-            imgEl.style.userSelect = '';
-            imgEl.style.webkitUserSelect = '';
-            console.warn('Direct copy failed, trying Canvas Clipboard API...', directErr);
+            console.warn('Selection fallback copy failed', selErr);
           }
         }
-
-        // Layer 3: Modern Canvas / Blob Clipboard API
-        if (!navigator.clipboard || !window.ClipboardItem) {
-          throw new Error('Not supported');
-        }
-
-        const blob = await new Promise((resolve, reject) => {
-          const imgObj = new Image();
-          imgObj.crossOrigin = 'anonymous';
-          imgObj.onload = () => {
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = imgObj.naturalWidth || imgObj.width || 100;
-              canvas.height = imgObj.naturalHeight || imgObj.height || 100;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(imgObj, 0, 0);
-              canvas.toBlob(b => {
-                if (b) resolve(b);
-                else reject(new Error('Canvas to Blob failed.'));
-              }, 'image/png');
-            } catch (err) { reject(err); }
-          };
-          imgObj.onerror = () => {
-            reject(new Error('CORS or network error.'));
-          };
-          const sep = currentSrc.includes('?') ? '&' : '?';
-          imgObj.src = currentSrc + sep + '_nocache=' + Date.now();
-        });
-
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
-        copyBtn.textContent = '✓';
-        showToast('Đã sao chép hình ảnh vào Clipboard');
-        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
-      } catch (err) {
-        console.warn('Copy image error:', err);
+        
         showToast('Không hỗ trợ copy tự động, vui lòng chuột phải -> Copy Image');
         copyBtn.textContent = '✗';
         setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
