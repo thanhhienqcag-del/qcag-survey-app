@@ -721,38 +721,36 @@
           _onDataChanged(_cloneStoreRows());
         }
         await _ensureActiveBase();
+
         if (_store.length) {
-          // Always bootstrap from server once to recover from stale/incomplete local cache.
-          // This also refreshes paging.total so init() can pull remaining pages reliably.
+          // Do not rehydrate the entire dataset on every reload. A single
+          // incremental refresh is enough to surface newly created/updated rows
+          // while keeping transfer volume low.
           try {
-            var bootstrapRows = await _fetchStore();
-            if (bootstrapRows && bootstrapRows.length) {
-              _store = _normalizeRequestRows(bootstrapRows);
-              _triggerStoreUpdated();
+            var refreshResult = await this.refresh();
+            if (!refreshResult || !refreshResult.isOk) {
+              var bootstrapRows = await _fetchStore();
+              if (bootstrapRows && bootstrapRows.length) {
+                _store = _normalizeRequestRows(bootstrapRows);
+                _triggerStoreUpdated();
+              }
             }
           } catch (bootstrapErr) {
-            console.warn('[dataSdk] bootstrap fetch failed, fallback to incremental refresh:', bootstrapErr);
-          }
-          await this.refresh();
-        } else {
-          _store = _normalizeRequestRows(await _fetchStore());
-          _triggerStoreUpdated();
-        }
-
-        // Load đủ toàn bộ dữ liệu trước khi trả về — đảm bảo search/filter
-        // hoạt động chính xác ngay từ lần đầu, không bị thiếu records.
-        if (_storeTotalHint > _store.length) {
-          var guard = 0;
-          while (_storeTotalHint > _store.length && guard < 20) {
-            guard++;
+            console.warn('[dataSdk] incremental bootstrap failed, fallback to one-shot fetch:', bootstrapErr);
             try {
-              var moreRes = await window.dataSdk.loadMore();
-              if (!moreRes || !moreRes.isOk || !moreRes.hasMore) break;
-            } catch (e) {
-              console.warn('[dataSdk] init loadMore failed:', e);
-              break;
+              var fallbackRows = await _fetchStore();
+              if (fallbackRows && fallbackRows.length) {
+                _store = _normalizeRequestRows(fallbackRows);
+                _triggerStoreUpdated();
+              }
+            } catch (fallbackErr) {
+              console.warn('[dataSdk] fallback bootstrap fetch failed:', fallbackErr);
             }
           }
+        } else {
+          var bootstrapRows = await _fetchStore();
+          _store = _normalizeRequestRows(bootstrapRows);
+          _triggerStoreUpdated();
         }
 
         // Setup SSE listener for realtime invalidation events (with reconnect).
