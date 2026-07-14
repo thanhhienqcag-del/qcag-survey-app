@@ -453,6 +453,12 @@
     border-color: transparent;
   }
   .dv-zoom-btn-edit:active { background: #b91c1c; }
+  .dv-zoom-btn-share {
+    background: #16a34a;
+    color: #fff;
+    border-color: transparent;
+  }
+  .dv-zoom-btn-share:active { background: #15803d; }
   .dv-zoom-btn-view { /* right button – default white */ }
 
   @media (max-width: 420px) {

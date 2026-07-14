@@ -2031,6 +2031,51 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       inner.appendChild(editBtn);
     }
 
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'dv-zoom-btn dv-zoom-btn-share';
+    shareBtn.textContent = 'Chia sẻ';
+    shareBtn.onclick = async (e) => {
+      try { e.stopPropagation(); } catch (ex) {}
+      showToast('Đang chuẩn bị file chia sẻ...');
+      try {
+        const proxyUrl = `/api/ks/proxy-image?url=${encodeURIComponent(src)}`;
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error('Tải ảnh thất bại');
+        const blob = await response.blob();
+        
+        let ext = 'png';
+        if (blob.type === 'image/jpeg') ext = 'jpg';
+        else if (blob.type === 'image/webp') ext = 'webp';
+        
+        const tkCode = window._dv_currentDesignReq ? window._dv_currentDesignReq.tkCode : 'design';
+        const filename = `MQ_${tkCode}.${ext}`;
+        const file = new File([blob], filename, { type: blob.type });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Chia sẻ MQ',
+            text: `Mẫu thiết kế MQ của outlet: ${window._dv_currentDesignReq ? window._dv_currentDesignReq.outletName : ''}`
+          });
+        } else if (navigator.share) {
+          await navigator.share({
+            title: 'Chia sẻ MQ',
+            url: src
+          });
+        } else {
+          throw new Error('Not supported');
+        }
+      } catch (err) {
+        try {
+          await navigator.clipboard.writeText(src);
+          showToast('Đã sao chép liên kết hình ảnh!');
+        } catch (_) {
+          showToast('Không thể chia sẻ hình ảnh');
+        }
+      }
+    };
+    inner.appendChild(shareBtn);
+
     const viewBtn = document.createElement('button');
     viewBtn.className = 'dv-zoom-btn dv-zoom-btn-view';
     viewBtn.textContent = 'Xem nội dung yêu cầu';

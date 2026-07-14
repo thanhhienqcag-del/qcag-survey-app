@@ -686,6 +686,11 @@
     var candidates = _unique([_activeBase].concat(_getBaseCandidates()).filter(function (x) { return x != null; }));
     var sinceIso = _lastSyncIso || _latestStoreTimestampIso();
     if (!sinceIso) return [];
+    try {
+      var dt = new Date(sinceIso);
+      dt.setTime(dt.getTime() - 5 * 24 * 60 * 60 * 1000);
+      sinceIso = dt.toISOString();
+    } catch (_) {}
     for (var i = 0; i < candidates.length; i++) {
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
