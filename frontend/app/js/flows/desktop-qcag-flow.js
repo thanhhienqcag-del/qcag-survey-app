@@ -261,6 +261,7 @@ async function qcagDesktopWarmImage(url) {
       img.onerror = () => resolve();
       img.src = normalized;
     });
+    _qcagDesktopImageBlobUrlCache[normalized] = normalized;
     return normalized;
   })();
 
