@@ -2389,6 +2389,12 @@ app.get('/api/ks/health', async (req, res) => {
             ...snapshot,
         });
     }
+    return res.json({
+        ok: true,
+        service: 'ks-mobile',
+        ts: Date.now(),
+        ...snapshot
+    });
 });
 
 // GET /api/ks/proxy-image
