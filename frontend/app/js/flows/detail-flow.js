@@ -2038,8 +2038,13 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       try { e.stopPropagation(); } catch (ex) {}
       showToast('Đang chuẩn bị ảnh chia sẻ...');
       try {
-        const proxyUrl = `/api/ks/proxy-image?url=${encodeURIComponent(src)}`;
-        const response = await fetch(proxyUrl);
+        const backendBase = (window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-493469512136.asia-southeast1.run.app';
+        const useProxy = src.startsWith('http') && !src.startsWith(window.location.origin) && !src.includes('localhost') && !src.includes('127.0.0.1');
+        const targetUrl = useProxy
+          ? `${backendBase}/api/ks/proxy-image?url=${encodeURIComponent(src)}`
+          : src;
+
+        const response = await fetch(targetUrl);
         if (!response.ok) throw new Error('Tải ảnh thất bại');
         const originalBlob = await response.blob();
         
