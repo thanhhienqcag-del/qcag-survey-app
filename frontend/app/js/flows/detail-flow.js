@@ -2004,7 +2004,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     <button class="dv-zoom-close">✕</button>
     <button class="dv-zoom-rotate-btn rotate-right" title="Xoay phải ↻">↻</button>
     <button class="dv-zoom-rotate-btn rotate-left" title="Xoay trái ↺">↺</button>
-    <button class="dv-zoom-copy-btn" title="Sao chép hình ảnh">📋</button>
+    <button class="dv-zoom-view-btn-top" title="Xem nội dung yêu cầu">📄</button>
     <button class="dv-zoom-dvhc-btn" onclick="(function(e){e.stopPropagation();if(typeof qcagDesktopToggleDVHCLookup==='function')qcagDesktopToggleDVHCLookup();})(event)" title="Tra cứu ĐVHC">🗺️</button>
     <div class="dv-zoom-scale" id="dvZoomScale">100%</div>
     ${imgs.length > 1 ? `
@@ -2036,34 +2036,18 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     shareBtn.textContent = 'Chia sẻ';
     shareBtn.onclick = async (e) => {
       try { e.stopPropagation(); } catch (ex) {}
-      showToast('Đang chuẩn bị file chia sẻ...');
       try {
-        const proxyUrl = `/api/ks/proxy-image?url=${encodeURIComponent(src)}`;
-        const response = await fetch(proxyUrl);
-        if (!response.ok) throw new Error('Tải ảnh thất bại');
-        const blob = await response.blob();
-        
-        let ext = 'png';
-        if (blob.type === 'image/jpeg') ext = 'jpg';
-        else if (blob.type === 'image/webp') ext = 'webp';
-        
-        const tkCode = window._dv_currentDesignReq ? window._dv_currentDesignReq.tkCode : 'design';
-        const filename = `MQ_${tkCode}.${ext}`;
-        const file = new File([blob], filename, { type: blob.type });
-        
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            title: 'Chia sẻ MQ',
-            text: `Mẫu thiết kế MQ của outlet: ${window._dv_currentDesignReq ? window._dv_currentDesignReq.outletName : ''}`
-          });
-        } else if (navigator.share) {
+        if (navigator.share) {
+          const tkCode = window._dv_currentDesignReq ? window._dv_currentDesignReq.tkCode : '';
+          const outletName = window._dv_currentDesignReq ? window._dv_currentDesignReq.outletName : '';
           await navigator.share({
             title: 'Chia sẻ MQ',
+            text: `Mẫu thiết kế MQ ${tkCode} - ${outletName}`,
             url: src
           });
         } else {
-          throw new Error('Not supported');
+          await navigator.clipboard.writeText(src);
+          showToast('Đã sao chép liên kết hình ảnh!');
         }
       } catch (err) {
         try {
@@ -2076,24 +2060,6 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     };
     inner.appendChild(shareBtn);
 
-    const viewBtn = document.createElement('button');
-    viewBtn.className = 'dv-zoom-btn dv-zoom-btn-view';
-    viewBtn.textContent = 'Xem nội dung yêu cầu';
-    viewBtn.onclick = (e) => {
-      try { e.preventDefault(); e.stopPropagation(); } catch (ex) {}
-      closeDvZoom();
-      dvSetMode('content');
-      // Hide comment section — user just wants to read the request info
-      const commentsEl = document.getElementById('designComments');
-      if (commentsEl) {
-        const sectionTitle = commentsEl.previousElementSibling;
-        if (sectionTitle) sectionTitle.style.display = 'none';
-        commentsEl.style.display = 'none';
-      }
-      const footer = document.querySelector('.design-comment-footer');
-      if (footer) footer.style.display = 'none';
-    };
-    inner.appendChild(viewBtn);
     showContentBar.appendChild(inner);
     overlay.appendChild(showContentBar);
   }
@@ -2206,99 +2172,21 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     };
   }
 
-  const copyBtn = overlay.querySelector('.dv-zoom-copy-btn');
-  if (copyBtn) {
-    copyBtn.onclick = async (e) => {
-      e.stopPropagation();
-      const currentSrc = imgs[currentIndex];
-      try {
-        copyBtn.textContent = '...';
-
-        // Check if Clipboard API is supported
-        if (!navigator.clipboard || !window.ClipboardItem) {
-          throw new Error('Clipboard API not supported');
-        }
-
-        // Determine backend base URL for proxying image to bypass CORS limitations
-        const backendBase = (window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-493469512136.asia-southeast1.run.app';
-        const useProxy = currentSrc.startsWith('http') && !currentSrc.includes('localhost') && !currentSrc.includes('127.0.0.1');
-        const targetSrc = useProxy
-          ? `${backendBase}/api/ks/proxy-image?url=${encodeURIComponent(currentSrc)}`
-          : currentSrc;
-
-        const blob = await new Promise((resolve, reject) => {
-          const imgObj = new Image();
-          imgObj.crossOrigin = 'anonymous';
-          imgObj.onload = () => {
-            try {
-              const canvas = document.createElement('canvas');
-              canvas.width = imgObj.naturalWidth || imgObj.width || 100;
-              canvas.height = imgObj.naturalHeight || imgObj.height || 100;
-              const ctx = canvas.getContext('2d');
-              ctx.drawImage(imgObj, 0, 0);
-              canvas.toBlob(b => {
-                if (b) resolve(b);
-                else reject(new Error('Canvas to Blob failed.'));
-              }, 'image/png');
-            } catch (err) { reject(err); }
-          };
-          imgObj.onerror = () => {
-            reject(new Error('CORS or network error.'));
-          };
-          const sep = targetSrc.includes('?') ? '&' : '?';
-          imgObj.src = useProxy ? targetSrc : targetSrc + sep + '_nocache=' + Date.now();
-        });
-
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]);
-        copyBtn.textContent = '✓';
-        showToast('Đã sao chép hình ảnh vào Clipboard');
-        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
-        return;
-      } catch (err) {
-        console.warn('Canvas clipboard copy failed, trying selection copy fallback...', err);
-        
-        // Fallback: Contenteditable copy (works for Word/Slack, doesn't need CORS/HTTPS)
-        const imgEl = document.getElementById('dvZoomImg');
-        if (imgEl) {
-          try {
-            const tempDiv = document.createElement('div');
-            tempDiv.contentEditable = true;
-            tempDiv.style.position = 'fixed';
-            tempDiv.style.left = '-9999px';
-            tempDiv.style.top = '-9999px';
-            
-            const tempImg = document.createElement('img');
-            tempImg.src = imgEl.src;
-            tempDiv.appendChild(tempImg);
-            document.body.appendChild(tempDiv);
-            
-            const range = document.createRange();
-            range.selectNode(tempImg);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            
-            const ok = document.execCommand('copy');
-            selection.removeAllRanges();
-            document.body.removeChild(tempDiv);
-            
-            if (ok) {
-              copyBtn.textContent = '✓';
-              showToast('Đã copy định dạng web (Word, Slack)');
-              setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
-              return;
-            }
-          } catch (selErr) {
-            console.warn('Selection fallback copy failed', selErr);
-          }
-        }
-        
-        showToast('Không hỗ trợ copy tự động, vui lòng chuột phải -> Copy Image');
-        copyBtn.textContent = '✗';
-        setTimeout(() => { copyBtn.textContent = '📋'; }, 1800);
+  const viewBtnTop = overlay.querySelector('.dv-zoom-view-btn-top');
+  if (viewBtnTop) {
+    viewBtnTop.onclick = (e) => {
+      try { e.preventDefault(); e.stopPropagation(); } catch (ex) {}
+      closeDvZoom();
+      dvSetMode('content');
+      // Hide comment section — user just wants to read the request info
+      const commentsEl = document.getElementById('designComments');
+      if (commentsEl) {
+        const sectionTitle = commentsEl.previousElementSibling;
+        if (sectionTitle) sectionTitle.style.display = 'none';
+        commentsEl.style.display = 'none';
       }
+      const footer = document.querySelector('.design-comment-footer');
+      if (footer) footer.style.display = 'none';
     };
   }
 
