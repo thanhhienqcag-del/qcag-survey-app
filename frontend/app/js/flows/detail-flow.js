@@ -2036,18 +2036,49 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
     shareBtn.textContent = 'Chia sẻ';
     shareBtn.onclick = async (e) => {
       try { e.stopPropagation(); } catch (ex) {}
+      showToast('Đang chuẩn bị ảnh chia sẻ...');
       try {
-        if (navigator.share) {
-          const tkCode = window._dv_currentDesignReq ? window._dv_currentDesignReq.tkCode : '';
-          const outletName = window._dv_currentDesignReq ? window._dv_currentDesignReq.outletName : '';
+        const proxyUrl = `/api/ks/proxy-image?url=${encodeURIComponent(src)}`;
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error('Tải ảnh thất bại');
+        const originalBlob = await response.blob();
+        
+        const imgObj = new Image();
+        imgObj.crossOrigin = 'anonymous';
+        const blobUrl = URL.createObjectURL(originalBlob);
+        
+        const jpegBlob = await new Promise((resolve, reject) => {
+          imgObj.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = imgObj.naturalWidth || imgObj.width;
+              canvas.height = imgObj.naturalHeight || imgObj.height;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(imgObj, 0, 0);
+              canvas.toBlob(b => {
+                if (b) resolve(b);
+                else reject(new Error('Canvas to Blob failed'));
+              }, 'image/jpeg', 0.92);
+            } catch (err) { reject(err); }
+          };
+          imgObj.onerror = () => reject(new Error('Load image failed'));
+          imgObj.src = blobUrl;
+        });
+        
+        URL.revokeObjectURL(blobUrl);
+        
+        const tkCode = window._dv_currentDesignReq ? window._dv_currentDesignReq.tkCode : 'design';
+        const filename = `MQ_${tkCode}.jpg`;
+        const file = new File([jpegBlob], filename, { type: 'image/jpeg' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({
-            title: 'Chia sẻ MQ',
-            text: `Mẫu thiết kế MQ ${tkCode} - ${outletName}`,
-            url: src
+            files: [file]
           });
         } else {
-          await navigator.clipboard.writeText(src);
-          showToast('Đã sao chép liên kết hình ảnh!');
+          throw new Error('Not supported');
         }
       } catch (err) {
         try {
