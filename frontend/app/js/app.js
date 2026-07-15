@@ -114,20 +114,19 @@ window.toggleTheme = function toggleTheme() {
 // Handle soft keyboard overlaying fixed buttons
 document.addEventListener('DOMContentLoaded', () => {
   if (window.visualViewport) {
-    let initialHeight = window.visualViewport.height;
-    window.visualViewport.addEventListener('resize', () => {
-      const isKeyboardOpen = window.visualViewport.height < initialHeight - 100;
-      const diff = initialHeight - window.visualViewport.height;
+    const updateLayout = () => {
       const footers = document.querySelectorAll('.fixed-bottom-kb-overlay');
+      const diff = window.innerHeight - window.visualViewport.height;
       footers.forEach(f => {
-        if (isKeyboardOpen) {
+        if (diff > 100) {
           f.style.transform = `translateY(-${diff}px)`;
         } else {
           f.style.transform = 'translateY(0)';
-          initialHeight = window.visualViewport.height;
         }
       });
-    });
+    };
+    window.visualViewport.addEventListener('resize', updateLayout);
+    window.visualViewport.addEventListener('scroll', updateLayout);
   }
 });
 

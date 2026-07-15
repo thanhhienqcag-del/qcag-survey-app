@@ -661,6 +661,7 @@ async function initDB() {
 
     // QC signage modal state (stored as JSON string).
     await ensureColumn(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS qc_signage_state TEXT`);
+    await ensureColumn(`ALTER TABLE quotations ADD COLUMN IF NOT EXISTS tk_code VARCHAR(64)`);
 
     // Pending orders table for production order creation workflow
     await pool.query(`
@@ -1056,6 +1057,7 @@ const QUOTATION_SELECT_COLUMNS = [
     'created_by',
     'created_by_name',
     'qc_signage_state',
+    'tk_code',
 ].join(', ');
 
 app.get('/db-health', async(req, res) => {
@@ -1299,9 +1301,9 @@ app.get('/quotations/view', async(req, res) => {
         const [rows] = await pool.query(
             `SELECT ${QUOTATION_SELECT_COLUMNS}
              FROM quotations
-             WHERE sale_code = ? AND quote_code = ?
+             WHERE sale_code = ? AND (quote_code = ? OR tk_code = ?)
              LIMIT 1`,
-            [saleCode, quoteCode]
+            [saleCode, quoteCode, quoteCode]
         );
         
         if (rows && rows.length > 0) {
@@ -2286,6 +2288,7 @@ function ksRowToApp(row, lightweight = false) {
     return {
         __backendId: row.backend_id || ('db_' + row.id),
         id:                  row.id,
+        tkCode:              row.tk_code || '',
         type:                row.type || 'new',
         outletCode:          row.outlet_code || '',
         outletName:          row.outlet_name || '',
@@ -2317,7 +2320,7 @@ function ksRowToApp(row, lightweight = false) {
 }
 
 const KS_REQUESTS_SELECT_SQL = `
-    SELECT id, backend_id, type, outlet_code, outlet_name, address,
+    SELECT id, backend_id, tk_code, type, outlet_code, outlet_name, address,
            outlet_lat, outlet_lng, phone, items, content,
            old_content, old_content_extra, status, requester, comments,
            editing_requested_at, mq_folder, created_at, updated_at,
@@ -2610,12 +2613,10 @@ app.post('/api/ks/requests', async (req, res) => {
             [tkCode, statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
         );
 
-        // Dual-write sync
-        try {
-            await syncRequest(pool, insertId);
-        } catch (syncErr) {
-            console.error('[dual-write] syncRequest failed (non-fatal):', syncErr);
-        }
+        // Dual-write sync (non-blocking)
+        syncRequest(pool, insertId).catch(syncErr => {
+            console.error('[dual-write] syncRequest background failed:', syncErr);
+        });
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
         wsInvalidate('ks_requests');
@@ -2789,12 +2790,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
 
-        // Dual-write sync
-        try {
-            await syncRequest(pool, rowId);
-        } catch (syncErr) {
-            console.error('[dual-write] syncRequest failed (non-fatal):', syncErr);
-        }
+        // Dual-write sync (non-blocking)
+        syncRequest(pool, rowId).catch(syncErr => {
+            console.error('[dual-write] syncRequest background failed:', syncErr);
+        });
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');
@@ -2948,12 +2947,10 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
             [newOutletCode, newMqFolder, newDesignImages, rowId]
         );
 
-        // Dual-write sync
-        try {
-            await syncRequest(pool, rowId);
-        } catch (syncErr) {
-            console.error('[dual-write] syncRequest failed (non-fatal):', syncErr);
-        }
+        // Dual-write sync (non-blocking)
+        syncRequest(pool, rowId).catch(syncErr => {
+            console.error('[dual-write] syncRequest background failed:', syncErr);
+        });
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');

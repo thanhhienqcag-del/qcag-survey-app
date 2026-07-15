@@ -846,7 +846,8 @@ async function _loadBridgeStatus(backendId) {
     if (!bridgeData && typeof currentSession !== 'undefined' && currentSession && currentSession.saleCode && backendId) {
       try {
         const baseUrl = (window.__env && window.__env.BACKEND_URL) ? window.__env.BACKEND_URL.replace(/\/+$/, '') : '';
-        const url = baseUrl + '/quotations/view?sale_code=' + encodeURIComponent(currentSession.saleCode) + '&quote_code=' + encodeURIComponent(backendId);
+        const targetCode = (currentDetailRequest && currentDetailRequest.tkCode) || backendId;
+        const url = baseUrl + '/quotations/view?sale_code=' + encodeURIComponent(currentSession.saleCode) + '&quote_code=' + encodeURIComponent(targetCode);
         const res = await fetch(url);
         if (res.ok) {
           bridgeData = await res.json();

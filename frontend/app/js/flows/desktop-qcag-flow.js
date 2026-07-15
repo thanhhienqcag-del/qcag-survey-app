@@ -1321,7 +1321,7 @@ function getQCAGDesktopVisibleRequests() {
     });
   }
 
-  // Filter by region (support tokens like S4 -> 'South 4', MOT8 -> 'Mondern On Team 8')
+  // Filter by region (support tokens like S4 -> 'South 4', MOT8 -> 'Modern On Team 8')
   if (_qcagDesktopRegionFilter && _qcagDesktopRegionFilter !== 'all') {
     const token = String(_qcagDesktopRegionFilter || '').toLowerCase();
     const regionPatterns = {

@@ -2022,6 +2022,11 @@ body.dark .qcag-survey-badge,
   fill: none;
 }
 
+.main-nav-icon svg[fill="currentColor"] {
+  fill: currentColor;
+  stroke: none;
+}
+
 .main-nav-btn.active {
   color: #111827;
   background: #f3f4f6;
