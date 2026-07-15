@@ -1372,9 +1372,37 @@ function getQCAGDesktopVisibleRequests() {
     });
   } else if (_qcagDesktopSortMode === 'tag') {
     list.sort((a, b) => {
-      const ta = qcagDesktopStatusBadge(a).label || '';
-      const tb = qcagDesktopStatusBadge(b).label || '';
-      return ta.localeCompare(tb, 'vi');
+      const badgeA = qcagDesktopStatusBadge(a);
+      const badgeB = qcagDesktopStatusBadge(b);
+      const labelA = badgeA ? (badgeA.label || '') : '';
+      const labelB = badgeB ? (badgeB.label || '') : '';
+      
+      const tagPriority = {
+        'Chờ thiết kế': 1,
+        'Chờ chỉnh sửa': 2,
+        'Chờ xác nhận': 3,
+        'Chờ xử lý': 4,
+        'Đang xử lý': 5,
+        'Chờ kiểm tra': 6,
+        'Ngoài phạm vi BH': 7,
+        'Đã Bảo hành': 8,
+        'Hoàn thành': 9
+      };
+      
+      const prioA = tagPriority[labelA] || 999;
+      const prioB = tagPriority[labelB] || 999;
+      
+      if (prioA !== prioB) {
+        return prioA - prioB;
+      }
+      
+      if (prioA === 999 && prioB === 999 && labelA !== labelB) {
+        return labelA.localeCompare(labelB, 'vi');
+      }
+      
+      const timeA = new Date(a.createdAt || 0).getTime();
+      const timeB = new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
     });
   } else {
     list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
