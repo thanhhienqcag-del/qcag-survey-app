@@ -223,6 +223,14 @@ function _processImageFile(file) {
                 var exifObj = piexif.load(rawDataUrl);
                 // Bỏ đi các dữ liệu hình thu nhỏ cũ nếu có để giảm kích thước
                 delete exifObj["thumbnail"];
+                
+                // Reset Orientation to 1 (Normal) because the browser's Canvas API
+                // has already physically rotated the pixels during drawImage compression.
+                // Keeping the original orientation value would cause double-rotation in rendering.
+                if (exifObj["0th"]) {
+                  exifObj["0th"][piexif.ImageIFD.Orientation || 274] = 1;
+                }
+
                 var exifStr = piexif.dump(exifObj);
                 // Chèn EXIF vào ảnh đã nén
                 uploadUrl = piexif.insert(exifStr, compressedUrl);
