@@ -155,33 +155,50 @@ function normalizeVietnameseAccents(str) {
   // Chuyển chuỗi về dạng Unicode dựng sẵn NFC chuẩn
   let text = str.normalize('NFC');
 
-  // 1. Chuẩn hóa tổ hợp "oa" (oá, oà, oả, oã, oạ -> óa, òa, ỏa, õa, ọa)
-  // Chỉ áp dụng ở cuối âm tiết (không đứng trước phụ âm/nguyên âm kết thúc như n, ng, t, c, ch, i, y)
-  const oaRules = [
+  // 1. Chuẩn hóa tổ hợp "oa" và "oe"
+  // Quy tắc chuẩn tiếng Việt:
+  // - Nếu có phụ âm kết thúc âm tiết (theo sau bởi ký tự chữ cái [a-zA-Z]),
+  //   thì dấu phải đặt ở nguyên âm sau: oá, oà, oả, oã, oạ / oé, oè, oẻ, oẽ, oẹ.
+  // - Nếu không có phụ âm kết thúc (đứng cuối từ/âm tiết), dấu đặt ở nguyên âm trước: óa, òa, ỏa, õa, ọa / óe, òe, ỏe, õe, ọe.
+
+  // 1.1. Trường hợp theo sau bởi chữ cái -> Chuyển dấu từ O/E sang A/E (toàn, loài, hoét, khoẻ...)
+  const oaToA = [
+    [/óa(?=[a-zA-Z])/g, 'oá'], [/òa(?=[a-zA-Z])/g, 'oà'], [/ỏa(?=[a-zA-Z])/g, 'oả'], [/õa(?=[a-zA-Z])/g, 'oã'], [/ọa(?=[a-zA-Z])/g, 'oạ'],
+    [/ÓA(?=[a-zA-Z])/g, 'OÁ'], [/ÒA(?=[a-zA-Z])/g, 'OÀ'], [/ỎA(?=[a-zA-Z])/g, 'OẢ'], [/ÕA(?=[a-zA-Z])/g, 'OÃ'], [/ỌA(?=[a-zA-Z])/g, 'OẠ']
+  ];
+  for (const [pattern, replacement] of oaToA) {
+    text = text.replace(pattern, replacement);
+  }
+
+  const oeToE = [
+    [/óe(?=[a-zA-Z])/g, 'oé'], [/òe(?=[a-zA-Z])/g, 'oè'], [/ỏe(?=[a-zA-Z])/g, 'oẻ'], [/õe(?=[a-zA-Z])/g, 'oẽ'], [/ọe(?=[a-zA-Z])/g, 'oẹ'],
+    [/ÓE(?=[a-zA-Z])/g, 'OÉ'], [/ÒE(?=[a-zA-Z])/g, 'OÈ'], [/ỎE(?=[a-zA-Z])/g, 'OẺ'], [/ÕE(?=[a-zA-Z])/g, 'OẼ'], [/ỌE(?=[a-zA-Z])/g, 'OẸ']
+  ];
+  for (const [pattern, replacement] of oeToE) {
+    text = text.replace(pattern, replacement);
+  }
+
+  // 1.2. Trường hợp KHÔNG theo sau bởi chữ cái -> Chuyển dấu từ A/E sang O/E (hòa, hóa, khỏe...)
+  const oaToO = [
     [/oá(?![a-zA-Z])/g, 'óa'], [/oà(?![a-zA-Z])/g, 'òa'], [/oả(?![a-zA-Z])/g, 'ỏa'], [/oã(?![a-zA-Z])/g, 'õa'], [/oạ(?![a-zA-Z])/g, 'ọa'],
     [/OÁ(?![a-zA-Z])/g, 'ÓA'], [/OÀ(?![a-zA-Z])/g, 'ÒA'], [/OẢ(?![a-zA-Z])/g, 'ỎA'], [/OÃ(?![a-zA-Z])/g, 'ÕA'], [/OẠ(?![a-zA-Z])/g, 'ỌA']
   ];
-  for (const [pattern, replacement] of oaRules) {
+  for (const [pattern, replacement] of oaToO) {
     text = text.replace(pattern, replacement);
   }
 
-  // 2. Chuẩn hóa tổ hợp "oe" (oé, oè, oẻ, oẽ, oẹ -> óe, òe, ỏe, õe, ọe)
-  // Chỉ áp dụng ở cuối âm tiết (không đứng trước phụ âm kết thúc như n, t, c)
-  const oeRules = [
+  const oeToO = [
     [/oé(?![a-zA-Z])/g, 'óe'], [/oè(?![a-zA-Z])/g, 'òe'], [/oẻ(?![a-zA-Z])/g, 'ỏe'], [/oẽ(?![a-zA-Z])/g, 'õe'], [/oẹ(?![a-zA-Z])/g, 'ọe'],
     [/OÉ(?![a-zA-Z])/g, 'ÓE'], [/OÈ(?![a-zA-Z])/g, 'ÒE'], [/OẺ(?![a-zA-Z])/g, 'ỎE'], [/OẼ(?![a-zA-Z])/g, 'ÕE'], [/OẸ(?![a-zA-Z])/g, 'ỌE']
   ];
-  for (const [pattern, replacement] of oeRules) {
+  for (const [pattern, replacement] of oeToO) {
     text = text.replace(pattern, replacement);
   }
 
-  // 3. Chuẩn hóa tổ hợp "uy" (uý, uỳ, uỷ, uỹ, uỵ -> úy, ùy, ủy, ũy, cụy)
-  // Tránh sử dụng Negative Lookbehind (?<!...) để tương thích 100% với các thiết bị di động cũ (như iOS cũ)
-  // Ta sử dụng nhóm bắt giữ (capture groups) để kiểm tra nếu ký tự đứng trước là q/Q thì giữ nguyên
-  // Đồng thời dùng Negative Lookahead (?![nNcCtT]) để bảo vệ các từ kết thúc bằng phụ âm (ví dụ: Huỳnh, huých, huýt)
+  // 2. Chuẩn hóa tổ hợp "uy" (uý, uỳ, uỷ, uỹ, uỵ -> úy, ùy, ủy, ũy, cụy)
   const uyMap = { 'uý': 'úy', 'uỳ': 'ùy', 'uỷ': 'ủy', 'uỹ': 'ũy', 'uỵ': 'ụy' };
   text = text.replace(/([qQ]?)u([ýỳỷỹỵ])(?![nNcCtT])/g, (match, prefix, accent) => {
-    if (prefix) return match; // Nếu đi sau q/Q (ví dụ: quý, quỳ) -> giữ nguyên
+    if (prefix) return match;
     const key = 'u' + accent;
     return uyMap[key] || match;
   });
