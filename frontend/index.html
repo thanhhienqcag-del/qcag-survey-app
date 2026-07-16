@@ -248,23 +248,15 @@
     #qcagEditOutletName, #qcagEditOutletName::placeholder { text-transform: uppercase; }
     .qcag-filter-count.qcag-blink { animation: qcag-warranty-blink 1s ease-in-out infinite; }
     @keyframes qcag-warranty-blink { 0% { transform: scale(1); opacity:1 } 50% { transform: scale(1.12); opacity:0.5 } 100% { transform: scale(1); opacity:1 } }
-    /* Warranty tab alert: only add a red outline + subtle halo; do not override
-       the button's selected/active background or the count badge colors. */
+    /* Warranty tab alert: simple red outline like before */
     .qcag-filter-btn.qcag-filter-alert {
-      border: 2px solid #ef4444; /* red outline */
-      box-shadow: 0 0 0 6px rgba(239,68,68,0.04); /* subtle halo */
-      /* Do not change background or text color — respect theme/selected styles */
-      background-color: inherit;
-      color: inherit;
-    }
-    /* Keep the inner count badge styling untouched so theme selection persists. */
-    .qcag-filter-btn.qcag-filter-alert .qcag-filter-count {
-      /* no overrides here */
+      border: 2px solid #ef4444 !important; /* red outline */
+      box-shadow: 0 0 0 6px rgba(239,68,68,0.04) !important; /* subtle halo */
     }
     [data-theme="dark"] .qcag-filter-btn.qcag-filter-alert,
     .theme-dark .qcag-filter-btn.qcag-filter-alert {
-      border-color: #b91c1c; /* darker red outline for dark theme */
-      box-shadow: 0 0 0 6px rgba(185,28,28,0.04);
+      border-color: #b91c1c !important; /* darker red outline for dark theme */
+      box-shadow: 0 0 0 6px rgba(185,28,28,0.04) !important;
     }
     /* Mobile highlight removed to reduce CSS weight */
     .theme-dark #draftsModal button.bg-green-600 {
@@ -605,9 +597,16 @@
         <main class="qcag-desktop-main">
           <aside class="qcag-desktop-list-panel">
             <div class="qcag-status-tabs">
-              <div class="flex items-center bg-gray-100 rounded-lg p-1 text-sm">
-                <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn px-3 py-1 rounded-md active">Đang xử lý <span id="qcagProcessingCount" class="qcag-status-count">0</span></button>
-                <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn px-3 py-1 rounded-md">Hoàn thành <span id="qcagDoneCount" class="qcag-status-count">0</span></button>
+              <div class="qcag-status-tabs-container">
+                <div id="qcagStatusSlideBg" class="qcag-active-slide-bg left-active"></div>
+                <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn active">
+                  <span class="tab-label">Đang Xử Lý</span>
+                  <span id="qcagProcessingCount" class="tab-count">0</span>
+                </button>
+                <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn">
+                  <span class="tab-label">Hoàn Thành</span>
+                  <span id="qcagDoneCount" class="tab-count">0</span>
+                </button>
               </div>
             </div>
 

@@ -229,7 +229,7 @@ function renderRequestList() {
         (requester.ssName || '').toLowerCase().includes(q) ||
         (r.outletName  || '').toLowerCase().includes(q) ||
         (r.outletCode  || '').toLowerCase().includes(q) ||
-        (r.address     || '').toLowerCase().includes(q);
+        (r.designFilename || '').toLowerCase().includes(q);
     });
   }
 

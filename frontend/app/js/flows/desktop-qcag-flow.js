@@ -9,6 +9,7 @@ let _qcagDesktopStatusFilter = 'processing';
 let _qcagDesktopRegionFilter = 'all';
 let _qcagDesktopSearchQuery = '';
 let _qcagDesktopCurrentId = null;
+let _qcagDesktopOpenRequestSnapshot = null; // Snapshot of request when opened to freeze list position
 let _qcagDesktopPendingCommentImages = [];
 let _qcagCommentsCollapsed = false; // collapsible comment panel state
 let _qcagDesktopSearchDebounce = null;
@@ -1275,18 +1276,23 @@ function getQCAGDesktopVisibleRequests() {
   let list = (allRequests || []).slice();
   const hasSearch = !!_qcagDesktopSearchQuery;
 
+  // Wrap items so we filter and sort based on the snapshot (if it's the active request),
+  // but keep the actual updated object for rendering.
+  let wrapped = list.map(r => {
+    const sortKey = (r.__backendId === _qcagDesktopCurrentId && _qcagDesktopOpenRequestSnapshot)
+      ? _qcagDesktopOpenRequestSnapshot
+      : r;
+    return { actual: r, sortKey };
+  });
+
   // Apply status filter:
-  //   'done'       → completed items WITHOUT a pending edit request
-  //   'processing' → items still needing action OR has pending edit request (even if previously done)
   if (!hasSearch && _qcagDesktopStatusFilter === 'done') {
-    // Show only items explicitly marked done (and not pulled back for editing)
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       const status = String(r.status || 'pending').toLowerCase();
       const isDone = status === 'done' || status === 'processed';
       if (!isDone) return false;
-      // Warranty type doesn't need MQ to be considered done
       if (String(r.type || '').toLowerCase() === 'warranty') return true;
-      // Only treat as done if it has MQ and is explicitly done; edits pull back to processing
       const designImgs = qcagDesktopParseJson(r.designImages, []);
       const hasMq = Array.isArray(designImgs) && designImgs.length > 0;
       const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
@@ -1296,7 +1302,8 @@ function getQCAGDesktopVisibleRequests() {
 
   // Only show requests based on the active tab (type) and processing rules
   if (!hasSearch && _qcagDesktopFilterType === 'new') {
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       const typeMatch = String(r.type || '').toLowerCase() === 'new';
       if (!typeMatch) return false;
       if (_qcagDesktopStatusFilter === 'done') return true;
@@ -1306,17 +1313,16 @@ function getQCAGDesktopVisibleRequests() {
       const needsMq = designImgs.length === 0;
       const needsEdit = qcagDesktopIsPendingEditRequest(r);
       const hasDesignAwaitingConfirm = Array.isArray(designImgs) && designImgs.length > 0 && !isDone;
-      // Show items needing MQ, edits, or those with MQ awaiting confirmation in processing
       return needsEdit || needsMq || hasDesignAwaitingConfirm;
     });
   } else if (!hasSearch && _qcagDesktopFilterType === 'warranty') {
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       const t = String(r.type || '').toLowerCase();
       if (t !== 'warranty') return false;
       if (_qcagDesktopStatusFilter === 'done') return true;
       const status = String(r.status || 'pending').toLowerCase();
       const isDone = status === 'done' || status === 'processed';
-      // Show all non-done warranty requests in the processing tab
       return !isDone;
     });
   }
@@ -1335,7 +1341,8 @@ function getQCAGDesktopVisibleRequests() {
       'all': /.*/
     };
     const pattern = regionPatterns[token] || new RegExp(token.replace(/[^a-z0-9]/g, ''), 'i');
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       const requester = qcagDesktopParseJson(r.requester, {});
       const regionRaw = String(requester.region || r.region || '');
       return pattern.test(regionRaw);
@@ -1344,26 +1351,30 @@ function getQCAGDesktopVisibleRequests() {
 
   if (_qcagDesktopSearchQuery) {
     const q = _qcagDesktopSearchQuery;
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       const requester = qcagDesktopParseJson(r.requester, {});
       return String(r.tkCode || '').toLowerCase().includes(q) ||
         String(requester.saleName || requester.saleCode || requester.phone || '').toLowerCase().includes(q) ||
         String(requester.ssName || '').toLowerCase().includes(q) ||
         String(r.outletName || '').toLowerCase().includes(q) ||
         String(r.outletCode || '').toLowerCase().includes(q) ||
-        String(r.address || '').toLowerCase().includes(q);
+        String(r.designFilename || '').toLowerCase().includes(q);
     });
   }
 
   if (_qcagDesktopYearFilter !== null && !_qcagDesktopSearchQuery) {
-    list = list.filter(r => {
+    wrapped = wrapped.filter(w => {
+      const r = w.sortKey;
       try { return new Date(r.createdAt || 0).getFullYear() === _qcagDesktopYearFilter; }
       catch (e) { return true; }
     });
   }
 
   if (_qcagDesktopSortMode === 'sale') {
-    list.sort((a, b) => {
+    wrapped.sort((wa, wb) => {
+      const a = wa.sortKey;
+      const b = wb.sortKey;
       const ra = qcagDesktopParseJson(a.requester, {});
       const rb = qcagDesktopParseJson(b.requester, {});
       const na = String(ra.saleName || ra.phone || '').toLowerCase();
@@ -1371,22 +1382,25 @@ function getQCAGDesktopVisibleRequests() {
       return na.localeCompare(nb, 'vi');
     });
   } else if (_qcagDesktopSortMode === 'tag') {
-    list.sort((a, b) => {
-      const badgeA = qcagDesktopStatusBadge(a);
-      const badgeB = qcagDesktopStatusBadge(b);
+    wrapped.sort((wa, wb) => {
+      const a = wa.sortKey;
+      const b = wb.sortKey;
+      const badgeA = qcagDesktopGetCleanRequestBadge(a);
+      const badgeB = qcagDesktopGetCleanRequestBadge(b);
       const labelA = badgeA ? (badgeA.label || '') : '';
       const labelB = badgeB ? (badgeB.label || '') : '';
       
       const tagPriority = {
-        'Chờ thiết kế': 1,
-        'Chờ chỉnh sửa': 2,
-        'Chờ xác nhận': 3,
-        'Chờ xử lý': 4,
-        'Đang xử lý': 5,
-        'Chờ kiểm tra': 6,
-        'Ngoài phạm vi BH': 7,
-        'Đã Bảo hành': 8,
-        'Hoàn thành': 9
+        'Chờ khảo sát': 1,
+        'Chờ thiết kế': 2,
+        'Chờ chỉnh sửa': 3,
+        'Chờ xác nhận': 4,
+        'Chờ xử lý': 5,
+        'Đang xử lý': 6,
+        'Chờ kiểm tra': 7,
+        'Ngoài phạm vi BH': 8,
+        'Đã Bảo hành': 9,
+        'Hoàn thành': 10
       };
       
       const prioA = tagPriority[labelA] || 999;
@@ -1405,14 +1419,20 @@ function getQCAGDesktopVisibleRequests() {
       return timeB - timeA;
     });
   } else {
-    list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    wrapped.sort((wa, wb) => {
+      const a = wa.sortKey;
+      const b = wb.sortKey;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
   }
+
+  const result = wrapped.map(w => w.actual);
   // Enrich each request with standardized tags (non-destructive)
   try {
-    const enriched = list.map(r => ({ ...r, standardTags: assignStandardTags(r) }));
+    const enriched = result.map(r => ({ ...r, standardTags: assignStandardTags(r) }));
     return enriched;
   } catch (e) {
-    return list;
+    return result;
   }
 }
 
@@ -1523,6 +1543,16 @@ function qcagDesktopSetStatusFilter(status) {
     const detailBtn = document.getElementById(`detailStatus${s === 'processing' ? 'Processing' : 'Done'}`);
     if (detailBtn) detailBtn.classList.toggle('active', isActive);
   });
+  const slideBg = document.getElementById('qcagStatusSlideBg');
+  if (slideBg) {
+    if (_qcagDesktopStatusFilter === 'processing') {
+      slideBg.classList.add('left-active');
+      slideBg.classList.remove('right-active');
+    } else {
+      slideBg.classList.add('right-active');
+      slideBg.classList.remove('left-active');
+    }
+  }
   renderQCAGDesktopList();
 
   // When switching between status tabs, clear the currently shown detail
@@ -1600,10 +1630,34 @@ function qcagDesktopUpdateFilterCounts() {
   const warrantyCount = list.filter(r => matchesStatusForType(r, 'warranty')).length;
   // Compute processing vs done counts for the top-left status tabs
   const processingCount = list.filter(r => {
-    try { const st = String(r.status || 'pending').toLowerCase(); return !(st === 'done' || st === 'processed'); } catch (e) { return false; }
+    try {
+      const t = String(r.type || '').toLowerCase();
+      const status = String(r.status || 'pending').toLowerCase();
+      const isDone = status === 'done' || status === 'processed';
+      if (t === 'new') {
+        const designImgs = qcagDesktopParseJson(r.designImages, []);
+        const needsMq = designImgs.length === 0;
+        const needsEdit = qcagDesktopIsPendingEditRequest(r);
+        const hasDesignAwaitingConfirm = Array.isArray(designImgs) && designImgs.length > 0 && !isDone;
+        return needsEdit || needsMq || hasDesignAwaitingConfirm;
+      }
+      return !isDone;
+    } catch (e) { return false; }
   }).length;
   const doneCount = list.filter(r => {
-    try { const st = String(r.status || 'pending').toLowerCase(); return (st === 'done' || st === 'processed'); } catch (e) { return false; }
+    try {
+      const t = String(r.type || '').toLowerCase();
+      const status = String(r.status || 'pending').toLowerCase();
+      const isDone = status === 'done' || status === 'processed';
+      if (t === 'new') {
+        if (!isDone) return false;
+        const designImgs = qcagDesktopParseJson(r.designImages, []);
+        const hasMq = Array.isArray(designImgs) && designImgs.length > 0;
+        const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
+        return hasMq && !hasEditRequest;
+      }
+      return isDone;
+    } catch (e) { return false; }
   }).length;
   // Also compute pending warranty (non-done) to use for alerting the tab
   const pendingWarrantyCount = list.filter(r => {
@@ -2243,6 +2297,17 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
     ? qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(updatedRequest.acceptanceImages, []))
     : qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(updatedRequest.designImages, []));
 
+  // Update filename title in-place
+  const filenameEl = document.getElementById('qcagMQFilenameTitle');
+  if (filenameEl) {
+    if (!_isWarrantyRefresh && updatedRequest && updatedRequest.designFilename) {
+      const cleanName = updatedRequest.designFilename.replace(/\.[^/.]+$/, "");
+      filenameEl.textContent = `(${cleanName})`;
+    } else {
+      filenameEl.textContent = '';
+    }
+  }
+
   // Rebuild thumb grid in-place
   const previewEl = document.getElementById('qcagMQPreview');
   if (previewEl) {
@@ -2641,6 +2706,13 @@ function qcagDesktopAttachCommentPaste() {
     }
     // Don't prevent default so text paste still works
   });
+
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      qcagDesktopSendComment();
+    }
+  });
 }
 
 function qcagDesktopRenderCommentPreview() {
@@ -2792,6 +2864,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
   const isSameReq = _qcagDesktopCurrentId === id;
   _qcagDesktopCurrentId = id;
   currentDetailRequest = request;
+  if (!isSameReq) {
+    _qcagDesktopOpenRequestSnapshot = request ? JSON.parse(JSON.stringify(request)) : null;
+  }
   if (!keepPendingComment) _qcagDesktopPendingCommentImages = [];
 
   // Save current scroll before re-render so list doesn't jump to top
@@ -2944,7 +3019,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
         <div class="qcag-card">
           <div class="qcag-actions qcag-split-cards">
             <div class="qcag-subcard">
-              <div class="qcag-card-title">${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}</div>
+              <div class="qcag-card-title">${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}<span id="qcagMQFilenameTitle" class="qcag-mq-filename text-xs font-normal text-gray-500 ml-2" style="color: #6b7280; font-size: 12px; font-weight: normal; margin-left: 8px;">${(!isWarranty && request.designFilename) ? `(${escapeHtml(request.designFilename.replace(/\.[^/.]+$/, ""))})` : ''}</span></div>
               <div class="qcag-subcard-body">
                 <div class="qcag-action-block">
                   <label class="qcag-upload-square" title="${isWarranty ? 'Upload ảnh nghiệm thu' : 'Upload MQ thiết kế'}">
@@ -3012,18 +3087,25 @@ async function openQCAGDesktopRequest(id, keepPendingComment) {
                     const editedClass = showEdited ? 'qcag-mq-edited' : 'qcag-mq-edited qcag-mq-empty';
 
                     const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(request);
+                    const isPendingEdit = qcagDesktopIsPendingEditRequest(request);
+                    const reqStatus = String(request.status || '').toLowerCase();
+                    const isDone = (reqStatus === 'done' || reqStatus === 'processed') && !isPendingEdit;
+
                     const showCompleteBtn = _qcagDesktopStatusFilter !== 'done';
-                    const completeDisabled = designImgs.length === 0 || isSurveySizeIncomplete;
-                    const completeTitle = isSurveySizeIncomplete
-                      ? 'Vui l\u00f2ng x\u00e1c nh\u1eadn k\u00edch th\u01b0\u1edbc kh\u1ea3o s\u00e1t tr\u01b0\u1edbc khi ho\u00e0n th\u00e0nh'
-                      : (designImgs.length === 0 ? escapeHtml(completeBtnDisabledTitle) : '');
+                    const completeDisabled = isDone || designImgs.length === 0 || isSurveySizeIncomplete;
+                    const completeTitle = isDone
+                      ? 'Yêu cầu đã hoàn thành'
+                      : (isSurveySizeIncomplete
+                        ? 'Vui l\u00f2ng x\u00e1c nh\u1eadn k\u00edch th\u01b0\u1edbc kh\u1ea3o s\u00e1t tr\u01b0\u1edbc khi ho\u00e0n th\u00e0nh'
+                        : (designImgs.length === 0 ? escapeHtml(completeBtnDisabledTitle) : ''));
 
                     const warning = isSurveySizeIncomplete
                       ? '<div class="qcag-survey-warning">Vui l\u00f2ng x\u00e1c nh\u1eadn k\u00edch th\u01b0\u1edbc kh\u1ea3o s\u00e1t tr\u01b0\u1edbc khi ho\u00e0n th\u00e0nh.</div>'
                       : '';
 
+                    const finalBtnLabel = isDone ? 'Đã hoàn thành' : completeBtnLabel;
                     const btn = showCompleteBtn
-                      ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}" ${completeDisabled ? `disabled title="${completeTitle}"` : ''}>${escapeHtml(completeBtnLabel)}</button>`
+                      ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}" ${completeDisabled ? `disabled title="${completeTitle}"` : ''}>${escapeHtml(finalBtnLabel)}</button>`
                       : '';
 
                     return `<div class="qcag-mq-footer-left"><div class="${creatorClass}">${creatorLine}</div><div class="${editedClass}">${editedLine}</div>${warning}</div><div class="qcag-mq-footer-right">${btn}</div>`;
@@ -3316,6 +3398,7 @@ async function qcagDesktopUploadMQ(input) {
   const updated = {
     ...currentDetailRequest,
     designImages: JSON.stringify([dataUrl]),
+    designFilename: file.name,
     designUpdatedAt: new Date().toISOString(),
     // Track who last uploaded/edited the MQ (updated on every upload)
     designLastEditedBy: currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG',
@@ -3637,7 +3720,7 @@ async function qcagDesktopRemoveDesignImage(index) {
   const imgs = qcagDesktopParseJson(currentDetailRequest.designImages, []);
   if (!Array.isArray(imgs) || index < 0 || index >= imgs.length) return;
   imgs.splice(index, 1);
-  const updated = { ...currentDetailRequest, designImages: JSON.stringify(imgs), updatedAt: new Date().toISOString() };
+  const updated = { ...currentDetailRequest, designImages: JSON.stringify(imgs), designFilename: '', updatedAt: new Date().toISOString() };
   const ok = await qcagDesktopPersistRequest(updated, 'Đã xóa ảnh MQ', true);
   if (ok) qcagDesktopRefreshMQInPlace(updated);
 }

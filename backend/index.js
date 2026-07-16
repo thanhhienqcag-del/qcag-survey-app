@@ -941,26 +941,9 @@ async function initDbWithRetry() {
 // and automatically re-initializes if the pool is in a broken state.
 let _keepAliveTimer = null;
 function startDbKeepAlive() {
-    if (_keepAliveTimer) return; // already running
-    const INTERVAL_MS = 4 * 60 * 1000; // 4 minutes
-    _keepAliveTimer = setInterval(async () => {
-        try {
-            await pool.query('SELECT 1');
-            dbReady = true;
-            dbLastOkAt = Date.now();
-            dbLastError = null;
-        } catch (err) {
-            const msg = err && err.message ? err.message : String(err);
-            console.warn('[db-keepalive] ping failed:', msg);
-            dbReady = false;
-            dbLastError = msg;
-            // Re-init pool on next request via ensureDbInitStarted
-            dbInitPromise = null;
-        }
-    }, INTERVAL_MS);
-    // Allow Node process to exit even if this timer is running
-    if (_keepAliveTimer.unref) _keepAliveTimer.unref();
-    console.log('[db-keepalive] started (interval: 4 min)');
+    // Disabled: Polling every 4 minutes keeps Neon DB awake 24/7 and incurs unnecessary compute costs.
+    // The connection pool (pg) will automatically recreate connections if they drop while the DB sleeps.
+    console.log('[db-keepalive] disabled to allow Neon DB to suspend and save costs');
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2314,6 +2297,7 @@ function ksRowToApp(row, lightweight = false) {
         designCreatedAt:     safeIsoDate(row.design_created_at),
         designLastEditedBy:  row.design_last_edited_by  || null,
         designLastEditedAt:  safeIsoDate(row.design_last_edited_at),
+        designFilename:      row.design_filename || '',
         createdAt:           safeIsoDate(row.created_at),
         updatedAt:           safeIsoDate(row.updated_at),
     };
@@ -2325,6 +2309,7 @@ const KS_REQUESTS_SELECT_SQL = `
            old_content, old_content_extra, status, requester, comments,
            editing_requested_at, mq_folder, created_at, updated_at,
            design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
+           design_filename,
            CASE WHEN design_images IS NOT NULL AND length(design_images) > 4 AND design_images != '[]' THEN '["..."]' ELSE '[]' END as design_images,
            CASE WHEN status_images IS NOT NULL AND length(status_images) > 4 AND status_images != '[]' THEN '["..."]' ELSE '[]' END as status_images,
            CASE WHEN acceptance_images IS NOT NULL AND length(acceptance_images) > 4 AND acceptance_images != '[]' THEN '["..."]' ELSE '[]' END as acceptance_images,
@@ -2524,10 +2509,57 @@ app.get('/api/ks/requests/:id', async (req, res) => {
     }
 });
 
+// --- Vietnamese Text Normalization Helpers ---
+function normalizeVietnameseAccents(str) {
+    if (typeof str !== 'string') return str;
+    let text = str.normalize('NFC');
+    const oaRules = [
+        [/oá(?![a-zA-Z])/g, 'óa'], [/oà(?![a-zA-Z])/g, 'òa'], [/oả(?![a-zA-Z])/g, 'ỏa'], [/oã(?![a-zA-Z])/g, 'õa'], [/oạ(?![a-zA-Z])/g, 'ọa'],
+        [/OÁ(?![a-zA-Z])/g, 'ÓA'], [/OÀ(?![a-zA-Z])/g, 'ÒA'], [/OẢ(?![a-zA-Z])/g, 'ỎA'], [/OÃ(?![a-zA-Z])/g, 'ÕA'], [/OẠ(?![a-zA-Z])/g, 'ỌA']
+    ];
+    for (const [pattern, replacement] of oaRules) {
+        text = text.replace(pattern, replacement);
+    }
+    const oeRules = [
+        [/oé(?![a-zA-Z])/g, 'óe'], [/oè(?![a-zA-Z])/g, 'òe'], [/oẻ(?![a-zA-Z])/g, 'ỏe'], [/oẽ(?![a-zA-Z])/g, 'õe'], [/oẹ(?![a-zA-Z])/g, 'ọe'],
+        [/OÉ(?![a-zA-Z])/g, 'ÓE'], [/OÈ(?![a-zA-Z])/g, 'ÒE'], [/OẺ(?![a-zA-Z])/g, 'ỎE'], [/OẼ(?![a-zA-Z])/g, 'ÕE'], [/OẸ(?![a-zA-Z])/g, 'ỌE']
+    ];
+    for (const [pattern, replacement] of oeRules) {
+        text = text.replace(pattern, replacement);
+    }
+    const uyMap = { 'uý': 'úy', 'uỳ': 'ùy', 'uỷ': 'ủy', 'uỹ': 'ũy', 'uỵ': 'ụy' };
+    text = text.replace(/([qQ]?)u([ýỳỷỹỵ])(?![nNcCtT])/g, (match, prefix, accent) => {
+        if (prefix) return match;
+        const key = 'u' + accent;
+        return uyMap[key] || match;
+    });
+    const uyMapUpper = { 'UÝ': 'ÚY', 'UỲ': 'ÙY', 'UỶ': 'ỦY', 'UỸ': 'ŨY', 'UỴ': 'ỤY' };
+    text = text.replace(/([qQ]?)U([ÝỲỶỸỴ])(?![nNcCtT])/g, (match, prefix, accent) => {
+        if (prefix) return match;
+        const key = 'U' + accent;
+        return uyMapUpper[key] || match;
+    });
+    return text;
+}
+
+function normalizePayloadStrings(obj) {
+    if (typeof obj === 'string') return normalizeVietnameseAccents(obj);
+    if (Array.isArray(obj)) return obj.map(item => normalizePayloadStrings(item));
+    if (obj !== null && typeof obj === 'object') {
+        const newObj = {};
+        for (const key in obj) {
+            newObj[key] = normalizePayloadStrings(obj[key]);
+        }
+        return newObj;
+    }
+    return obj;
+}
+// ---------------------------------------------
+
 // POST /api/ks/requests
 app.post('/api/ks/requests', async (req, res) => {
     try {
-        const b = req.body || {};
+        const b = normalizePayloadStrings(req.body || {});
         const now = new Date();
         const backendId = toNullableString(b.__backendId) || toNullableString(b.backendId) ||
             ('srv_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex'));
@@ -2672,7 +2704,7 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
 app.patch('/api/ks/requests/:id', async (req, res) => {
     try {
         const id = String(req.params.id || '').trim();
-        const b = req.body || {};
+        const b = normalizePayloadStrings(req.body || {});
         const now = new Date();
 
         let rows;
@@ -2713,6 +2745,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         maybeJson('comments',        'comments');
         maybeJson('requester',       'requester');
         maybeStr('status',           'status');
+        maybeStr('designFilename',   'design_filename');
         if ('editingRequestedAt' in b) {
             fields.push('editing_requested_at = ?');
             vals.push(b.editingRequestedAt ? new Date(b.editingRequestedAt) : null);

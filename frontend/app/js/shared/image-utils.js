@@ -113,9 +113,9 @@ async function _convertHeicToJpeg(heicFile) {
 // Default: max 1600px on longest side, quality 0.82 (~100-300KB per image).
 // WebP is 30-50% smaller than JPEG at similar quality.
 function _compressImageFile(file, maxDim, quality, forceJpeg) {
-  // Optimize dimensions and quality for significantly faster uploads (saves ~70% payload size)
-  maxDim  = (maxDim === 1600 || !maxDim) ? 1200 : maxDim;
-  quality = (quality === 0.82 || !quality) ? 0.72 : quality;
+  // Aggressively optimize dimensions and quality to achieve 2-3s submit times on mobile networks
+  maxDim  = (maxDim >= 1200 || !maxDim) ? 1024 : maxDim;
+  quality = (quality >= 0.72 || !quality) ? 0.65 : quality;
   return new Promise(function (resolve, reject) {
     function createObjectUrl(blob) {
       try {
@@ -474,6 +474,10 @@ function applyLocationToForm(loc) {
   if (latInput) latInput.value = loc.lat;
   if (lngInput) lngInput.value = loc.lng;
   if (sourceInput) sourceInput.value = loc.source;
+
+  try {
+    localStorage.setItem('ks_last_gps_location', JSON.stringify({ lat: loc.lat, lng: loc.lng }));
+  } catch (e) {}
 
   if (typeof setLocationPreview === 'function') {
     const labelText = loc.source === 'device_gps' ? 'GPS Thiết bị' : 'Đọc từ ảnh (EXIF)';

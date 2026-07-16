@@ -651,6 +651,8 @@
       if (id != null) indexById[String(id)] = i;
     }
 
+    var toAdd = [];
+    var addedKeys = {};
     for (var j = 0; j < incoming.length; j++) {
       var next = incoming[j] || {};
       var nid = next.__backendId || next.id;
@@ -668,9 +670,16 @@
         _store[idx] = merged;
         changed = true;
       } else {
-        _store.unshift(next);
-        changed = true;
+        if (!addedKeys[key]) {
+          addedKeys[key] = true;
+          toAdd.push(next);
+          changed = true;
+        }
       }
+    }
+
+    if (toAdd.length > 0) {
+      _store = toAdd.concat(_store);
     }
 
     if (_store.length > _storeMaxRows) {
@@ -856,8 +865,32 @@
       };
     },
 
+    // Helper to deeply normalize strings in payload
+    _normalizePayloadStrings: function (obj) {
+      if (typeof obj === 'string') {
+        if (typeof window.normalizeVietnameseAccents === 'function') {
+          return window.normalizeVietnameseAccents(obj);
+        }
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(item => this._normalizePayloadStrings(item));
+      }
+      if (obj !== null && typeof obj === 'object') {
+        var newObj = {};
+        for (var key in obj) {
+          if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            newObj[key] = this._normalizePayloadStrings(obj[key]);
+          }
+        }
+        return newObj;
+      }
+      return obj;
+    },
+
     async create(newItem) {
       if (!newItem) return { isOk: false };
+      newItem = this._normalizePayloadStrings(newItem);
       if (!newItem.__backendId) {
         newItem = Object.assign({}, newItem, {
           __backendId: 'srv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
@@ -894,6 +927,7 @@
 
     async update(updated) {
       if (!updated || !updated.__backendId) return { isOk: false };
+      updated = this._normalizePayloadStrings(updated);
       try {
         var response = await _fetchJsonWithRetry('/api/ks/requests/' + encodeURIComponent(updated.__backendId), {
           method: 'PATCH',

@@ -66,10 +66,21 @@ function initLeafletMap() {
     return;
   }
 
-  const defaultCenter = hasCoords ? [latVal, lngVal] : [10.7769, 106.7009];
+  let cachedCenter = null;
+  try {
+    const cached = localStorage.getItem('ks_last_gps_location');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.lat && parsed.lng) {
+        cachedCenter = [parseFloat(parsed.lat), parseFloat(parsed.lng)];
+      }
+    }
+  } catch (e) {}
+
+  const defaultCenter = hasCoords ? [latVal, lngVal] : (cachedCenter ? cachedCenter : [10.7769, 106.7009]);
   // Create map with increased maxZoom to allow deeper zoom levels (will upscale tiles
   // if provider doesn't supply native tiles at that zoom).
-  lMap = L.map('mapContainer', { zoomControl: true, maxZoom: 25 }).setView(defaultCenter, hasCoords ? 18 : 17);
+  lMap = L.map('mapContainer', { zoomControl: true, maxZoom: 25 }).setView(defaultCenter, hasCoords ? 18 : (cachedCenter ? 15 : 17));
 
   _osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; OpenStreetMap contributors',
@@ -108,10 +119,29 @@ function initLeafletMap() {
   // Auto-center on current GPS if no saved location
   if (!hasCoords && navigator.geolocation) {
     navigator.geolocation.getCurrentPosition((pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      try {
+        localStorage.setItem('ks_last_gps_location', JSON.stringify({ lat, lng }));
+      } catch (e) {}
       if (!pickedLatLng && lMap) {
-        lMap.setView([pos.coords.latitude, pos.coords.longitude], 15);
+        lMap.setView([lat, lng], 15);
+        if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
+        else lMarker.setLatLng([lat, lng]);
+        pickedLatLng = { lat, lng };
+        document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        _updateSaveBtn();
+        reverseGeocode(lat, lng, (addr) => {
+          if (addr) document.getElementById('pickedCoords').textContent = addr;
+        });
       }
-    }, () => {}, { timeout: 8000, enableHighAccuracy: false });
+    }, (err) => {
+      console.warn('[GPS] Map auto-center geolocation error:', err);
+      // Only alert if we don't even have a cached center, or if permission denied explicitly
+      if (err.code === 1) {
+        showToast('Bị từ chối quyền định vị. Vui lòng cấp quyền vị trí trong cài đặt trình duyệt.');
+      }
+    }, { timeout: 8000, enableHighAccuracy: true });
   }
 
   lMap.on('click', function (e) {
@@ -237,6 +267,9 @@ function useCurrentLocation() {
   navigator.geolocation.getCurrentPosition((pos) => {
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
+    try {
+      localStorage.setItem('ks_last_gps_location', JSON.stringify({ lat, lng }));
+    } catch (e) {}
     document.getElementById('outletLat').value = lat;
     document.getElementById('outletLng').value = lng;
     statusEl.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
@@ -320,6 +353,9 @@ function _fallbackCopy(text) {
 
 function savePickedLocation() {
   if (!pickedLatLng) { showToast('Bạn vui lòng chọn định vị điểm bán trước'); return; }
+  try {
+    localStorage.setItem('ks_last_gps_location', JSON.stringify({ lat: pickedLatLng.lat, lng: pickedLatLng.lng }));
+  } catch (e) {}
   document.getElementById('outletLat').value = pickedLatLng.lat;
   document.getElementById('outletLng').value = pickedLatLng.lng;
   const locSourceEl = document.getElementById('locationSource');
@@ -416,6 +452,9 @@ function locateMeOnMap() {
   navigator.geolocation.getCurrentPosition((pos) => {
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
+    try {
+      localStorage.setItem('ks_last_gps_location', JSON.stringify({ lat, lng }));
+    } catch (e) {}
     lMap.setView([lat, lng], 16);
     if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
     else lMarker.setLatLng([lat, lng]);

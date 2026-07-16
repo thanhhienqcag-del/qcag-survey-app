@@ -133,7 +133,7 @@
         return String(r.tkCode || '').toLowerCase().includes(q) ||
           String(r.outletCode || '').toLowerCase().includes(q) ||
           String(r.outletName || '').toLowerCase().includes(q) ||
-          String(r.address || '').toLowerCase().includes(q);
+          String(r.designFilename || '').toLowerCase().includes(q);
       });
     }
 

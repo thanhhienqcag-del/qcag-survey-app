@@ -148,3 +148,50 @@ document.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeAllCustomSelects();
 });
+
+function normalizeVietnameseAccents(str) {
+  if (typeof str !== 'string') return str;
+
+  // Chuyển chuỗi về dạng Unicode dựng sẵn NFC chuẩn
+  let text = str.normalize('NFC');
+
+  // 1. Chuẩn hóa tổ hợp "oa" (oá, oà, oả, oã, oạ -> óa, òa, ỏa, õa, ọa)
+  // Chỉ áp dụng ở cuối âm tiết (không đứng trước phụ âm/nguyên âm kết thúc như n, ng, t, c, ch, i, y)
+  const oaRules = [
+    [/oá(?![a-zA-Z])/g, 'óa'], [/oà(?![a-zA-Z])/g, 'òa'], [/oả(?![a-zA-Z])/g, 'ỏa'], [/oã(?![a-zA-Z])/g, 'õa'], [/oạ(?![a-zA-Z])/g, 'ọa'],
+    [/OÁ(?![a-zA-Z])/g, 'ÓA'], [/OÀ(?![a-zA-Z])/g, 'ÒA'], [/OẢ(?![a-zA-Z])/g, 'ỎA'], [/OÃ(?![a-zA-Z])/g, 'ÕA'], [/OẠ(?![a-zA-Z])/g, 'ỌA']
+  ];
+  for (const [pattern, replacement] of oaRules) {
+    text = text.replace(pattern, replacement);
+  }
+
+  // 2. Chuẩn hóa tổ hợp "oe" (oé, oè, oẻ, oẽ, oẹ -> óe, òe, ỏe, õe, ọe)
+  // Chỉ áp dụng ở cuối âm tiết (không đứng trước phụ âm kết thúc như n, t, c)
+  const oeRules = [
+    [/oé(?![a-zA-Z])/g, 'óe'], [/oè(?![a-zA-Z])/g, 'òe'], [/oẻ(?![a-zA-Z])/g, 'ỏe'], [/oẽ(?![a-zA-Z])/g, 'õe'], [/oẹ(?![a-zA-Z])/g, 'ọe'],
+    [/OÉ(?![a-zA-Z])/g, 'ÓE'], [/OÈ(?![a-zA-Z])/g, 'ÒE'], [/OẺ(?![a-zA-Z])/g, 'ỎE'], [/OẼ(?![a-zA-Z])/g, 'ÕE'], [/OẸ(?![a-zA-Z])/g, 'ỌE']
+  ];
+  for (const [pattern, replacement] of oeRules) {
+    text = text.replace(pattern, replacement);
+  }
+
+  // 3. Chuẩn hóa tổ hợp "uy" (uý, uỳ, uỷ, uỹ, uỵ -> úy, ùy, ủy, ũy, cụy)
+  // Tránh sử dụng Negative Lookbehind (?<!...) để tương thích 100% với các thiết bị di động cũ (như iOS cũ)
+  // Ta sử dụng nhóm bắt giữ (capture groups) để kiểm tra nếu ký tự đứng trước là q/Q thì giữ nguyên
+  // Đồng thời dùng Negative Lookahead (?![nNcCtT]) để bảo vệ các từ kết thúc bằng phụ âm (ví dụ: Huỳnh, huých, huýt)
+  const uyMap = { 'uý': 'úy', 'uỳ': 'ùy', 'uỷ': 'ủy', 'uỹ': 'ũy', 'uỵ': 'ụy' };
+  text = text.replace(/([qQ]?)u([ýỳỷỹỵ])(?![nNcCtT])/g, (match, prefix, accent) => {
+    if (prefix) return match; // Nếu đi sau q/Q (ví dụ: quý, quỳ) -> giữ nguyên
+    const key = 'u' + accent;
+    return uyMap[key] || match;
+  });
+
+  const uyMapUpper = { 'UÝ': 'ÚY', 'UỲ': 'ÙY', 'UỶ': 'ỦY', 'UỸ': 'ŨY', 'UỴ': 'ỤY' };
+  text = text.replace(/([qQ]?)U([ÝỲỶỸỴ])(?![nNcCtT])/g, (match, prefix, accent) => {
+    if (prefix) return match;
+    const key = 'U' + accent;
+    return uyMapUpper[key] || match;
+  });
+
+  return text;
+}

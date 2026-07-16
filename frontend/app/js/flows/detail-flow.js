@@ -2504,16 +2504,40 @@ async function submitEditRequest() {
     finalText = `Yêu cầu chỉnh sửa được gửi từ ${qcName}\n\n${text}`;
   }
 
+  closeEditRequestSheet();
+  const imgs = _editRequestPendingImages.slice();
+  _editRequestPendingImages = [];
+
+  if (imgs.length > 0) {
+    showLoadingOverlay('Đang gửi yêu cầu chỉnh sửa...', 'Đang tải hình ảnh lên');
+  } else {
+    showLoadingOverlay('Đang gửi yêu cầu chỉnh sửa...', 'Vui lòng chờ trong giây lát');
+  }
+
+  // Upload images if any
+  let uploadedImgs = [];
+  if (imgs.length > 0 && window.dataSdk && window.dataSdk.uploadImage && backendId) {
+    for (const imgData of imgs) {
+      try {
+        const url = await window.dataSdk.uploadImage(imgData, null, backendId, 'comments');
+        uploadedImgs.push(url || imgData);
+      } catch (e) {
+        uploadedImgs.push(imgData);
+      }
+    }
+  } else {
+    uploadedImgs = imgs;
+  }
+
   const comment = {
     authorRole,
     authorName,
     text: finalText,
     commentType: 'edit-request',
     editCategories: [..._editRequestCategories],
-    ...(_editRequestPendingImages.length > 0 ? { images: [..._editRequestPendingImages] } : {}),
+    ...(uploadedImgs.length > 0 ? { images: uploadedImgs } : {}),
     createdAt: new Date().toISOString()
   };
-  _editRequestPendingImages = [];
   comments.push(comment);
 
   // Heineken and QCAG edit-requests must pull request back to processing and clear MQ
@@ -2539,9 +2563,6 @@ async function submitEditRequest() {
     ...extraFields,
     updatedAt: new Date().toISOString()
   };
-
-  closeEditRequestSheet();
-  showLoadingOverlay('Đang gửi yêu cầu chỉnh sửa...', 'Vui lòng chờ trong giây lát');
 
   if (window.dataSdk) {
     const result = await window.dataSdk.update(updated);
