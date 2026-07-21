@@ -276,15 +276,23 @@ async function initApp() {
               if (updated) {
                 const oldTs = currentDetailRequest.updatedAt ? new Date(currentDetailRequest.updatedAt).getTime() : 0;
                 const newTs = updated.updatedAt ? new Date(updated.updatedAt).getTime() : 0;
-                if (newTs !== oldTs) {
+                const oldCommentsLen = (currentDetailRequest.comments || '').length;
+                const newCommentsLen = (updated.comments || '').length;
+                const oldDesignLen = (currentDetailRequest.designImages || '').length;
+                const newDesignLen = (updated.designImages || '').length;
+                const hasChanged = (newTs !== oldTs) ||
+                                   (newCommentsLen !== oldCommentsLen) ||
+                                   (newDesignLen !== oldDesignLen) ||
+                                   (updated.status !== currentDetailRequest.status) ||
+                                   (updated.editingRequestedAt !== currentDetailRequest.editingRequestedAt);
+
+                if (hasChanged) {
                   if (typeof qcagDesktopGetFullRequest === 'function' && typeof _qcagDesktopInPlaceRefresh === 'function') {
                     qcagDesktopGetFullRequest(updated.__backendId).then(full => {
                       if (full) {
-                        // Don't downgrade status: if a confirm-complete PATCH arrived after
-                        // this fetch was issued (upload-SSE race), skip the stale update.
                         const statRank = s => (s === 'done' || s === 'processed') ? 2 : s === 'processing' ? 1 : 0;
                         const currS = String((currentDetailRequest && currentDetailRequest.__backendId === full.__backendId ? currentDetailRequest.status : '') || '').toLowerCase();
-                        if (statRank(currS) > statRank(String(full.status || '').toLowerCase())) return;
+                        if (statRank(currS) > statRank(String(full.status || '').toLowerCase()) && !full.editingRequestedAt) return;
                         currentDetailRequest = full;
                         if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(full);
                         _qcagDesktopInPlaceRefresh(full);

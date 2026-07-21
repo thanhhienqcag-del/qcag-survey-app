@@ -1272,6 +1272,20 @@ function qcagDesktopStatusBadge(req) {
   return { label: 'Chờ xử lý', cls: 'pending' };
 }
 
+function qcagDesktopGetDisplayBadge(req) {
+  if (!req) return { label: '', cls: '' };
+  try {
+    const statusBadge = qcagDesktopStatusBadge(req);
+    const stdTags = Array.isArray(req.standardTags) ? req.standardTags : (assignStandardTags(req) || []);
+    if (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1) {
+      return { label: 'Chờ khảo sát', cls: 'pending survey' };
+    }
+    return statusBadge;
+  } catch (e) {
+    return { label: '', cls: '' };
+  }
+}
+
 function getQCAGDesktopVisibleRequests() {
   let list = (allRequests || []).slice();
   const hasSearch = !!_qcagDesktopSearchQuery;
@@ -1385,35 +1399,11 @@ function getQCAGDesktopVisibleRequests() {
     wrapped.sort((wa, wb) => {
       const a = wa.sortKey;
       const b = wb.sortKey;
-      const badgeA = qcagDesktopGetCleanRequestBadge(a);
-      const badgeB = qcagDesktopGetCleanRequestBadge(b);
-      const labelA = badgeA ? (badgeA.label || '') : '';
-      const labelB = badgeB ? (badgeB.label || '') : '';
-      
-      const tagPriority = {
-        'Chờ khảo sát': 1,
-        'Chờ thiết kế': 2,
-        'Chờ chỉnh sửa': 3,
-        'Chờ xác nhận': 4,
-        'Chờ xử lý': 5,
-        'Đang xử lý': 6,
-        'Chờ kiểm tra': 7,
-        'Ngoài phạm vi BH': 8,
-        'Đã Bảo hành': 9,
-        'Hoàn thành': 10
-      };
-      
-      const prioA = tagPriority[labelA] || 999;
-      const prioB = tagPriority[labelB] || 999;
-      
-      if (prioA !== prioB) {
-        return prioA - prioB;
-      }
-      
-      if (prioA === 999 && prioB === 999 && labelA !== labelB) {
-        return labelA.localeCompare(labelB, 'vi');
-      }
-      
+      const badgeA = qcagDesktopGetDisplayBadge(a);
+      const badgeB = qcagDesktopGetDisplayBadge(b);
+      const ta = (badgeA && badgeA.label) || '';
+      const tb = (badgeB && badgeB.label) || '';
+      if (ta !== tb) return ta.localeCompare(tb, 'vi');
       const timeA = new Date(a.createdAt || 0).getTime();
       const timeB = new Date(b.createdAt || 0).getTime();
       return timeB - timeA;
@@ -1543,16 +1533,6 @@ function qcagDesktopSetStatusFilter(status) {
     const detailBtn = document.getElementById(`detailStatus${s === 'processing' ? 'Processing' : 'Done'}`);
     if (detailBtn) detailBtn.classList.toggle('active', isActive);
   });
-  const slideBg = document.getElementById('qcagStatusSlideBg');
-  if (slideBg) {
-    if (_qcagDesktopStatusFilter === 'processing') {
-      slideBg.classList.add('left-active');
-      slideBg.classList.remove('right-active');
-    } else {
-      slideBg.classList.add('right-active');
-      slideBg.classList.remove('left-active');
-    }
-  }
   renderQCAGDesktopList();
 
   // When switching between status tabs, clear the currently shown detail
@@ -1770,14 +1750,7 @@ function renderQCAGDesktopList() {
 
     const stdTags = Array.isArray(req.standardTags) ? req.standardTags : (assignStandardTags(req) || []);
 
-    // Determine the single display badge for the item (top-right).
-    // Priority: edit-request (handled in qcagDesktopStatusBadge) then survey if present.
-    let displayBadge = statusBadge;
-    try {
-      if (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1) {
-        displayBadge = { label: 'Chờ khảo sát', cls: 'pending survey' };
-      }
-    } catch (e) {}
+    const displayBadge = qcagDesktopGetDisplayBadge(req);
 
     // Waiting time badge: bottom-right, hidden ONLY for genuinely completed items
     // (statusBadge.cls === 'done' means: has MQ + status=done + no pending edit)
@@ -2276,18 +2249,34 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
     itemsSec.innerHTML = qcagDesktopBuildItemsHtml(items, canManageItems);
   }
 
-  // 2. Refresh comment timeline
+  // 2. Refresh comment timeline & badge
   const timeline = document.getElementById('qcagCommentTimeline');
+  const comments = qcagDesktopParseJson(updatedRequest.comments, []);
   if (timeline) {
-    const comments = qcagDesktopParseJson(updatedRequest.comments, []);
     timeline.innerHTML = comments.length > 0
       ? comments.map((c, idx) => qcagDesktopCommentHtml(c, comments, idx)).join('')
       : '<div class="qcag-detail-muted">Chưa có bình luận</div>';
     setTimeout(() => { if (timeline) timeline.scrollTop = timeline.scrollHeight; }, 30);
   }
 
-  // 3. Refresh MQ preview + complete button + left list (một lần duy nhất)
+  const expandTab = document.getElementById('qcagExpandCommentsTab');
+  if (expandTab) {
+    expandTab.innerHTML = `
+      ${comments.length > 0 ? `<span class="qcag-comments-count-badge">${comments.length}</span>` : ''}
+      <span class="qcag-expand-comments-tab-label">Bình luận ▸</span>
+    `;
+  }
+
+  // 3. Refresh MQ preview + complete button
   qcagDesktopRefreshMQInPlace(updatedRequest);
+
+  // 4. Refresh old designs section for this outlet
+  if (updatedRequest.__backendId) {
+    qcagDesktopRefreshOldDesignSection(updatedRequest.__backendId);
+  }
+
+  // 5. Refresh sidebar request list
+  renderQCAGDesktopList();
 }
 
 // ── In-place MQ section refresh (no scroll jump) ─────────────────────
@@ -2704,7 +2693,6 @@ function qcagDesktopAttachCommentPaste() {
         reader.readAsDataURL(file);
       }
     }
-    // Don't prevent default so text paste still works
   });
 
   ta.addEventListener('keydown', (e) => {
@@ -2717,7 +2705,8 @@ function qcagDesktopAttachCommentPaste() {
 
 function qcagDesktopRenderCommentPreview() {
   const wrap = document.getElementById('qcagCommentUploadPreview');
-  if (!wrap) return;  if (_qcagDesktopPendingCommentImages.length === 0) {
+  if (!wrap) return;
+  if (_qcagDesktopPendingCommentImages.length === 0) {
     wrap.innerHTML = '';
     wrap.classList.add('hidden');
     return;
@@ -2731,52 +2720,62 @@ function qcagDesktopRenderCommentPreview() {
   `).join('');
 }
 
-// ── Old design carousel helpers ─────────────────────────────────────
-
-/**
- * Builds a map of { backendId → tkCode } for all loaded requests.
- * Uses _qcagRequestCodeCache to avoid re-building on every render;
- * the cache is invalidated whenever _qcagRequestsVersion changes.
- */
-function qcagDesktopComputeRequestCodes() {
-  if (_qcagRequestCodeCache.version === _qcagRequestsVersion) {
-    return _qcagRequestCodeCache.codes;
-  }
-  const codes = {};
-  (allRequests || []).forEach(function(r) {
-    if (r.__backendId) codes[r.__backendId] = r.tkCode || '';
-  });
-  _qcagRequestCodeCache = { version: _qcagRequestsVersion, codes: codes };
-  return codes;
-}
-
-/**
- * Returns all completed requests for the same outlet that have MQ images,
- * excluding the current request. Sorted oldest first.
- */
 function ksGetOldDesignsForOutlet(currentReq) {
   if (!currentReq || !currentReq.outletCode) return [];
   const outletCode = String(currentReq.outletCode).trim().toLowerCase();
   // New Outlet requests have no real outlet code — never show old designs for them
   if (outletCode === 'new outlet') return [];
   const currentId = currentReq.__backendId;
-  return (allRequests || [])
+  const candidates = (allRequests || [])
     .filter(r => {
-      if (r.__backendId === currentId) return false;
+      if (!r || r.__backendId === currentId) return false;
       // Exclude 'New Outlet' entries from appearing as past designs
       if (String(r.outletCode || '').trim().toLowerCase() === 'new outlet') return false;
       if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return false;
       const status = String(r.status || '').toLowerCase();
       if (status !== 'done' && status !== 'processed') return false;
-      // Prefer cached full version for image check (avoids placeholder '["..."]')
+      return true;
+    });
+
+  // Pre-fetch any unfetched candidate requests in background so past design images appear automatically
+  candidates.forEach(r => {
+    if (r && r.__backendId && typeof _qcagDesktopFullRequestCache !== 'undefined' && !_qcagDesktopFullRequestCache[r.__backendId]) {
+      if (typeof qcagDesktopGetFullRequest === 'function') {
+        qcagDesktopGetFullRequest(r.__backendId).then(full => {
+          if (full && currentDetailRequest && currentDetailRequest.__backendId === currentId) {
+            qcagDesktopRefreshOldDesignSection(currentId);
+          }
+        }).catch(() => {});
+      }
+    }
+  });
+
+  return candidates
+    .filter(r => {
       const src = (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[r.__backendId]) || r;
       const imgs = qcagDesktopParseJson(src.designImages, []);
-      // Consider a placeholder value '["..."]' as empty
+      if (imgs.length === 1 && imgs[0] === '...') return true;
       if (!Array.isArray(imgs) || imgs.length === 0) return false;
-      if (imgs.length === 1 && imgs[0] === '...') return false;
       return true;
     })
     .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+}
+
+function qcagDesktopRefreshOldDesignSection(currentId) {
+  if (!currentDetailRequest || currentDetailRequest.__backendId !== currentId) return;
+  const section = document.getElementById('qcagOldDesignSection');
+  if (!section) return;
+  try {
+    const oldList = ksGetOldDesignsForOutlet(currentDetailRequest);
+    if (oldList.length === 0) {
+      section.innerHTML = '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
+      return;
+    }
+    const codeMap = qcagDesktopComputeRequestCodes();
+    section.innerHTML = qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
+  } catch (e) {
+    console.error('qcagOldDesignSection refresh error', e);
+  }
 }
 
 /**
@@ -2840,12 +2839,11 @@ function qcagOldDesignGo(dir) {
   }
 }
 
-async function openQCAGDesktopRequest(id, keepPendingComment) {
+async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
   if (!shouldUseQCAGDesktop()) return;
 
-  // Avoid forcing image re-load when clicking the already selected item.
-  // (Keeps status/old-content previews stable unless user selects a different request.)
-  if (id && id === _qcagDesktopCurrentId) {
+  // Avoid forcing image re-load when clicking the already selected item unless forceRerender is true.
+  if (id && id === _qcagDesktopCurrentId && !forceRerender) {
     return;
   }
 

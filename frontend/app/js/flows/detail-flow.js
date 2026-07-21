@@ -2583,8 +2583,7 @@ async function submitEditRequest() {
             }
             if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
             if (typeof openQCAGDesktopRequest === 'function') {
-              window._qcagDesktopCurrentId = null;
-              openQCAGDesktopRequest(backendId);
+              openQCAGDesktopRequest(backendId, false, true);
             }
           }
         } catch (e) { /* non-fatal */ }
@@ -2602,8 +2601,7 @@ async function submitEditRequest() {
     showToast('Đã gửi yêu cầu chỉnh sửa (lưu local)');
     if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
       if (typeof openQCAGDesktopRequest === 'function') {
-        window._qcagDesktopCurrentId = null;
-        openQCAGDesktopRequest(backendId);
+        openQCAGDesktopRequest(backendId, false, true);
       }
     } else {
       showRequestDetail(backendId);

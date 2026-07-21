@@ -566,6 +566,21 @@
     throw errLast || new Error('Request failed for ' + path);
   }
 
+  var _pollTimer = null;
+  function _startBackgroundPolling() {
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(function () {
+      try {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+          window.dataSdk.refresh().catch(function (e) {
+            console.warn('[dataSdk] bg poll error:', e);
+          });
+        }
+      } catch (e) {}
+    }, 4000);
+  }
+
   function _cloneStoreRows() {
     return _store.map(function (x) { return Object.assign({}, x); });
   }
@@ -769,8 +784,8 @@
           }
         }
 
-        // Setup SSE listener for realtime invalidation events (with reconnect).
-        try { _openSse(); } catch (e) {}
+        // Setup background polling timer for realtime updates across users
+        try { _startBackgroundPolling(); } catch (e) {}
 
         return { isOk: true };
       } catch (e) {

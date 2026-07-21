@@ -597,16 +597,10 @@
         <main class="qcag-desktop-main">
           <aside class="qcag-desktop-list-panel">
             <div class="qcag-status-tabs">
-              <div class="qcag-status-tabs-container">
-                <div id="qcagStatusSlideBg" class="qcag-active-slide-bg left-active"></div>
-                <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn active">
-                  <span class="tab-label">Đang Xử Lý</span>
-                  <span id="qcagProcessingCount" class="tab-count">0</span>
-                </button>
-                <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn">
-                  <span class="tab-label">Hoàn Thành</span>
-                  <span id="qcagDoneCount" class="tab-count">0</span>
-                </button>
+              <div class="flex items-center justify-between bg-gray-100 rounded-lg p-1 text-sm gap-3">
+                <button id="qcagStatusProcessing" onclick="qcagDesktopSetStatusFilter('processing')" class="qcag-status-btn px-3 py-1 rounded-md active">Đang xử lý <span id="qcagProcessingCount" class="qcag-status-count">0</span></button>
+                <div class="qcag-status-divider"></div>
+                <button id="qcagStatusDone" onclick="qcagDesktopSetStatusFilter('done')" class="qcag-status-btn px-3 py-1 rounded-md">Hoàn thành <span id="qcagDoneCount" class="qcag-status-count">0</span></button>
               </div>
             </div>
 
