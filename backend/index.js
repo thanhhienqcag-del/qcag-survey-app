@@ -2450,6 +2450,70 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
+        // Direct-read path: when the client asks for paging or incremental updates,
+        // bypass the stale in-memory cache and query Neon fresh.
+        if (updatedSinceRaw) {
+            const [[countRow]] = await pool.query(
+                'SELECT COUNT(*) AS total FROM ks_requests_view WHERE updated_at >= ? OR created_at >= ?',
+                [updatedSince, updatedSince]
+            );
+            const total = Number(countRow && countRow.total ? countRow.total : 0);
+            const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} WHERE updated_at >= ? OR created_at >= ? ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`, [updatedSince, updatedSince]);
+            const mapped = rows.map(r => ksRowToApp(r, true));
+            return res.json({
+                ok: true,
+                data: mapped,
+                paging: {
+                    total,
+                    limit,
+                    offset,
+                    hasMore: offset + mapped.length < total
+                }
+            });
+        }
+
+        if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
+            const [[countRow]] = await pool.query('SELECT COUNT(*) AS total FROM ks_requests_view');
+            const total = Number(countRow && countRow.total ? countRow.total : 0);
+            const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`);
+            const mapped = rows.map(r => ksRowToApp(r, true));
+            return res.json({
+                ok: true,
+                data: mapped,
+                paging: {
+                    total,
+                    limit,
+                    offset,
+                    hasMore: offset + mapped.length < total
+                }
+            });
+        }
+
+        // Serve from cache if available for simple no-params bootstrap requests.
+        if (_ksRequestsCache) {
+            const clientEtag = req.headers['if-none-match'];
+            res.setHeader('ETag', _ksRequestsCache.etag);
+            res.setHeader('Cache-Control', 'no-cache');
+            if (clientEtag && clientEtag === _ksRequestsCache.etag) {
+                return res.status(304).end();
+            }
+            return res.json({ ok: true, data: _ksRequestsCache.rows, paging: { total: _ksRequestsCache.rows.length, limit: _ksRequestsCache.rows.length, offset: 0, hasMore: false } });
+        }
+
+        // Cache miss: query Neon once, cache result.
+        const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC`);
+        const mapped = rows.map(r => ksRowToApp(r, true));
+        const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
+        _ksRequestsCache = { rows: mapped, etag };
+        res.setHeader('ETag', etag);
+        res.setHeader('Cache-Control', 'no-cache');
+        return res.json({ ok: true, data: mapped, paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false } });
+    } catch (err) {
+        console.error('GET /api/ks/requests error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'fetch_failed' });
+    }
+});
+
 // GET /api/ks/requests/production-approvals
 app.get('/api/ks/requests/production-approvals', async (req, res) => {
     try {
@@ -2552,70 +2616,6 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
     } catch (err) {
         console.error('POST /api/ks/requests/:id/request-edit-production error:', err);
         res.status(500).json({ ok: false, error: 'db_error' });
-    }
-});
-
-        // Direct-read path: when the client asks for paging or incremental updates,
-        // bypass the stale in-memory cache and query Neon fresh.
-        if (updatedSinceRaw) {
-            const [[countRow]] = await pool.query(
-                'SELECT COUNT(*) AS total FROM ks_requests_view WHERE updated_at >= ? OR created_at >= ?',
-                [updatedSince, updatedSince]
-            );
-            const total = Number(countRow && countRow.total ? countRow.total : 0);
-            const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} WHERE updated_at >= ? OR created_at >= ? ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`, [updatedSince, updatedSince]);
-            const mapped = rows.map(r => ksRowToApp(r, true));
-            return res.json({
-                ok: true,
-                data: mapped,
-                paging: {
-                    total,
-                    limit,
-                    offset,
-                    hasMore: offset + mapped.length < total
-                }
-            });
-        }
-
-        if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
-            const [[countRow]] = await pool.query('SELECT COUNT(*) AS total FROM ks_requests_view');
-            const total = Number(countRow && countRow.total ? countRow.total : 0);
-            const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`);
-            const mapped = rows.map(r => ksRowToApp(r, true));
-            return res.json({
-                ok: true,
-                data: mapped,
-                paging: {
-                    total,
-                    limit,
-                    offset,
-                    hasMore: offset + mapped.length < total
-                }
-            });
-        }
-
-        // Serve from cache if available for simple no-params bootstrap requests.
-        if (_ksRequestsCache) {
-            const clientEtag = req.headers['if-none-match'];
-            res.setHeader('ETag', _ksRequestsCache.etag);
-            res.setHeader('Cache-Control', 'no-cache');
-            if (clientEtag && clientEtag === _ksRequestsCache.etag) {
-                return res.status(304).end();
-            }
-            return res.json({ ok: true, data: _ksRequestsCache.rows, paging: { total: _ksRequestsCache.rows.length, limit: _ksRequestsCache.rows.length, offset: 0, hasMore: false } });
-        }
-
-        // Cache miss: query Neon once, cache result.
-        const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC`);
-        const mapped = rows.map(r => ksRowToApp(r, true));
-        const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
-        _ksRequestsCache = { rows: mapped, etag };
-        res.setHeader('ETag', etag);
-        res.setHeader('Cache-Control', 'no-cache');
-        return res.json({ ok: true, data: mapped, paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false } });
-    } catch (err) {
-        console.error('GET /api/ks/requests error:', err && err.message ? err.message : err);
-        return res.status(500).json({ ok: false, error: 'fetch_failed' });
     }
 });
 
