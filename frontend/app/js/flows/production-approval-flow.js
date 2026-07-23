@@ -370,6 +370,16 @@ async function fetchProductionApprovals() {
 
     _productionApprovalItems = finalItems;
     updateProductionApprovalBadge();
+
+    const pendingCount = finalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
+    const approvedCount = finalItems.filter(i => i.productionApprovalStatus === 'approved').length;
+
+    // Auto-switch to 'approved' tab if pending is 0 and approved has items
+    if (_productionApprovalTab === 'pending' && pendingCount === 0 && approvedCount > 0) {
+        _productionApprovalTab = 'approved';
+        setProductionApprovalTab('approved');
+    }
+
     const modal = document.getElementById('productionApprovalModal');
     if (modal && !modal.classList.contains('hidden')) {
         renderProductionApprovalList();
@@ -392,8 +402,18 @@ function openProductionApprovalModal() {
     const modal = document.getElementById('productionApprovalModal');
     if (!modal) return;
     modal.classList.remove('hidden');
-    _productionApprovalTab = 'pending';
-    fetchProductionApprovals();
+
+    fetchProductionApprovals().then(() => {
+        const pendingCount = _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
+        const approvedCount = _productionApprovalItems.filter(i => i.productionApprovalStatus === 'approved').length;
+
+        if (pendingCount === 0 && approvedCount > 0) {
+            setProductionApprovalTab('approved');
+        } else {
+            setProductionApprovalTab(_productionApprovalTab || 'pending');
+        }
+    });
+
     renderProductionApprovalList();
 }
 
@@ -742,6 +762,8 @@ function approveProductionItem(idKey) {
     // Smoothly collapse card after 1.2s delay so Sale sees clear visual confirmation without sudden disappearance
     setTimeout(() => {
         const card = actionContainer ? actionContainer.closest('.bg-\\[\\#1b2433\\]') : null;
+        const remainingPending = _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
+        
         if (card && _productionApprovalTab === 'pending') {
             card.style.transition = 'all 0.4s ease-out';
             card.style.opacity = '0';
@@ -752,10 +774,18 @@ function approveProductionItem(idKey) {
             card.style.paddingBottom = '0px';
             card.style.overflow = 'hidden';
             setTimeout(() => {
-                renderProductionApprovalList();
+                if (remainingPending === 0) {
+                    setProductionApprovalTab('approved');
+                } else {
+                    renderProductionApprovalList();
+                }
             }, 420);
         } else {
-            renderProductionApprovalList();
+            if (remainingPending === 0) {
+                setProductionApprovalTab('approved');
+            } else {
+                renderProductionApprovalList();
+            }
         }
     }, 1200);
 }
