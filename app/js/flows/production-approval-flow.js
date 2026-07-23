@@ -8,6 +8,9 @@
 let _productionApprovalItems = [];
 let _productionApprovalTab = 'pending'; // 'pending' | 'approved' | 'rejected'
 let _currentZoomScale = 1;
+let _currentPanX = 0;
+let _currentPanY = 0;
+let _isPanningImg = false;
 
 function getProductionApprovalItems() {
     return _productionApprovalItems;
@@ -77,10 +80,6 @@ function parseMqDesignImages(item) {
     if (qcagUrl && typeof qcagUrl === 'string' && qcagUrl.startsWith('http')) images.push(qcagUrl);
     return Array.from(new Set(images.filter(img => typeof img === 'string' && img !== '...' && img.startsWith('http'))));
 }
-
-let _currentPanX = 0;
-let _currentPanY = 0;
-let _isPanningImg = false;
 
 /** Full-Screen MQ Image Lightbox Viewer with Zooming, Drag & Pan, and Integrated 3 Action Buttons */
 function openMqImagePreview(url, idKey, itemObj) {
@@ -242,6 +241,7 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 outletCode: q.outlet_code || q.outletCode || '---',
                 saleName: q.sale_name || q.saleName || '',
                 ssName: q.ss_name || q.ssName || '',
+                requester: q.requester || q.requesterName || order.requester || '',
                 region: q.area || q.region || 'S16',
                 amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
                 items: q.items || [],
@@ -309,27 +309,31 @@ async function fetchProductionApprovals() {
 
     let finalItems = Array.from(dedupMap.values());
 
-    // 4. Filter by logged-in Sale user if applicable
+    // 4. STRICT FILTERING BY LOGGED-IN SALE USER ONLY
     if (typeof currentSession !== 'undefined' && currentSession) {
-        const userSaleName = normalizeSaleName(currentSession.saleName || currentSession.name || currentSession.phone || '');
-        const userRegion = normalizeSaleName(currentSession.region || '');
+        const userSaleName = normalizeSaleName(currentSession.saleName || currentSession.name || currentSession.username || '');
+        const userPhone = String(currentSession.phone || '').trim();
 
         if (userSaleName) {
-            const filtered = finalItems.filter(item => {
+            finalItems = finalItems.filter(item => {
                 const itemSale = normalizeSaleName(item.saleName || '');
-                const itemSS = normalizeSaleName(item.ssName || '');
-                if (!itemSale) return true; // Show unassigned items
-                return itemSale.includes(userSaleName) || userSaleName.includes(itemSale) || (userRegion && normalizeSaleName(item.region).includes(userRegion));
+                const itemRequester = normalizeSaleName(item.requester || '');
+
+                if (itemSale) {
+                    return itemSale.includes(userSaleName) || userSaleName.includes(itemSale);
+                }
+                if (itemRequester) {
+                    return itemRequester.includes(userSaleName) || userSaleName.includes(itemRequester);
+                }
+                return false; // Strictly hide quotes that do not belong to this logged-in Sale!
             });
-            if (filtered.length > 0) {
-                finalItems = filtered;
-            }
         }
     }
 
     _productionApprovalItems = finalItems;
     updateProductionApprovalBadge();
-    if (typeof renderProductionApprovalList === 'function') {
+    const modal = document.getElementById('productionApprovalModal');
+    if (modal && !modal.classList.contains('hidden')) {
         renderProductionApprovalList();
     }
 }
@@ -820,4 +824,16 @@ function submitRejectReason() {
     }
     closeRejectReasonModal();
     if (idKey) confirmRejectProduction(idKey, reason);
+}
+
+// Auto-fetch on page load & periodic background sync (15s) so badge displays immediately on Home Screen
+if (typeof window !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(fetchProductionApprovals, 500);
+        setInterval(fetchProductionApprovals, 15000);
+    });
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(fetchProductionApprovals, 300);
+        setInterval(fetchProductionApprovals, 15000);
+    }
 }
