@@ -300,12 +300,14 @@ async function fetchProductionApprovals() {
                 
                 // Merge status map from backend into allExtracted
                 allExtracted.forEach(item => {
-                    const qCode = item.quoteCode || extractQuoteCodeFromIdKey(item.__backendId || item.id);
-                    if (qCode && map[qCode]) {
-                        item.productionApprovalStatus = map[qCode].status || item.productionApprovalStatus;
-                        item.rejectReason = map[qCode].reason || item.rejectReason;
-                        item.approvedBy = map[qCode].approvedBy || item.approvedBy;
-                        item.approvedAt = map[qCode].approvedAt || item.approvedAt;
+                    const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
+                    const cleanCode = extractQuoteCodeFromIdKey(rawCode);
+                    const approvalObj = (cleanCode && map[cleanCode]) || (rawCode && map[rawCode]);
+                    if (approvalObj) {
+                        item.productionApprovalStatus = approvalObj.status || item.productionApprovalStatus;
+                        item.rejectReason = approvalObj.reason || item.rejectReason;
+                        item.approvedBy = approvalObj.approvedBy || item.approvedBy;
+                        item.approvedAt = approvalObj.approvedAt || item.approvedAt;
                     }
                 });
             }
@@ -321,11 +323,13 @@ async function fetchProductionApprovals() {
             if (localCacheStr) {
                 const localCache = JSON.parse(localCacheStr);
                 allExtracted.forEach(item => {
-                    const qCode = item.quoteCode || extractQuoteCodeFromIdKey(item.__backendId || item.id);
-                    if (qCode && localCache[qCode]) {
-                        item.productionApprovalStatus = localCache[qCode].status || item.productionApprovalStatus;
-                        if (localCache[qCode].reason) item.rejectReason = localCache[qCode].reason;
-                        if (localCache[qCode].approvedAt) item.approvedAt = localCache[qCode].approvedAt;
+                    const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
+                    const cleanCode = extractQuoteCodeFromIdKey(rawCode);
+                    const approvalCacheObj = (cleanCode && localCache[cleanCode]) || (rawCode && localCache[rawCode]);
+                    if (approvalCacheObj) {
+                        item.productionApprovalStatus = approvalCacheObj.status || item.productionApprovalStatus;
+                        if (approvalCacheObj.reason) item.rejectReason = approvalCacheObj.reason;
+                        if (approvalCacheObj.approvedAt) item.approvedAt = approvalCacheObj.approvedAt;
                     }
                 });
             }
@@ -694,19 +698,21 @@ function approveProductionItem(idKey) {
     try {
         if (typeof localStorage !== 'undefined') {
             const cache = JSON.parse(localStorage.getItem('ks_production_approvals_cache') || '{}');
-            const qCode = item.quoteCode || extractQuoteCodeFromIdKey(idKey);
-            if (qCode) {
-                cache[qCode] = { status: 'approved', approvedAt: item.approvedAt };
-                localStorage.setItem('ks_production_approvals_cache', JSON.stringify(cache));
-            }
+            const cleanCode = extractQuoteCodeFromIdKey(idKey || item.quoteCode || item.__backendId || item.id);
+            const rawCode = String(item.quoteCode || idKey || '').trim();
+            const payload = { status: 'approved', approvedAt: item.approvedAt };
+            if (cleanCode) cache[cleanCode] = payload;
+            if (rawCode) cache[rawCode] = payload;
+            localStorage.setItem('ks_production_approvals_cache', JSON.stringify(cache));
         }
     } catch (_) {}
 
     // Notify API backend
+    const cleanTargetCode = extractQuoteCodeFromIdKey(idKey || item.quoteCode) || idKey;
     const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
         ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
         : 'https://ks-backend-493469512136.asia-southeast1.run.app';
-    fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/approve-production', {
+    fetch(base + '/api/ks/requests/' + encodeURIComponent(cleanTargetCode) + '/approve-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
