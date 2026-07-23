@@ -715,16 +715,43 @@ function approveProductionItem(idKey) {
         })
     }).catch(err => console.warn('Approve API error:', err));
 
-    // Trigger native App 2 toast notification (dark background with orange border & green checkmark)
+    // Trigger native App 2 toast notification
     const msg = '✅ Bạn đã xác nhận thi công ' + (item.outletName || 'Outlet');
     if (typeof showToast === 'function') {
         showToast(msg);
-    } else {
-        alert(msg);
     }
 
-    renderProductionApprovalList();
+    // In-place UI feedback: replace swipe bar with glowing green success badge immediately
+    const actionContainer = document.getElementById('actionContainer_' + idKey);
+    if (actionContainer) {
+        actionContainer.innerHTML = `
+            <div class="w-full text-xs text-center font-semibold flex items-center justify-center gap-1.5 text-emerald-400 py-2.5 px-3 bg-emerald-950/50 border border-emerald-500/60 rounded-2xl animate-pulse shadow-lg shadow-emerald-500/20">
+                ✓ Đã đồng ý sản xuất
+            </div>
+        `;
+    }
+
     updateProductionApprovalBadge();
+
+    // Smoothly collapse card after 1.2s delay so Sale sees clear visual confirmation without sudden disappearance
+    setTimeout(() => {
+        const card = actionContainer ? actionContainer.closest('.bg-\\[\\#1b2433\\]') : null;
+        if (card && _productionApprovalTab === 'pending') {
+            card.style.transition = 'all 0.4s ease-out';
+            card.style.opacity = '0';
+            card.style.transform = 'scale(0.95)';
+            card.style.maxHeight = '0px';
+            card.style.marginBottom = '0px';
+            card.style.paddingTop = '0px';
+            card.style.paddingBottom = '0px';
+            card.style.overflow = 'hidden';
+            setTimeout(() => {
+                renderProductionApprovalList();
+            }, 420);
+        } else {
+            renderProductionApprovalList();
+        }
+    }, 1200);
 }
 
 /** Edit Request Handler (Gửi Yêu Cầu Sửa Về Desktop QCAG) */

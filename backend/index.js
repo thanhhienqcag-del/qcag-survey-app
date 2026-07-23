@@ -2553,7 +2553,56 @@ async function ensureProductionApprovalsTable() {
     } catch (e) {
         console.warn('ensureProductionApprovalsTable warning:', e && e.message ? e.message : e);
     }
+async function ensurePendingOrdersTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ks_pending_orders (
+                id VARCHAR(100) PRIMARY KEY,
+                created_by VARCHAR(255),
+                total_points INT DEFAULT 0,
+                total_amount NUMERIC(15, 2) DEFAULT 0,
+                area_list VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'pending',
+                quotes_json JSONB,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+    } catch (_) {}
 }
+
+// GET /pending-orders
+app.get('/pending-orders', async (req, res) => {
+    try {
+        await ensurePendingOrdersTable();
+        const [rows] = await pool.query(
+            `SELECT id, created_by, total_points, total_amount, area_list, status, quotes_json, created_at, updated_at
+             FROM ks_pending_orders
+             ORDER BY created_at DESC`
+        );
+        const data = (rows || []).map(r => {
+            let quotes = [];
+            if (r.quotes_json) {
+                quotes = typeof r.quotes_json === 'string' ? JSON.parse(r.quotes_json) : r.quotes_json;
+            }
+            return {
+                id: r.id,
+                createdBy: r.created_by || 'Admin',
+                totalPoints: Number(r.total_points || 0),
+                totalAmount: Number(r.total_amount || 0),
+                areaList: r.area_list || '',
+                status: r.status || 'pending',
+                quotes: Array.isArray(quotes) ? quotes : [],
+                createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+                updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString()
+            };
+        });
+        res.json({ ok: true, data });
+    } catch (err) {
+        console.error('GET /pending-orders error:', err && err.message ? err.message : err);
+        res.status(500).json({ ok: false, error: 'db_error', data: [] });
+    }
+});
 
 // GET /api/ks/requests/production-approvals
 app.get('/api/ks/requests/production-approvals', async (req, res) => {
