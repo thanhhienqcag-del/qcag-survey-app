@@ -2553,6 +2553,8 @@ async function ensureProductionApprovalsTable() {
     } catch (e) {
         console.warn('ensureProductionApprovalsTable warning:', e && e.message ? e.message : e);
     }
+}
+
 async function ensurePendingOrdersTable() {
     try {
         await pool.query(`
