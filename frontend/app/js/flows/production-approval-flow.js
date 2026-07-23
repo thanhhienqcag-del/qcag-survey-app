@@ -826,14 +826,29 @@ function submitRejectReason() {
     if (idKey) confirmRejectProduction(idKey, reason);
 }
 
-// Auto-fetch on page load & periodic background sync (15s) so badge displays immediately on Home Screen
+// Efficient Event-Driven Sync: Fetch ONCE on app load / login & when returning to app (tab focus/visibility).
+// ZERO repeated setInterval polling to save 100% server resources and avoid Cloud Run costs!
 if (typeof window !== 'undefined') {
+    const triggerSingleFetch = () => {
+        if (typeof fetchProductionApprovals === 'function') {
+            fetchProductionApprovals();
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(fetchProductionApprovals, 500);
-        setInterval(fetchProductionApprovals, 15000);
+        setTimeout(triggerSingleFetch, 400);
     });
+
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        setTimeout(fetchProductionApprovals, 300);
-        setInterval(fetchProductionApprovals, 15000);
+        setTimeout(triggerSingleFetch, 200);
     }
+
+    // Refresh ONLY when user returns to / focuses the app tab
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            triggerSingleFetch();
+        }
+    });
+
+    window.addEventListener('focus', triggerSingleFetch);
 }
