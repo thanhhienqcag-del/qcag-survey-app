@@ -835,12 +835,23 @@ function submitRejectReason() {
     if (idKey) confirmRejectProduction(idKey, reason);
 }
 
-// Efficient Event-Driven Sync: Fetch ONCE on app load / login & when returning to app (tab focus/visibility).
-// ZERO repeated setInterval polling to save 100% server resources and avoid Cloud Run costs!
+// Efficient Event-Driven Sync: Realtime SSE + Event-Driven Refresh
 if (typeof window !== 'undefined') {
     const triggerSingleFetch = () => {
         if (typeof fetchProductionApprovals === 'function') {
             fetchProductionApprovals();
+        }
+    };
+
+    // Realtime SSE listener: Update instantly when App 1 adds a pending order or updates approval status
+    const origHook = window.__ksOnInvalidate;
+    window.__ksOnInvalidate = function(payload) {
+        if (typeof origHook === 'function') {
+            try { origHook(payload); } catch (_) {}
+        }
+        const res = String(payload && payload.resource || '').toLowerCase();
+        if (res === 'pending_orders' || res === 'ks_requests' || res === 'quotations') {
+            triggerSingleFetch();
         }
     };
 
@@ -852,7 +863,7 @@ if (typeof window !== 'undefined') {
         setTimeout(triggerSingleFetch, 200);
     }
 
-    // Refresh ONLY when user returns to / focuses the app tab
+    // Refresh when user returns to / focuses the app tab
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             triggerSingleFetch();
