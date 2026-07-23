@@ -2450,6 +2450,111 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
+// GET /api/ks/requests/production-approvals
+app.get('/api/ks/requests/production-approvals', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, backend_id, tk_code, outlet_code, outlet_name, address, phone,
+                    items, content, status, requester, design_images, created_at, updated_at,
+                    production_approval_status, production_reject_reason, production_approved_at, production_approved_by
+             FROM ks_requests_view
+             WHERE production_approval_status IS NOT NULL AND production_approval_status != ''
+             ORDER BY created_at DESC`
+        );
+        const mapped = rows.map(r => {
+            const base = ksRowToApp(r, false);
+            base.productionApprovalStatus = r.production_approval_status || 'pending';
+            base.rejectReason = r.production_reject_reason || null;
+            base.approvedAt = r.production_approved_at || null;
+            base.approvedBy = r.production_approved_by || null;
+            return base;
+        });
+        res.json({ ok: true, data: mapped });
+    } catch (err) {
+        console.error('GET /api/ks/requests/production-approvals error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+// POST /api/ks/requests/:id/approve-production
+app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const b = req.body || {};
+        const approvedBy = b.approvedBy ? String(b.approvedBy).trim() : 'Sale Heineken';
+
+        await pool.query(
+            `UPDATE ks_requests 
+             SET production_approval_status = 'approved',
+                 production_approved_by = ?,
+                 production_approved_at = NOW(),
+                 updated_at = NOW()
+             WHERE backend_id = ? OR id = ?`,
+            [approvedBy, id, parseInt(id, 10) || 0]
+        );
+
+        wsInvalidate('ks_requests', { action: 'update', id });
+        res.json({ ok: true, message: 'approved' });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/approve-production error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+// POST /api/ks/requests/:id/reject-production
+app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const b = req.body || {};
+        const reason = b.reason ? String(b.reason).trim() : 'Từ chối sản xuất';
+        const rejectedBy = b.rejectedBy ? String(b.rejectedBy).trim() : 'Sale Heineken';
+
+        await pool.query(
+            `UPDATE ks_requests 
+             SET production_approval_status = 'rejected',
+                 production_reject_reason = ?,
+                 production_approved_by = ?,
+                 production_approved_at = NOW(),
+                 updated_at = NOW()
+             WHERE backend_id = ? OR id = ?`,
+            [reason, rejectedBy, id, parseInt(id, 10) || 0]
+        );
+
+        wsInvalidate('ks_requests', { action: 'update', id });
+        res.json({ ok: true, message: 'rejected' });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/reject-production error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+// POST /api/ks/requests/:id/request-edit-production
+app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const b = req.body || {};
+        const editNote = b.note ? String(b.note).trim() : 'Yêu cầu chỉnh sửa nội dung/thiết kế trước khi duyệt';
+        const requestedBy = b.requestedBy ? String(b.requestedBy).trim() : 'Sale Heineken';
+
+        await pool.query(
+            `UPDATE ks_requests 
+             SET status = 'pending-edit',
+                 production_approval_status = 'pending-edit',
+                 editing_requested_at = NOW(),
+                 production_reject_reason = ?,
+                 updated_at = NOW()
+             WHERE backend_id = ? OR id = ?`,
+            [editNote, id, parseInt(id, 10) || 0]
+        );
+
+        wsInvalidate('ks_requests', { action: 'update', id, status: 'pending-edit' });
+        res.json({ ok: true, message: 'edit_requested' });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/request-edit-production error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
         // Direct-read path: when the client asks for paging or incremental updates,
         // bypass the stale in-memory cache and query Neon fresh.
         if (updatedSinceRaw) {
@@ -3082,7 +3187,7 @@ async function start() {
                     };
                     server.once('error', onError);
                     server.once('listening', onListening);
-                    server.listen(p);
+                    server.listen(p, '0.0.0.0');
                 });
                 return p;
             } catch (err) {
