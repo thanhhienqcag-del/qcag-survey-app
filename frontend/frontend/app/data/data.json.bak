@@ -1,0 +1,15 @@
+[
+  {
+    "type": "new",
+    "outletCode": "12345678",
+    "outletName": "Lâm Như",
+    "address": "123",
+    "outletLat": "",
+    "outletLng": "",
+    "phone": "84966767731",
+    "items": "[{\"id\":1772676771814,\"type\":\"Hạng mục khác\",\"brand\":\"\",\"width\":\"\",\"height\":\"\",\"useOldSize\":false,\"otherContent\":\"456\",\"poles\":0,\"action\":\"\",\"note\":\"\"}]",
+    "content": "456",
+    "oldContent": false,
+    "oldContentImages": "[]"
+  }
+]

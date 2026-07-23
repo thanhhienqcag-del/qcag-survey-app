@@ -1,0 +1,5 @@
+[dotenv@17.3.1] injecting env (6) from .env -- tip: 🛡️ auth for agents: https://vestauth.com
+Backend running on :3102
+WebSocket listening on ws://localhost:3102/ws
+DB init OK
+DB init OK

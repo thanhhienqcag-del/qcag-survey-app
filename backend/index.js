@@ -1142,6 +1142,191 @@ app.get('/auth/me', requireAuth(), async(req, res) => {
     res.json({ ok: true, user: { username: req.user.username, name: req.user.name, role: req.user.role } });
 });
 
+app.get('/api/ks/sale-pending-confirmations', async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const phone = req.query && req.query.phone ? String(req.query.phone).trim() : '';
+        const userPhoneDigits = phone.replace(/\D/g, '');
+        if (!userPhoneDigits) {
+            return res.json({ ok: true, data: [] });
+        }
+
+        const [rows] = await pool.query(
+            `SELECT id, created_by, created_by_name, created_at, quotes 
+             FROM pending_orders 
+             ORDER BY created_at DESC`
+        );
+
+        // First pass: collect tk_codes and outlet_codes to fetch design images in one batch
+        const tkCodes = [];
+        const outletCodes = [];
+        for (const row of rows || []) {
+            let quotes = [];
+            try { quotes = JSON.parse(row.quotes || '[]'); } catch (e) {}
+            if (!Array.isArray(quotes)) continue;
+            for (const q of quotes) {
+                const quotePhoneDigits = String(q.sale_phone || '').replace(/\D/g, '');
+                if (quotePhoneDigits && userPhoneDigits === quotePhoneDigits) {
+                    if (q.tk_code) tkCodes.push(q.tk_code);
+                    if (q.outlet_code) outletCodes.push(q.outlet_code);
+                }
+            }
+        }
+
+        // Fetch design images from ks_requests
+        const designImagesMap = {};
+        if (tkCodes.length > 0 || outletCodes.length > 0) {
+            const tkPlaceholders = tkCodes.length > 0 ? tkCodes.map(() => '?').join(',') : "''";
+            const outletPlaceholders = outletCodes.length > 0 ? outletCodes.map(() => '?').join(',') : "''";
+            const queryParams = [...tkCodes, ...outletCodes];
+            const [ksRows] = await pool.query(
+                `SELECT tk_code, outlet_code, design_images 
+                 FROM ks_requests 
+                 WHERE (tk_code IN (${tkPlaceholders}) AND tk_code IS NOT NULL AND tk_code != '')
+                    OR (outlet_code IN (${outletPlaceholders}) AND outlet_code IS NOT NULL AND outlet_code != '')
+                 ORDER BY created_at DESC`,
+                queryParams
+            );
+            for (const ks of ksRows || []) {
+                if (ks.tk_code && !designImagesMap[ks.tk_code]) {
+                    designImagesMap[ks.tk_code] = ks.design_images;
+                }
+                if (ks.outlet_code && !designImagesMap[ks.outlet_code]) {
+                    designImagesMap[ks.outlet_code] = ks.design_images;
+                }
+            }
+        }
+
+        const results = [];
+        for (const row of rows || []) {
+            let quotes = [];
+            try {
+                quotes = JSON.parse(row.quotes || '[]');
+            } catch (e) {
+                quotes = [];
+            }
+            if (!Array.isArray(quotes)) continue;
+
+            for (const q of quotes) {
+                const quotePhoneDigits = String(q.sale_phone || '').replace(/\D/g, '');
+                // Check if the quote is assigned to the current logged in sale
+                if (quotePhoneDigits && userPhoneDigits === quotePhoneDigits) {
+                    let itemsParsed = [];
+                    if (q.items) {
+                        try {
+                            itemsParsed = typeof q.items === 'string' ? JSON.parse(q.items || '[]') : q.items;
+                        } catch (pe) {
+                            itemsParsed = [];
+                        }
+                    }
+
+                    // Extract design images
+                    let designImages = [];
+                    const matchedImagesJson = (q.tk_code && designImagesMap[q.tk_code]) || (q.outlet_code && designImagesMap[q.outlet_code]);
+                    if (matchedImagesJson) {
+                        try {
+                            designImages = JSON.parse(matchedImagesJson || '[]');
+                        } catch (e) {}
+                    }
+
+                    results.push({
+                        orderId: row.id,
+                        createdBy: row.created_by || row.created_by_name || 'User',
+                        createdAt: Number(row.created_at) || Date.now(),
+                        quoteCode: q.quote_code || '',
+                        outletCode: q.outlet_code || '',
+                        outletName: q.outlet_name || '',
+                        area: q.area || '',
+                        totalAmount: q.total_amount || 0,
+                        items: Array.isArray(itemsParsed) ? itemsParsed : [],
+                        designImages: Array.isArray(designImages) ? designImages.filter(x => x && x !== '...') : [],
+                        saleConfirmStatus: q.sale_confirm_status || 'pending',
+                        saleConfirmAt: q.sale_confirm_at || null,
+                        saleConfirmNote: q.sale_confirm_note || ''
+                    });
+                }
+            }
+        }
+
+        res.json({ ok: true, data: results });
+    } catch (err) {
+        console.error('GET /api/ks/sale-pending-confirmations error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+app.post('/api/ks/sale-pending-confirmations/confirm', async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const orderId = req.body && req.body.orderId ? String(req.body.orderId).trim() : '';
+        const quoteCode = req.body && req.body.quoteCode ? String(req.body.quoteCode).trim() : '';
+        const status = req.body && req.body.status ? String(req.body.status).trim() : ''; // 'accept' or 'reject'
+        const note = req.body && req.body.note != null ? String(req.body.note).trim() : '';
+        const phone = req.body && req.body.phone ? String(req.body.phone).trim() : '';
+
+        if (!orderId || !quoteCode || !['accept', 'reject'].includes(status) || !phone) {
+            return res.status(400).json({ ok: false, error: 'invalid_params' });
+        }
+
+        const userPhoneDigits = phone.replace(/\D/g, '');
+        if (!userPhoneDigits) {
+            return res.status(400).json({ ok: false, error: 'invalid_phone' });
+        }
+
+        const [[order]] = await pool.query(
+            'SELECT quotes FROM pending_orders WHERE id = ? LIMIT 1',
+            [orderId]
+        );
+
+        if (!order) {
+            return res.status(404).json({ ok: false, error: 'order_not_found' });
+        }
+
+        let quotes = [];
+        try {
+            quotes = JSON.parse(order.quotes || '[]');
+        } catch (e) {
+            quotes = [];
+        }
+
+        let found = false;
+        for (let i = 0; i < quotes.length; i++) {
+            const q = quotes[i];
+            if (String(q.quote_code) === quoteCode) {
+                const quotePhoneDigits = String(q.sale_phone || '').replace(/\D/g, '');
+                if (quotePhoneDigits && userPhoneDigits === quotePhoneDigits) {
+                    quotes[i] = {
+                        ...q,
+                        sale_confirm_status: status,
+                        sale_confirm_at: new Date().toISOString(),
+                        sale_confirm_note: note
+                    };
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!found) {
+            return res.status(403).json({ ok: false, error: 'quote_not_assigned_or_not_found' });
+        }
+
+        const quotesJson = JSON.stringify(quotes);
+        await pool.query(
+            'UPDATE pending_orders SET quotes = ?, updated_at = NOW() WHERE id = ?',
+            [quotesJson, orderId]
+        );
+
+        // Broadcast to notify App 1 clients of the pending order change in real time
+        wsInvalidate('pending_orders', { action: 'upsert', id: orderId });
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('POST /api/ks/sale-pending-confirmations/confirm error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
 app.post('/auth/logout', async(req, res) => {
     // Stateless token: client deletes token. Keep endpoint for UX parity.
     res.json({ ok: true });

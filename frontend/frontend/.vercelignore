@@ -1,0 +1,16 @@
+# Files not needed in production — exclude to reduce deployment size & bandwidth
+
+# Local dev data files (served by local server only, not needed on Vercel)
+app/data/data.json
+app/data/data.json.bak
+app/data/vn-address.json
+app/data/supabase-init.sql
+
+# Local dev server (runs locally, not on Vercel)
+app/server/
+
+# Documentation (not needed in production)
+app/docs/
+
+# Archive and scripts
+app/scripts/
