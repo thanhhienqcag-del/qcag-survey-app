@@ -2723,33 +2723,53 @@ function qcagDesktopRenderCommentPreview() {
 var _qcagDesktopOutletOldDesignCache = {};
 var _qcagDesktopOutletOldDesignFetching = {};
 
+function extractDesignImagesFromReq(r) {
+  if (!r) return [];
+  const src = (typeof _qcagDesktopFullRequestCache !== 'undefined' && r.__backendId && _qcagDesktopFullRequestCache[r.__backendId]) || r;
+  const raw = src.designImages || src.design_images || src.mqImages || src.mq_images;
+  const parsed = qcagDesktopParseJson(raw, []);
+  if (Array.isArray(parsed)) return parsed;
+  return [];
+}
+
+function isCandidatePastDesign(r, currentId, targetOutletCode) {
+  if (!r) return false;
+  const reqId = r.__backendId || r.id;
+  if (reqId === currentId) return false;
+  
+  const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
+  if (!rOutlet || rOutlet === 'new outlet' || rOutlet !== targetOutletCode) return false;
+
+  const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase();
+  const isDoneStatus = (st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || st === 'approved' || r.isDone || r.is_done);
+  
+  const imgs = extractDesignImagesFromReq(r);
+  const hasImages = imgs.length > 0;
+
+  return isDoneStatus || hasImages;
+}
+
 function ksGetOldDesignsForOutlet(currentReq) {
-  if (!currentReq || !currentReq.outletCode) return [];
-  const outletCode = String(currentReq.outletCode).trim().toLowerCase();
-  // New Outlet requests have no real outlet code — never show old designs for them
-  if (outletCode === 'new outlet') return [];
-  const currentId = currentReq.__backendId;
+  if (!currentReq) return [];
+  const outletCode = String(currentReq.outletCode || currentReq.outlet_code || '').trim().toLowerCase();
+  if (!outletCode || outletCode === 'new outlet') return [];
+  const currentId = currentReq.__backendId || currentReq.id;
 
   const candidateMap = {};
 
   // Add items from allRequests
   (allRequests || []).forEach(r => {
-    if (!r || r.__backendId === currentId) return;
-    if (String(r.outletCode || '').trim().toLowerCase() === 'new outlet') return;
-    if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return;
-    const status = String(r.status || '').toLowerCase();
-    if (status !== 'done' && status !== 'processed') return;
-    candidateMap[r.__backendId] = r;
+    if (isCandidatePastDesign(r, currentId, outletCode)) {
+      candidateMap[r.__backendId || r.id] = r;
+    }
   });
 
   // Add items from outlet API cache
   if (_qcagDesktopOutletOldDesignCache[outletCode]) {
     _qcagDesktopOutletOldDesignCache[outletCode].forEach(r => {
-      if (r && r.__backendId !== currentId) {
-        const status = String(r.status || '').toLowerCase();
-        if (status === 'done' || status === 'processed') {
-          if (!candidateMap[r.__backendId]) candidateMap[r.__backendId] = r;
-        }
+      if (isCandidatePastDesign(r, currentId, outletCode)) {
+        const id = r.__backendId || r.id;
+        if (!candidateMap[id]) candidateMap[id] = r;
       }
     });
   }
@@ -2763,16 +2783,13 @@ function ksGetOldDesignsForOutlet(currentReq) {
         .then(res => res.json())
         .then(json => {
           if (json && json.ok && Array.isArray(json.data)) {
-            const doneRows = json.data.filter(r => {
-              if (!r || r.__backendId === currentId) return false;
-              const status = String(r.status || '').toLowerCase();
-              return status === 'done' || status === 'processed';
-            });
-            _qcagDesktopOutletOldDesignCache[outletCode] = doneRows;
-            doneRows.forEach(dr => {
-              if (dr && dr.__backendId) {
+            const validRows = json.data.filter(r => isCandidatePastDesign(r, currentId, outletCode));
+            _qcagDesktopOutletOldDesignCache[outletCode] = validRows;
+            validRows.forEach(dr => {
+              const id = dr.__backendId || dr.id;
+              if (id) {
                 if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(dr);
-                const idx = (allRequests || []).findIndex(x => x.__backendId === dr.__backendId);
+                const idx = (allRequests || []).findIndex(x => (x.__backendId || x.id) === id);
                 if (idx === -1) {
                   allRequests.push(dr);
                 } else {
@@ -2780,7 +2797,7 @@ function ksGetOldDesignsForOutlet(currentReq) {
                 }
               }
             });
-            if (currentDetailRequest && currentDetailRequest.__backendId === currentId) {
+            if (currentDetailRequest && (currentDetailRequest.__backendId || currentDetailRequest.id) === currentId) {
               qcagDesktopRefreshOldDesignSection(currentId);
             }
           }
@@ -2795,10 +2812,11 @@ function ksGetOldDesignsForOutlet(currentReq) {
 
   // Pre-fetch any unfetched candidate requests in background so past design images appear automatically
   candidates.forEach(r => {
-    if (r && r.__backendId && typeof _qcagDesktopFullRequestCache !== 'undefined' && !_qcagDesktopFullRequestCache[r.__backendId]) {
+    const id = r.__backendId || r.id;
+    if (id && typeof _qcagDesktopFullRequestCache !== 'undefined' && !_qcagDesktopFullRequestCache[id]) {
       if (typeof qcagDesktopGetFullRequest === 'function') {
-        qcagDesktopGetFullRequest(r.__backendId).then(full => {
-          if (full && currentDetailRequest && currentDetailRequest.__backendId === currentId) {
+        qcagDesktopGetFullRequest(id).then(full => {
+          if (full && currentDetailRequest && (currentDetailRequest.__backendId || currentDetailRequest.id) === currentId) {
             qcagDesktopRefreshOldDesignSection(currentId);
           }
         }).catch(() => {});
@@ -2808,17 +2826,15 @@ function ksGetOldDesignsForOutlet(currentReq) {
 
   return candidates
     .filter(r => {
-      const src = (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[r.__backendId]) || r;
-      const imgs = qcagDesktopParseJson(src.designImages, []);
+      const imgs = extractDesignImagesFromReq(r);
       if (imgs.length === 1 && imgs[0] === '...') return true;
-      if (!Array.isArray(imgs) || imgs.length === 0) return false;
-      return true;
+      return imgs.length > 0;
     })
-    .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
 }
 
 function qcagDesktopRefreshOldDesignSection(currentId) {
-  if (!currentDetailRequest || currentDetailRequest.__backendId !== currentId) return;
+  if (!currentDetailRequest || (currentDetailRequest.__backendId || currentDetailRequest.id) !== currentId) return;
   const section = document.getElementById('qcagOldDesignSection');
   if (!section) return;
   try {
@@ -2843,15 +2859,14 @@ function qcagDesktopRefreshOldDesignSection(currentId) {
  */
 function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
   if (!entry) return '<div class="qcag-detail-muted">Không có thiết kế cũ</div>';
-  // Prefer cached full version for actual image URLs (avoids list placeholder '["..."]')
-  const fullEntry = (_qcagDesktopFullRequestCache && entry.__backendId && _qcagDesktopFullRequestCache[entry.__backendId]) || entry;
-  const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(fullEntry.designImages, []));
-  const requester  = qcagDesktopParseJson(entry.requester, {});
-  const reqCode    = (codeMap && codeMap[entry.__backendId]) || '-';
-  const uploadedBy = entry.designUploadedBy || '-';
-  const saleName   = (requester.saleName || requester.phone || '-').toUpperCase();
-  const requestTime = entry.createdAt      ? new Date(entry.createdAt).toLocaleString('vi-VN')      : '-';
-  const uploadTime  = entry.designUpdatedAt ? new Date(entry.designUpdatedAt).toLocaleString('vi-VN') : '-';
+  const fullEntry = (_qcagDesktopFullRequestCache && (entry.__backendId || entry.id) && _qcagDesktopFullRequestCache[entry.__backendId || entry.id]) || entry;
+  const designImgs = qcagDesktopPrepareRenderImageList(extractDesignImagesFromReq(fullEntry));
+  const requester  = typeof fullEntry.requester === 'object' && fullEntry.requester ? fullEntry.requester : qcagDesktopParseJson(fullEntry.requester, {});
+  const reqCode    = (codeMap && codeMap[entry.__backendId || entry.id]) || entry.tkCode || entry.tk_code || '-';
+  const uploadedBy = fullEntry.designUploadedBy || fullEntry.design_uploaded_by || fullEntry.designCreatedBy || fullEntry.design_created_by || '-';
+  const saleName   = (requester.saleName || requester.sale_name || fullEntry.saleName || fullEntry.sale_name || requester.phone || '-').toUpperCase();
+  const requestTime = (fullEntry.createdAt || fullEntry.created_at) ? new Date(fullEntry.createdAt || fullEntry.created_at).toLocaleString('vi-VN') : '-';
+  const uploadTime  = (fullEntry.designUpdatedAt || fullEntry.design_updated_at || fullEntry.updatedAt || fullEntry.updated_at) ? new Date(fullEntry.designUpdatedAt || fullEntry.design_updated_at || fullEntry.updatedAt || fullEntry.updated_at).toLocaleString('vi-VN') : '-';
 
   let imgsHtml = '<div class="qcag-detail-muted">Không có ảnh</div>';
   if (designImgs.length === 1) {
