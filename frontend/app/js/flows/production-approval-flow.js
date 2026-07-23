@@ -293,13 +293,44 @@ async function fetchProductionApprovals() {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
         if (res2.ok) {
             const json2 = await res2.json();
-            if (json2 && json2.ok && Array.isArray(json2.data)) {
-                allExtracted = allExtracted.concat(json2.data);
+            if (json2 && json2.ok && json2.data) {
+                const map = (typeof json2.data === 'object' && !Array.isArray(json2.data)) ? json2.data : {};
+                const list = Array.isArray(json2.data) ? json2.data : [];
+                allExtracted = allExtracted.concat(list);
+                
+                // Merge status map from backend into allExtracted
+                allExtracted.forEach(item => {
+                    const qCode = item.quoteCode || extractQuoteCodeFromIdKey(item.__backendId || item.id);
+                    if (qCode && map[qCode]) {
+                        item.productionApprovalStatus = map[qCode].status || item.productionApprovalStatus;
+                        item.rejectReason = map[qCode].reason || item.rejectReason;
+                        item.approvedBy = map[qCode].approvedBy || item.approvedBy;
+                        item.approvedAt = map[qCode].approvedAt || item.approvedAt;
+                    }
+                });
             }
         }
     } catch (e) {
         console.warn('App 2 production-approvals fetch warning:', e);
     }
+
+    // Merge instant local storage approvals cache
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const localCacheStr = localStorage.getItem('ks_production_approvals_cache');
+            if (localCacheStr) {
+                const localCache = JSON.parse(localCacheStr);
+                allExtracted.forEach(item => {
+                    const qCode = item.quoteCode || extractQuoteCodeFromIdKey(item.__backendId || item.id);
+                    if (qCode && localCache[qCode]) {
+                        item.productionApprovalStatus = localCache[qCode].status || item.productionApprovalStatus;
+                        if (localCache[qCode].reason) item.rejectReason = localCache[qCode].reason;
+                        if (localCache[qCode].approvedAt) item.approvedAt = localCache[qCode].approvedAt;
+                    }
+                });
+            }
+        }
+    } catch (_) {}
 
     // Deduplicate by quoteCode / id
     const dedupMap = new Map();
@@ -644,6 +675,14 @@ function initSwipeDragModal(event, idKey) {
     window.addEventListener('touchend', onEnd);
 }
 
+function extractQuoteCodeFromIdKey(idStr) {
+    if (!idStr) return '';
+    const str = String(idStr).trim();
+    const m = str.match(/po_q_([A-Za-z0-9]+)_/);
+    if (m && m[1]) return m[1];
+    return str;
+}
+
 function approveProductionItem(idKey) {
     const item = _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey);
     if (!item) return;
@@ -651,6 +690,18 @@ function approveProductionItem(idKey) {
     item.productionApprovalStatus = 'approved';
     item.approvedAt = new Date().toISOString();
     
+    // Save to instant local storage cache
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const cache = JSON.parse(localStorage.getItem('ks_production_approvals_cache') || '{}');
+            const qCode = item.quoteCode || extractQuoteCodeFromIdKey(idKey);
+            if (qCode) {
+                cache[qCode] = { status: 'approved', approvedAt: item.approvedAt };
+                localStorage.setItem('ks_production_approvals_cache', JSON.stringify(cache));
+            }
+        }
+    } catch (_) {}
+
     // Notify API backend
     const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
         ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
