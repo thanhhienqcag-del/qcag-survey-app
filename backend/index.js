@@ -2539,19 +2539,20 @@ async function ensureProductionApprovalsTable() {
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS ks_production_approvals (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 quote_code VARCHAR(100) NOT NULL UNIQUE,
                 outlet_code VARCHAR(100),
                 status VARCHAR(50) DEFAULT 'pending',
                 approved_by VARCHAR(255),
-                approved_at TIMESTAMP NULL,
+                approved_at TIMESTAMPTZ,
                 reject_reason TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_quote_code (quote_code)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
         `);
-    } catch (_) {}
+    } catch (e) {
+        console.warn('ensureProductionApprovalsTable warning:', e && e.message ? e.message : e);
+    }
 }
 
 // GET /api/ks/requests/production-approvals
@@ -2621,9 +2622,9 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
             await pool.query(
                 `INSERT INTO ks_production_approvals (quote_code, status, approved_by, approved_at, reject_reason, updated_at)
                  VALUES (?, 'approved', ?, NOW(), NULL, NOW())
-                 ON DUPLICATE KEY UPDATE 
+                 ON CONFLICT (quote_code) DO UPDATE SET 
                      status = 'approved',
-                     approved_by = VALUES(approved_by),
+                     approved_by = EXCLUDED.approved_by,
                      approved_at = NOW(),
                      reject_reason = NULL,
                      updated_at = NOW()`,
@@ -2648,7 +2649,7 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
         res.json({ ok: true, message: 'approved', quoteCode });
     } catch (err) {
         console.error('POST /api/ks/requests/:id/approve-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error' });
+        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
     }
 });
 
@@ -2666,10 +2667,10 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
             await pool.query(
                 `INSERT INTO ks_production_approvals (quote_code, status, approved_by, reject_reason, approved_at, updated_at)
                  VALUES (?, 'rejected', ?, ?, NOW(), NOW())
-                 ON DUPLICATE KEY UPDATE 
+                 ON CONFLICT (quote_code) DO UPDATE SET 
                      status = 'rejected',
-                     approved_by = VALUES(approved_by),
-                     reject_reason = VALUES(reject_reason),
+                     approved_by = EXCLUDED.approved_by,
+                     reject_reason = EXCLUDED.reject_reason,
                      approved_at = NOW(),
                      updated_at = NOW()`,
                 [quoteCode, rejectedBy, reason]
@@ -2694,7 +2695,7 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
         res.json({ ok: true, message: 'rejected', quoteCode });
     } catch (err) {
         console.error('POST /api/ks/requests/:id/reject-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error' });
+        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
     }
 });
 
@@ -2712,10 +2713,10 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
             await pool.query(
                 `INSERT INTO ks_production_approvals (quote_code, status, approved_by, reject_reason, approved_at, updated_at)
                  VALUES (?, 'pending-edit', ?, ?, NOW(), NOW())
-                 ON DUPLICATE KEY UPDATE 
+                 ON CONFLICT (quote_code) DO UPDATE SET 
                      status = 'pending-edit',
-                     approved_by = VALUES(approved_by),
-                     reject_reason = VALUES(reject_reason),
+                     approved_by = EXCLUDED.approved_by,
+                     reject_reason = EXCLUDED.reject_reason,
                      approved_at = NOW(),
                      updated_at = NOW()`,
                 [quoteCode, requestedBy, editNote]
@@ -2740,7 +2741,7 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         res.json({ ok: true, message: 'edit_requested', quoteCode });
     } catch (err) {
         console.error('POST /api/ks/requests/:id/request-edit-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error' });
+        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
     }
 });
 
