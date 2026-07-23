@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { Storage } = require('@google-cloud/storage');
 const { uploadBuffer } = require('./storage');
 const { syncRequest } = require('./lib/dual-write');
+const { resolveKsRequestsOptions } = require('./lib/ks-request-query');
 
 const gcs = new Storage();
 
@@ -819,8 +820,19 @@ async function initKsDB() {
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS design_last_edited_at TIMESTAMPTZ',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS tk_code VARCHAR(16)',
         'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS location_source VARCHAR(32)',
+        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS design_filename VARCHAR(255)',
+        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS production_approval_status VARCHAR(32)',
+        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS production_reject_reason TEXT',
+        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS production_approved_at TIMESTAMPTZ',
+        'ALTER TABLE ks_requests ADD COLUMN IF NOT EXISTS production_approved_by VARCHAR(255)',
     ]
     for (const sql of ksCols) await ensureColumn(sql);
+
+    try {
+        await pool.query('DROP VIEW IF EXISTS ks_requests_view; CREATE VIEW ks_requests_view AS SELECT * FROM ks_requests');
+    } catch (err) {
+        console.warn('[initKsDB] View creation failed (non-fatal):', err && err.message ? err.message : err);
+    }
 
     // Add indexes for optimization
     const ksIndexes = [
@@ -2426,6 +2438,7 @@ app.get('/api/ks/requests', async (req, res) => {
         const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 100;
         const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
         const outletCodeRaw = String(req.query && (req.query.outlet_code || req.query.outletCode) || '').trim();
+        const { updatedSinceRaw, updatedSince } = resolveKsRequestsOptions(req.query || {});
 
         // Specific outlet query path: return all requests for a given outlet code with full details
         if (outletCodeRaw && outletCodeRaw.toLowerCase() !== 'new outlet') {
