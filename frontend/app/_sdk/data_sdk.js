@@ -268,7 +268,7 @@
   // 2) same-origin origin (works for Vercel + local app server)
   // 3) localhost ports for local dev fallback
   function _getBaseCandidates() {
-    var candidates = [];
+    var candidates = ['https://ks-backend-493469512136.asia-southeast1.run.app'];
     try {
       if (window.__env && typeof window.__env.BACKEND_URL !== 'undefined') {
         var be = String(window.__env.BACKEND_URL || '').trim();
@@ -435,39 +435,27 @@
 
   async function _isHealthyBase(base) {
     var url = _buildUrl(base, '/api/ks/health');
-    var dbHealthUrl = _buildUrl(base, '/db-health');
+    var healthDirectUrl = _buildUrl(base, '/health');
     var attempts = 2;
     for (var a = 0; a < attempts; a++) {
       try {
         var res = await fetch(url, { method: 'GET' });
+        if (!res || !res.ok) {
+          res = await fetch(healthDirectUrl, { method: 'GET' });
+        }
         if (!res || !res.ok) throw new Error('health_failed');
 
-        // Newer backends expose dbReady in /api/ks/health.
         try {
           var payload = await res.clone().json();
           if (payload && (payload.dbReady === false || payload.ok === false)) {
             throw new Error('db_not_ready');
           }
-        } catch (_) {
-          // ignore JSON parse errors (older/local health endpoints)
-        }
-
-        // Extra DB probe when endpoint exists.
-        // If /db-health is 404 (local mock server), still consider base healthy.
-        try {
-          var dbRes = await fetch(dbHealthUrl, { method: 'GET' });
-          if (dbRes && dbRes.status !== 404 && !dbRes.ok) {
-            throw new Error('db_health_failed');
-          }
-        } catch (dbErr) {
-          throw dbErr;
-        }
+        } catch (_) {}
 
         return true;
       } catch (e) {
         // ignore and retry
       }
-      // small backoff between attempts
       await new Promise(function (r) { setTimeout(r, 150 * (a + 1)); });
     }
     return false;
