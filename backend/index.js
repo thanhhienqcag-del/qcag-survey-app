@@ -827,6 +827,7 @@ async function initKsDB() {
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_created_at ON ks_requests (created_at DESC)',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_backend_id ON ks_requests (backend_id)',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_outlet_code ON ks_requests (outlet_code)',
+        'CREATE INDEX IF NOT EXISTS idx_ks_requests_outlet_code_btree_lower ON ks_requests USING btree (LOWER(TRIM(outlet_code)))',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_status ON ks_requests (status)',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_tk_code ON ks_requests (tk_code)',
     ];
