@@ -1515,7 +1515,7 @@ async function uploadDesign(input) {
     // Compress immediately (WebP preferred) — much faster upload
     let dataUrl;
     try {
-      dataUrl = await _compressImageFile(file, 1600, 0.82);
+      dataUrl = await _compressImageFile(file, 2048, 0.92);
     } catch (_) {
       dataUrl = await new Promise(resolve => {
         const reader = new FileReader();
