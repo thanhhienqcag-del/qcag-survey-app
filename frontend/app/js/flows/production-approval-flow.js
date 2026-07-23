@@ -285,7 +285,10 @@ async function fetchProductionApprovals() {
     }
 
     // 3. Fetch App 2 Backend production approvals
-    const app2Base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
+    const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+        : defaultApp2Backend;
     try {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
         if (res2.ok) {
@@ -649,7 +652,9 @@ function approveProductionItem(idKey) {
     item.approvedAt = new Date().toISOString();
     
     // Notify API backend
-    const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/approve-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -715,7 +720,9 @@ function confirmRequestEditProduction(idKey, note) {
     item.rejectReason = String(note || 'Yêu cầu chỉnh sửa').trim();
 
     // Send edit request to Desktop QCAG
-    const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/request-edit-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -787,7 +794,9 @@ function confirmRejectProduction(idKey, reason) {
     }
 
     // Notify API backend
-    const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/reject-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

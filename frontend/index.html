@@ -46,6 +46,7 @@
       if (typeof window.__env.BACKEND_URL === 'undefined') {
         window.__env.BACKEND_URL = defaultBackend;
       }
+      window.API_BASE_URL = window.__env.BACKEND_URL;
       if (!Array.isArray(window.__env.BACKEND_URL_CANDIDATES)) {
         window.__env.BACKEND_URL_CANDIDATES = [window.__env.BACKEND_URL]
           .concat(isLocalHost ? localCandidates : [])
