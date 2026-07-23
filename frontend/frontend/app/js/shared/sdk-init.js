@@ -314,7 +314,6 @@ async function initApp() {
           renderRequestList();
         }
         if (typeof updateNotifBadge === 'function') updateNotifBadge();
-        if (typeof updateConfirmPendingBadge === 'function') updateConfirmPendingBadge();
         const notifyEl = document.getElementById('notificationsScreen');
         if (notifyEl && notifyEl.classList.contains('flex') && typeof renderNotifications === 'function') {
           renderNotifications();

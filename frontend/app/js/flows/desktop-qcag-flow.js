@@ -2720,22 +2720,78 @@ function qcagDesktopRenderCommentPreview() {
   `).join('');
 }
 
+var _qcagDesktopOutletOldDesignCache = {};
+var _qcagDesktopOutletOldDesignFetching = {};
+
 function ksGetOldDesignsForOutlet(currentReq) {
   if (!currentReq || !currentReq.outletCode) return [];
   const outletCode = String(currentReq.outletCode).trim().toLowerCase();
   // New Outlet requests have no real outlet code — never show old designs for them
   if (outletCode === 'new outlet') return [];
   const currentId = currentReq.__backendId;
-  const candidates = (allRequests || [])
-    .filter(r => {
-      if (!r || r.__backendId === currentId) return false;
-      // Exclude 'New Outlet' entries from appearing as past designs
-      if (String(r.outletCode || '').trim().toLowerCase() === 'new outlet') return false;
-      if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return false;
-      const status = String(r.status || '').toLowerCase();
-      if (status !== 'done' && status !== 'processed') return false;
-      return true;
+
+  const candidateMap = {};
+
+  // Add items from allRequests
+  (allRequests || []).forEach(r => {
+    if (!r || r.__backendId === currentId) return;
+    if (String(r.outletCode || '').trim().toLowerCase() === 'new outlet') return;
+    if (String(r.outletCode || '').trim().toLowerCase() !== outletCode) return;
+    const status = String(r.status || '').toLowerCase();
+    if (status !== 'done' && status !== 'processed') return;
+    candidateMap[r.__backendId] = r;
+  });
+
+  // Add items from outlet API cache
+  if (_qcagDesktopOutletOldDesignCache[outletCode]) {
+    _qcagDesktopOutletOldDesignCache[outletCode].forEach(r => {
+      if (r && r.__backendId !== currentId) {
+        const status = String(r.status || '').toLowerCase();
+        if (status === 'done' || status === 'processed') {
+          if (!candidateMap[r.__backendId]) candidateMap[r.__backendId] = r;
+        }
+      }
     });
+  }
+
+  // Trigger background fetch for this outletCode if not fetched yet
+  if (!_qcagDesktopOutletOldDesignFetching[outletCode]) {
+    _qcagDesktopOutletOldDesignFetching[outletCode] = true;
+    try {
+      var base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
+      fetch(base + '/api/ks/requests?outlet_code=' + encodeURIComponent(outletCode))
+        .then(res => res.json())
+        .then(json => {
+          if (json && json.ok && Array.isArray(json.data)) {
+            const doneRows = json.data.filter(r => {
+              if (!r || r.__backendId === currentId) return false;
+              const status = String(r.status || '').toLowerCase();
+              return status === 'done' || status === 'processed';
+            });
+            _qcagDesktopOutletOldDesignCache[outletCode] = doneRows;
+            doneRows.forEach(dr => {
+              if (dr && dr.__backendId) {
+                if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(dr);
+                const idx = (allRequests || []).findIndex(x => x.__backendId === dr.__backendId);
+                if (idx === -1) {
+                  allRequests.push(dr);
+                } else {
+                  allRequests[idx] = Object.assign({}, allRequests[idx], dr);
+                }
+              }
+            });
+            if (currentDetailRequest && currentDetailRequest.__backendId === currentId) {
+              qcagDesktopRefreshOldDesignSection(currentId);
+            }
+          }
+        })
+        .catch(e => {
+          console.warn('[ksGetOldDesignsForOutlet] fetch error:', e);
+        });
+    } catch (_) {}
+  }
+
+  const candidates = Object.values(candidateMap);
 
   // Pre-fetch any unfetched candidate requests in background so past design images appear automatically
   candidates.forEach(r => {

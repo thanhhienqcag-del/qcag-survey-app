@@ -67,7 +67,7 @@
 })();
 
 function showScreen(screenId) {
-  ['homeScreen', 'newRequestScreen', 'warrantyScreen', 'listScreen', 'notificationsScreen', 'accountScreen', 'detailScreen', 'qcagDesktopScreen', 'productionConfirmScreen'].forEach(id => {
+  ['homeScreen', 'newRequestScreen', 'warrantyScreen', 'listScreen', 'notificationsScreen', 'accountScreen', 'detailScreen', 'qcagDesktopScreen'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === screenId) {
@@ -102,8 +102,6 @@ function goHome() {
   showScreen('homeScreen');
   try { if (typeof updateHomePushBtn === 'function') updateHomePushBtn(); } catch (_) {}
   try { if (typeof updateHomeInstallBtn === 'function') updateHomeInstallBtn(); } catch (_) {}
-  // Update confirm badge when returning home
-  try { if (typeof updateConfirmPendingBadge === 'function') updateConfirmPendingBadge(); } catch (_) {}
 }
 
 function startNewRequest() {
@@ -121,13 +119,6 @@ function startWarrantyCheck() {
   lastRequestType = 'warranty';
   resetWarrantyForm();
   showScreen('warrantyScreen');
-}
-
-function startProductionConfirmation() {
-  showScreen('productionConfirmScreen');
-  if (typeof initProductionConfirmScreen === 'function') {
-    initProductionConfirmScreen();
-  }
 }
 
 function showRequestList() {

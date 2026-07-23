@@ -711,14 +711,6 @@
        </div>
        <span id="draftsButtonCount" class="text-base font-bold text-white absolute right-4 top-1/2 -translate-y-1/2"></span>
       </button>
-      <!-- Nút xác nhận sản xuất (chỉ hiển thị cho Sale) -->
-      <button id="productionConfirmBtn" onclick="startProductionConfirmation()" class="w-full py-3 font-medium rounded-xl relative flex items-center justify-center home-action-btn bg-amber-600 hover:bg-amber-700 text-white hidden">
-        <div class="flex items-center justify-center gap-3">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-          <span>Xác nhận sản xuất</span>
-        </div>
-        <span id="productionConfirmBadge" class="text-xs font-bold bg-red-500 text-white rounded-full px-2 py-0.5 absolute right-4 top-1/2 -translate-y-1/2 hidden">0</span>
-       </button>
       <!-- Add to homescreen button (shown when PWA install prompt is available or on iOS) -->
       <button id="homeInstallBtn" onclick="homeInstallBtnClick()" class="w-full py-2.5 rounded-xl border border-blue-200 bg-blue-50 hidden items-center justify-center gap-2 text-sm text-blue-600 transition-colors active:bg-blue-100">
         <span>📲</span>
@@ -729,56 +721,8 @@
     </div>
     <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
 
-    </div>
-
-    <!-- Production Order Confirmation Screen -->
-    <div id="productionConfirmScreen" class="h-full flex-col hidden mobile-main-screen">
-      <!-- Top header bar -->
-      <div class="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50 top-user-bar">
-        <button onclick="goHome()" title="Về trang chủ" aria-label="Về trang chủ" class="p-2 -ml-2 text-gray-700">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-        </button>
-        <div class="flex flex-col items-center">
-          <h2 class="font-semibold text-gray-900">Xác nhận sản xuất</h2>
-          <div class="text-xs text-gray-500 mt-0.5">Danh sách điểm cần duyệt sản xuất</div>
-        </div>
-        <div class="w-10"></div> <!-- spacing balancer -->
-      </div>
-
-      <!-- Status filters (Tab buttons) -->
-      <div class="flex border-b border-gray-100 bg-white">
-        <button id="pcTabPendingBtn" onclick="switchConfirmTab('pending')" class="flex-1 py-3 text-sm font-medium border-b-2 border-amber-600 text-amber-600">
-          Chờ duyệt (<span id="pcCountPending">0</span>)
-        </button>
-        <button id="pcTabAcceptedBtn" onclick="switchConfirmTab('accept')" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500">
-          Đồng ý (<span id="pcCountAccepted">0</span>)
-        </button>
-        <button id="pcTabRejectedBtn" onclick="switchConfirmTab('reject')" class="flex-1 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500">
-          Từ chối (<span id="pcCountRejected">0</span>)
-        </button>
-      </div>
-
-      <!-- Content list area -->
-      <div class="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4" id="productionConfirmList">
-        <!-- Will be rendered dynamically via JS -->
-      </div>
-    </div>
-
-    <!-- Reject Confirmation Dialog Modal -->
-    <div id="pcRejectModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden transition-opacity">
-      <div class="bg-white rounded-2xl w-80 max-w-[90%] p-5 shadow-2xl flex flex-col scale-100 transition-transform">
-        <h3 class="text-base font-bold text-gray-900 mb-2">Lý do từ chối sản xuất</h3>
-        <p class="text-xs text-gray-500 mb-3">Vui lòng nhập lý do từ chối để gửi lại cho nhóm Thiết kế/Admin.</p>
-        <textarea id="pcRejectInput" class="w-full h-24 p-2 border border-gray-200 rounded-lg text-sm mb-4 focus:outline-none focus:border-red-500" placeholder="Nhập lý do tại đây..."></textarea>
-        <div class="flex gap-2.5">
-          <button onclick="closeConfirmRejectModal()" class="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 bg-gray-50 active:bg-gray-100">Hủy</button>
-          <button onclick="submitConfirmReject()" class="flex-1 py-2 rounded-xl text-sm font-medium text-white bg-red-600 active:bg-red-700">Từ chối</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- New Request Form -->
-    <div id="newRequestScreen" class="h-full flex-col hidden">
+   </div><!-- New Request Form -->
+   <div id="newRequestScreen" class="h-full flex-col hidden">
     <div class="flex items-center justify-between p-4 border-b border-gray-100">
       <button onclick="goHome()" title="Về trang chủ" aria-label="Về trang chủ" class="p-2 -ml-2">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
@@ -1322,7 +1266,6 @@
   <script src="app/js/flows/desktop-qcag-flow.js?v=20260506c"></script>
   <script src="app/js/flows/mobile-nav-flow.js?v=20260506c"></script>
   <script src="app/js/flows/mobile-qcag-flow.js?v=20260520a"></script>
-  <script src="app/js/flows/production-confirm-flow.js?v=20260723a"></script>
   <script src="app/js/core/router.js?v=20260506c"></script>
   <script src="app/js/app.js?v=20260506c"></script>
   <!-- v2.5.0 | 2026-07-11 -->
