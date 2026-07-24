@@ -478,7 +478,7 @@
             <span class="qcag-nav-icon">&#x1F4CA;</span> Thống kê <span class="qcag-nav-soon">Coming soon</span>
           </button></li>
         </ul>
-        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.6.1 &nbsp;·&nbsp; 2026-07-23</div>
+        <div style="margin-top:auto;padding:12px 16px 16px;border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:rgba(255,255,255,0.35);user-select:none;" title="Phiên bản ứng dụng">v2.7.0 &nbsp;·&nbsp; 2026-07-24</div>
       </nav>
 
       <!-- Nav Overlay Panels -->
@@ -488,58 +488,113 @@
           <span class="qcag-nav-panel-title">Danh sách yêu cầu</span>
           <span id="qcagNavListCount" class="qcag-nav-panel-count"></span>
         </div>
-        <div class="qcag-nav-list-toolbar">
-          <input id="qcagNavListSearch" type="search" placeholder="Tìm theo Mã TK, Tên Sale, Tên SS, Outlet code, Tên outlet, Khu vực, Brand..." oninput="qcagNavListOnSearch(this.value)" class="qcag-nav-list-search-input">
-          <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xuất Excel">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Xuất Excel
-          </button>
-          <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="Bỏ chọn">Bỏ chọn</button>
+
+        <!-- Metric KPI Cards Bar (Compact 1-line) -->
+        <div id="qcagNavListMetrics" class="qcag-nav-metrics-bar">
+          <div class="qcag-nav-metric-card metric-all" onclick="qcagNavListSetStatusFilter(null, '')" title="Lọc tất cả yêu cầu">
+            <div class="qcag-nav-metric-info">
+              <span class="qcag-nav-metric-val" id="qcagNavKpiTotal">0</span>
+              <span class="qcag-nav-metric-lbl">TỔNG YÊU CẦU</span>
+            </div>
+          </div>
+          <div class="qcag-nav-metric-card metric-pending" onclick="qcagNavListSetStatusFilter(null, 'survey')" title="Lọc yêu cầu chờ khảo sát">
+            <div class="qcag-nav-metric-icon">🟡</div>
+            <div class="qcag-nav-metric-info">
+              <span class="qcag-nav-metric-val" id="qcagNavKpiSurvey">0</span>
+              <span class="qcag-nav-metric-lbl">CHỜ KHẢO SÁT</span>
+            </div>
+          </div>
+          <div class="qcag-nav-metric-card metric-active" onclick="qcagNavListSetStatusFilter(null, 'processing')" title="Lọc yêu cầu đang thi công / thiết kế">
+            <div class="qcag-nav-metric-icon">🔵</div>
+            <div class="qcag-nav-metric-info">
+              <span class="qcag-nav-metric-val" id="qcagNavKpiProcessing">0</span>
+              <span class="qcag-nav-metric-lbl">ĐANG THI CÔNG</span>
+            </div>
+          </div>
+          <div class="qcag-nav-metric-card metric-done" onclick="qcagNavListSetStatusFilter(null, 'done')" title="Lọc yêu cầu hoàn thành">
+            <div class="qcag-nav-metric-icon">🟢</div>
+            <div class="qcag-nav-metric-info">
+              <span class="qcag-nav-metric-val" id="qcagNavKpiDone">0</span>
+              <span class="qcag-nav-metric-lbl">HOÀN THÀNH</span>
+            </div>
+          </div>
         </div>
+
+        <!-- Search Toolbar + Shortened Search Input + Horizontal Region Buttons -->
+        <div class="qcag-nav-list-toolbar">
+          <div class="qcag-nav-search-wrap">
+            <input id="qcagNavListSearch" type="search" placeholder="Tìm Mã TK, Outlet, Sale, SS, Brand..." oninput="qcagNavListOnSearch(this.value)" class="qcag-nav-list-search-input">
+          </div>
+
+          <div class="qcag-nav-region-bar" id="qcagNavListRegionBar">
+            <span class="qcag-nav-filter-label" style="margin-right:2px;">Khu vực:</span>
+            <button class="qcag-nav-region-btn active" data-region="" onclick="qcagNavListSetRegionFilter('')">Tất cả</button>
+            <button class="qcag-nav-region-btn" data-region="s4" onclick="qcagNavListSetRegionFilter('s4')">S4 Hậu Giang</button>
+            <button class="qcag-nav-region-btn" data-region="s5" onclick="qcagNavListSetRegionFilter('s5')">S5 Cà Mau</button>
+            <button class="qcag-nav-region-btn" data-region="s16" onclick="qcagNavListSetRegionFilter('s16')">S16 An Giang</button>
+            <button class="qcag-nav-region-btn" data-region="s17" onclick="qcagNavListSetRegionFilter('s17')">S17 Kiên Giang</button>
+            <button class="qcag-nav-region-btn" data-region="24" onclick="qcagNavListSetRegionFilter('24')">24 Kiên Giang</button>
+            <button class="qcag-nav-region-btn" data-region="s19" onclick="qcagNavListSetRegionFilter('s19')">S19 Bạc Liêu</button>
+            <button class="qcag-nav-region-btn" data-region="mot8" onclick="qcagNavListSetRegionFilter('mot8')">MOT8 Phú Quốc</button>
+          </div>
+
+          <button class="qcag-nav-pdf-btn" onclick="qcagNavListPrintPDF()" title="In PDF phiếu chi tiết từng điểm">In PDF Chi Tiết</button>
+          <button class="qcag-nav-pdf-btn" onclick="qcagNavListPrintSummaryPDF()" title="In Bảng Danh Sách tổng hợp nhiều điểm trên 1 trang A4">In Bảng Danh Sách</button>
+          <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xuất dữ liệu Excel">Xuất Excel</button>
+          <button class="qcag-nav-selectall-btn" onclick="qcagNavListSelectAllVisible()" title="Chọn tất cả danh sách đang hiển thị">Chọn tất cả</button>
+          <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="Bỏ chọn tất cả">Bỏ chọn</button>
+        </div>
+
+        <!-- Compact Status Filter Pills Bar -->
         <div class="qcag-nav-list-filter-bar" id="qcagNavListFilterBar">
           <span class="qcag-nav-filter-label">Trạng thái:</span>
           <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">Tất cả</button>
-          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Chờ khảo sát</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Chờ thiết kế</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Chờ chỉnh sửa</button>
-          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Chờ xác nhận</button>
-          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">Đang xử lý</button>
-          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý</button>
-          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành</button>
-        </div>
-        <div class="qcag-nav-list-filter-bar qcag-nav-region-filter-bar" id="qcagNavListRegionBar">
-          <span class="qcag-nav-filter-label">Khu vực:</span>
-          <button class="qcag-nav-region-pill active" data-region="" onclick="qcagNavListSetRegionFilter('')">Tất cả</button>
-          <button class="qcag-nav-region-pill" data-region="s4" onclick="qcagNavListSetRegionFilter('s4')">S4 Hậu Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s5" onclick="qcagNavListSetRegionFilter('s5')">S5 Cà Mau</button>
-          <button class="qcag-nav-region-pill" data-region="s16" onclick="qcagNavListSetRegionFilter('s16')">S16 An Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s17" onclick="qcagNavListSetRegionFilter('s17')">S17 Kiên Giang</button>
-          <button class="qcag-nav-region-pill" data-region="24" onclick="qcagNavListSetRegionFilter('24')">24 Kiên Giang</button>
-          <button class="qcag-nav-region-pill" data-region="s19" onclick="qcagNavListSetRegionFilter('s19')">S19 Bạc Liêu</button>
-          <button class="qcag-nav-region-pill" data-region="mot8" onclick="qcagNavListSetRegionFilter('mot8')">MOT8 Phú Quốc</button>
+          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Chờ khảo sát <span class="qcag-pill-cnt" id="cntStatusSurvey"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Chờ thiết kế <span class="qcag-pill-cnt" id="cntStatusDesign"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Chờ chỉnh sửa <span class="qcag-pill-cnt" id="cntStatusEdit"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Chờ xác nhận <span class="qcag-pill-cnt" id="cntStatusConfirm"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">Đang xử lý <span class="qcag-pill-cnt" id="cntStatusProcessing"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý <span class="qcag-pill-cnt" id="cntStatusPending"></span></button>
+          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành <span class="qcag-pill-cnt" id="cntStatusDone"></span></button>
         </div>
         <div class="qcag-nav-panel-body">
           <div class="qcag-nav-table-wrap">
             <table class="qcag-nav-table" id="qcagNavListTable">
               <thead>
                 <tr>
-                  <th>STT</th>
-                  <th>Mã TK</th>
-                  <th>Khu vực</th>
-                  <th>Tên Sale</th>
-                  <th>Tên SS</th>
-                  <th>Outlet Code</th>
-                  <th>Tên Outlet</th>
-                  <th>Brand</th>
-                  <th>SL hạng mục</th>
+                  <th style="width:36px;text-align:center;">STT</th>
+                  <th>Mã TK & Ngày tạo</th>
+                  <th>Khu vực & Nhân sự</th>
+                  <th>Thông tin Outlet</th>
+                  <th>Brand & Hạng mục</th>
                   <th>Trạng thái</th>
-                  <th>Định vị</th>
+                  <th style="text-align:center;">Thao tác nhanh</th>
                 </tr>
               </thead>
               <tbody id="qcagNavListBody"></tbody>
             </table>
           </div>
           <div id="qcagNavListPagination" class="qcag-nav-list-pagination"></div>
+        </div>
+
+        <!-- Quick View Side Drawer Overlay -->
+        <div id="qcagNavQuickViewBackdrop" class="qcag-quickview-backdrop hidden" onclick="qcagNavCloseQuickView()"></div>
+        <div id="qcagNavQuickViewDrawer" class="qcag-quickview-drawer hidden">
+          <div class="qcag-qv-header">
+            <div class="qcag-qv-header-main">
+              <span id="qcagQvTkCode" class="qcag-qv-badge-tk">Mã TK</span>
+              <span id="qcagQvOutletTitle" class="qcag-qv-title">Tên Outlet</span>
+            </div>
+            <button class="qcag-qv-close-btn" onclick="qcagNavCloseQuickView()" title="Đóng">&#x2715;</button>
+          </div>
+          <div class="qcag-qv-body" id="qcagNavQuickViewBody">
+            <!-- Dynamic content loaded via JS -->
+          </div>
+          <div class="qcag-qv-footer">
+            <button id="qcagQvOpenMainBtn" class="qcag-qv-main-btn" onclick="qcagNavOpenCurrentInMainView()">
+              <span>🚀 Mở đầy đủ ở trang chính</span>
+            </button>
+          </div>
         </div>
       </div>
 

@@ -4083,9 +4083,12 @@ function qcagNavListSetRegionFilter(region) {
   _qcagNavListRegionFilter = region || '';
   _qcagNavListCurrentPage = 1;
   _qcagNavListSelected.clear();
-  // Update region button active states
   const bar = document.getElementById('qcagNavListRegionBar');
-  if (bar) bar.querySelectorAll('.qcag-nav-region-pill').forEach(b => b.classList.toggle('active', b.dataset.region === _qcagNavListRegionFilter));
+  if (bar) {
+    bar.querySelectorAll('.qcag-nav-region-btn').forEach(b => {
+      b.classList.toggle('active', (b.dataset.region || '') === _qcagNavListRegionFilter.toLowerCase());
+    });
+  }
   qcagNavRenderList();
 }
 
@@ -4127,6 +4130,538 @@ function qcagNavListClearSelection() {
   _qcagNavListRenderBody();
 }
 
+function qcagNavListSelectAllVisible() {
+  if (!_qcagNavListSelected) _qcagNavListSelected = new Set();
+  
+  const items = (_qcagNavListFiltered && _qcagNavListFiltered.length > 0)
+    ? _qcagNavListFiltered
+    : ((typeof allRequests !== 'undefined' ? allRequests : []) || []).map(r => ({ r }));
+
+  items.forEach(item => {
+    const r = item.r || item;
+    const key = r.__backendId || JSON.stringify(r);
+    _qcagNavListSelected.add(key);
+  });
+
+  _qcagNavListRenderBody();
+}
+
+function qcagNavListPrintPDF() {
+  if (!_qcagNavListSelected || _qcagNavListSelected.size === 0) {
+    alert('Vui lòng chọn ít nhất 1 dòng trong danh sách để in PDF.');
+    return;
+  }
+
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  const targets = reqs.filter(r => {
+    const key = r.__backendId || JSON.stringify(r);
+    return _qcagNavListSelected.has(key) || _qcagNavListSelected.has(r.__backendId);
+  });
+
+  if (!targets || targets.length === 0) {
+    alert('Không tìm thấy dữ liệu yêu cầu được chọn để in PDF.');
+    return;
+  }
+
+  const sheetsHtml = targets.map((r, idx) => {
+    const requester = qcagDesktopParseJson(r.requester, {});
+    const items = qcagDesktopParseJson(r.items, []);
+    const itemArr = Array.isArray(items) ? items : [];
+    const status = _qcagNavListBuildStatus(r);
+    const isSurvey = (status.cls === 'survey' || (status.label || '').toLowerCase().includes('khảo sát'));
+
+    const lat = parseFloat(r.outletLat);
+    const lng = parseFloat(r.outletLng);
+    const hasGps = !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+    const mapsUrl = hasGps 
+      ? `https://www.google.com/maps?q=${lat},${lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.outletAddress || r.outletName || '')}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(mapsUrl)}`;
+
+    const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '-';
+
+    const addressStr = (
+      r.outletAddress || 
+      r.address || 
+      r.outlet_address || 
+      r.outletLocation || 
+      r.fullAddress || 
+      requester.address || 
+      requester.outletAddress || 
+      requester.outlet_address || 
+      requester.fullAddress || 
+      (r.street ? `${r.street}${r.district ? ', ' + r.district : ''}${r.province ? ', ' + r.province : ''}` : '') || 
+      '-'
+    ).trim() || '-';
+
+    const itemsRowsHtml = itemArr.map((it, iIdx) => {
+      const rawName = (it.type || it.itemType || it.item_type || it.category || it.title || it.name || '').trim();
+      const name = escapeHtml(rawName || `Hạng mục ${iIdx + 1}`);
+      const brand = escapeHtml(it.brand || r.brand || '-');
+      const qty = it.quantity || it.qty || 1;
+      const specs = escapeHtml(it.specs || it.note || it.description || it.specifications || '-');
+      const subItem = escapeHtml(it.subType || it.subItem || it.secondaryCategory || '');
+
+      let dimCellHtml = '';
+      if (isSurvey) {
+        dimCellHtml = `
+          <div style="display:flex; align-items:center; justify-content:center; gap:4px;">
+            <div style="width:48px; height:24px; border:1.5px solid #475569; border-radius:3px; background:#ffffff;"></div>
+            <span style="font-weight:800; font-size:11px; color:#475569;">x</span>
+            <div style="width:48px; height:24px; border:1.5px solid #475569; border-radius:3px; background:#ffffff;"></div>
+          </div>
+        `;
+      } else {
+        const w = it.width ? `${it.width}` : '';
+        const h = it.height ? `${it.height}` : '';
+        const dimStr = (w || h) ? `${w} x ${h}` : '-';
+        dimCellHtml = `<span class="std-dim-text">${escapeHtml(dimStr)}</span>`;
+      }
+
+      let subItemCellHtml = '';
+      if (isSurvey) {
+        subItemCellHtml = `<div style="width:100%; height:24px; border:1.5px solid #475569; border-radius:3px; background:#ffffff;"></div>`;
+      } else {
+        subItemCellHtml = subItem || '-';
+      }
+
+      return `
+        <tr>
+          <td class="text-center font-bold">${iIdx + 1}</td>
+          <td style="width: 185px; max-width: 185px; padding: 4px 5px;">
+            <div class="item-name" style="font-size: 9.5px; font-weight: 700; color: #111827; line-height: 1.25; word-break: break-word;">${name}</div>
+            <div class="item-brand" style="font-size: 8.5px; font-weight: 500; color: #4b5563; margin-top: 1px; line-height: 1.2; word-break: break-word;">Brand: <strong>${brand}</strong></div>
+          </td>
+          <td class="text-center font-bold">${qty}</td>
+          <td class="text-center">${dimCellHtml}</td>
+          <td class="text-center">${subItemCellHtml}</td>
+          <td class="item-specs">${specs}</td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="print-page">
+        <!-- Page Header with Official QCAG SVG Logo -->
+        <div class="print-header">
+          <div class="header-left" style="display:flex; align-items:center; gap:12px;">
+            <img src="app/assets/qcag-logo.svg" style="height:36px; max-width:140px; object-fit:contain;" alt="QCAG Logo" />
+            <div>
+              <h2 class="company-title" style="font-size:14px; font-weight:700; color:#111827; margin:0; line-height:1.2;">QUẢNG CÁO AN GIANG</h2>
+              <div style="font-size:11px; font-weight:700; color:#111827; letter-spacing:0.2px;">PHIẾU KHẢO SÁT & YÊU CẦU THI CÔNG</div>
+              <div class="header-sub" style="font-size:10px; color:#4b5563;">Mã TK: <strong>${escapeHtml(r.tkCode || '-')}</strong> | Ngày tạo: ${escapeHtml(dateStr)}</div>
+            </div>
+          </div>
+          <div class="header-right">
+            ${isSurvey 
+              ? `<span class="badge-survey-print">PHIẾU KHẢO SÁT</span>` 
+              : `<span class="badge-status-print">${escapeHtml(status.label)}</span>`
+            }
+          </div>
+        </div>
+
+        <!-- Info Grid (Outlet & Sale & QR) -->
+        <div class="info-grid-container">
+          <div class="info-box outlet-box">
+            <h3 class="box-title">THÔNG TIN ĐIỂM BÁN (OUTLET)</h3>
+            <table class="info-table">
+              <tr><td class="lbl">Tên điểm bán:</td><td class="val highlight">${escapeHtml(r.outletName || '-')}</td></tr>
+              <tr><td class="lbl">Mã Outlet:</td><td class="val font-mono">${escapeHtml(r.outletCode || '-')}</td></tr>
+              <tr><td class="lbl">SĐT Outlet:</td><td class="val">${escapeHtml(r.outletPhone || requester.phone || '-')}</td></tr>
+              <tr><td class="lbl">Địa chỉ:</td><td class="val">${escapeHtml(addressStr)}</td></tr>
+            </table>
+          </div>
+
+          <div class="info-box sale-box">
+            <h3 class="box-title">THÔNG TIN NHÂN SỰ (SALE / SS)</h3>
+            <table class="info-table">
+              <tr><td class="lbl">Tên Sale:</td><td class="val highlight">${escapeHtml(requester.saleName || requester.phone || '-')}</td></tr>
+              <tr><td class="lbl">SĐT Sale:</td><td class="val">${escapeHtml(requester.salePhone || requester.phone || '-')}</td></tr>
+              <tr><td class="lbl">Giám sát SS:</td><td class="val">${escapeHtml(requester.ssName || '-')}</td></tr>
+              <tr><td class="lbl">Khu vực:</td><td class="val">${escapeHtml(requester.region || r.region || '-')}</td></tr>
+            </table>
+          </div>
+
+          <div class="info-box qr-box">
+            <h3 class="box-title">ĐỊNH VỊ MAPS</h3>
+            <div class="qr-code-wrap">
+              <img src="${qrUrl}" alt="QR Code Maps" class="qr-img" />
+              <div class="qr-hint">Quét QR mở Google Maps</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Items Table -->
+        <div class="items-table-container">
+          <h3 class="items-section-title">DANH SÁCH HẠNG MỤC CẦN ${isSurvey ? 'KHẢO SÁT / ĐO ĐẠC' : 'THI CÔNG'}</h3>
+          <table class="print-items-table">
+            <thead>
+              <tr>
+                <th style="width: 28px; text-align:center;">STT</th>
+                <th style="width: 185px; text-align:left;">Tên Hạng Mục & Brand</th>
+                <th style="width: 32px; text-align:center;">SL</th>
+                <th style="width: 120px; text-align:center;">Kích Thước (R x C)</th>
+                <th style="width: 120px; text-align:center;">Hạng Mục Phụ</th>
+                <th>Ghi Chú / Quy Cách</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsRowsHtml || '<tr><td colspan="6" style="text-align:center; padding: 12px;">Chưa có hạng mục chi tiết.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Field Survey & Technical Notes Section -->
+        <div class="survey-field-notes-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:4px; margin-bottom:4px;">
+          <div class="survey-field-box" style="border:1px solid #1e293b; border-radius:4px; padding:6px 8px; background:#ffffff !important; height:185px; min-height:185px; display:flex; flex-direction:column; justify-content:space-between;">
+            <div>
+              <div style="font-weight:700; font-size:10px; color:#111827; border-bottom:1px solid #1e293b; padding-bottom:3px; margin-bottom:6px; text-transform:uppercase;">
+                PHƯƠNG THỨC & ĐIỀU KIỆN THI CÔNG
+              </div>
+              <div style="font-size:10.5px; color:#111827; display:grid; grid-template-columns: 1fr 1fr; gap:5px 12px; margin-bottom:6px; font-weight:500;">
+                <div>[ &nbsp; ] Cần kéo điện xa</div>
+                <div>[ &nbsp; ] Cần thang / giàn giáo</div>
+                <div>[ &nbsp; ] Cần xe cẩu / nâng</div>
+                <div>[ &nbsp; ] Cần tháo dỡ bảng cũ</div>
+                <div>[ &nbsp; ] Thi công trên cao</div>
+                <div>[ &nbsp; ] Cấm tải</div>
+              </div>
+              <div style="font-weight:700; font-size:10px; color:#111827; margin-bottom:2px;">Công cụ / Phương án đặc biệt:</div>
+            </div>
+            <div>
+              <div class="dotted-line"></div>
+              <div class="dotted-line"></div>
+              <div class="dotted-line"></div>
+              <div class="dotted-line"></div>
+            </div>
+          </div>
+
+          <div class="survey-field-box" style="border:1px solid #1e293b; border-radius:4px; padding:6px 8px; background:#ffffff !important; height:185px; min-height:185px; display:flex; flex-direction:column;">
+            <div style="font-weight:700; font-size:10px; color:#111827; border-bottom:1px solid #1e293b; padding-bottom:3px; margin-bottom:4px; width:100%; text-transform:uppercase; text-align:left;">
+              SƠ ĐỒ VỊ TRÍ LẮP ĐẶT (VẼ TAY)
+            </div>
+            <div style="flex:1; width:100%; border:none; background:#ffffff !important;"></div>
+          </div>
+        </div>
+
+        <!-- 5-Line Sign Content Section -->
+        <div style="margin-top:4px; margin-bottom:4px;">
+          <div style="font-weight:700; font-size:10px; color:#111827; margin-bottom:2px; text-transform:uppercase;">Nội dung bảng hiệu:</div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+        </div>
+
+        <!-- Extra Notes & Surveyor Recommendations (5 Dotted Lines) -->
+        <div class="extra-notes-container" style="margin-top:4px; margin-bottom:4px;">
+          <div class="extra-notes-title" style="font-weight:700; font-size:10px; color:#111827; margin-bottom:2px; text-transform:uppercase;">Yêu cầu thêm nếu có:</div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+          <div class="dotted-line"></div>
+        </div>
+
+        <!-- Footer Signatures -->
+        <div class="print-footer-signatures">
+          <div class="sig-box">
+            <div>NGƯỜI LẬP PHIẾU</div>
+            <div class="sig-note">(Ký & ghi rõ họ tên)</div>
+          </div>
+          <div class="sig-box">
+            <div>ĐẠI DIỆN ĐIỂM BÁN</div>
+            <div class="sig-note">(Ký & ghi rõ họ tên)</div>
+          </div>
+          <div class="sig-box">
+            <div>NGƯỜI KHẢO SÁT</div>
+            <div class="sig-note">(Ký & ghi rõ họ tên)</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const printDocHtml = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>In PDF Danh Sách Yêu Cầu - QCAG</title>
+      <style>
+        @page {
+          size: A4 portrait;
+          margin: 6mm;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+          font-size: 10.5px;
+          color: #111827;
+          background: #ffffff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .print-page {
+          page-break-after: always;
+          break-after: page;
+          height: 278mm;
+          max-height: 278mm;
+          padding: 4px 6px;
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          overflow: hidden;
+        }
+        .print-page:last-child {
+          page-break-after: avoid;
+          break-after: avoid;
+        }
+        
+        .print-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1.5px solid #1e293b;
+          padding-bottom: 4px;
+          margin-bottom: 6px;
+        }
+        .company-title {
+          font-size: 14px;
+          font-weight: 700;
+          color: #111827;
+          margin: 0;
+          line-height: 1.2;
+        }
+        .header-sub {
+          font-size: 10px;
+          color: #4b5563;
+          margin-top: 1px;
+        }
+        .badge-survey-print, .badge-status-print {
+          background: #ffffff !important;
+          color: #111827 !important;
+          border: 1px solid #1e293b !important;
+          font-weight: 700;
+          font-size: 10.5px;
+          padding: 2px 8px;
+          border-radius: 4px;
+        }
+
+        .info-grid-container {
+          display: grid;
+          grid-template-columns: 1.25fr 1.25fr 0.8fr;
+          gap: 6px;
+          margin-bottom: 6px;
+        }
+        .info-box {
+          border: 1px solid #1e293b;
+          border-radius: 4px;
+          padding: 5px 7px;
+          background: #ffffff !important;
+        }
+        .box-title {
+          font-size: 10px;
+          font-weight: 700;
+          color: #111827;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #1e293b;
+          padding-bottom: 2px;
+          text-transform: uppercase;
+        }
+        .info-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .info-table td { padding: 1.5px 0; vertical-align: top; }
+        .info-table .lbl { width: 75px; color: #4b5563; font-weight: 500; }
+        .info-table .val { color: #111827; font-weight: 600; }
+        .info-table .val.highlight { color: #111827; font-weight: 700; font-size: 11px; }
+        .font-mono { font-family: monospace; }
+
+        .qr-box {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+        }
+        .qr-code-wrap { text-align: center; }
+        .qr-img { width: 72px; height: 72px; border: 1px solid #1e293b; border-radius: 4px; padding: 1px; background: #fff; }
+        .qr-hint { font-size: 8.5px; color: #4b5563; margin-top: 2px; font-weight: 600; }
+
+        .items-section-title {
+          font-size: 10.5px;
+          font-weight: 700;
+          color: #111827;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+        .print-items-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 10px;
+          margin-bottom: 6px;
+        }
+        .print-items-table th {
+          background: #ffffff !important;
+          color: #111827;
+          font-weight: 700;
+          text-transform: uppercase;
+          font-size: 9.5px;
+          padding: 5px 6px;
+          border: 1px solid #1e293b;
+        }
+        .print-items-table td {
+          padding: 4px 6px;
+          border: 1px solid #334155;
+          vertical-align: middle;
+        }
+        .text-center { text-align: center; }
+        .font-bold { font-weight: 700; }
+        .item-name { font-weight: 700; color: #111827; font-size: 11px; }
+        .item-brand { font-size: 9.5px; color: #4b5563; margin-top: 1px; }
+
+        .dotted-line {
+          border-bottom: 1px dashed #4b5563;
+          height: 16px;
+          margin-bottom: 3px;
+        }
+
+        .print-footer-signatures {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin-top: auto;
+          padding-top: 6px;
+          text-align: center;
+          border-top: 1px solid #1e293b;
+        }
+        .sig-box {
+          font-weight: 700;
+          font-size: 10px;
+          color: #111827;
+        }
+        .sig-note {
+          font-weight: 400;
+          font-size: 8.5px;
+          color: #4b5563;
+          margin-top: 1px;
+          margin-bottom: 35px;
+        }
+      </style>
+    </head>
+    <body>
+      ${sheetsHtml}
+      <script>
+        function triggerPrintWhenImagesLoaded() {
+          var imgs = Array.from(document.images);
+          if (imgs.length === 0) {
+            setTimeout(function() { window.print(); }, 150);
+            return;
+          }
+          var loadedCount = 0;
+          function onImgDone() {
+            loadedCount++;
+            if (loadedCount >= imgs.length) {
+              setTimeout(function() { window.print(); }, 150);
+            }
+          }
+          imgs.forEach(function(img) {
+            if (img.complete && img.naturalWidth !== 0) {
+              onImgDone();
+            } else {
+              img.onload = onImgDone;
+              img.onerror = onImgDone;
+            }
+          });
+          setTimeout(function() { window.print(); }, 1000);
+        }
+        if (document.readyState === 'complete') {
+          triggerPrintWhenImagesLoaded();
+        } else {
+          window.addEventListener('load', triggerPrintWhenImagesLoaded);
+        }
+      </script>
+    </body>
+    </html>
+  `;
+
+  let iframe = document.getElementById('qcagNavPrintIframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'qcagNavPrintIframe';
+    iframe.style.position = 'fixed';
+    iframe.style.top = '-9999px';
+    iframe.style.left = '-9999px';
+    iframe.style.width = '1px';
+    iframe.style.height = '1px';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+  }
+
+  const pDoc = iframe.contentWindow.document;
+  pDoc.open();
+  pDoc.write(printDocHtml);
+  pDoc.close();
+}
+
+function qcagNavListExportCSV() {
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  let targets = [];
+
+  if (_qcagNavListSelected && _qcagNavListSelected.size > 0) {
+    targets = reqs.filter(r => {
+      const key = r.__backendId || JSON.stringify(r);
+      return _qcagNavListSelected.has(key) || _qcagNavListSelected.has(r.__backendId);
+    });
+  } else if (_qcagNavListFiltered && _qcagNavListFiltered.length > 0) {
+    targets = _qcagNavListFiltered.map(item => item.r || item);
+  } else {
+    targets = reqs;
+  }
+
+  if (!targets || targets.length === 0) {
+    alert('Không có dữ liệu để xuất Excel.');
+    return;
+  }
+
+  const rows = [
+    ['STT', 'Mã TK', 'Ngày tạo', 'Khu vực', 'Sale', 'SĐT Sale', 'SS', 'Mã Outlet', 'Tên Outlet', 'SĐT Outlet', 'Địa chỉ', 'Brand', 'Trạng thái']
+  ];
+
+  targets.forEach((r, idx) => {
+    const requester = qcagDesktopParseJson(r.requester, {});
+    const status = _qcagNavListBuildStatus(r);
+    const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '-';
+
+    rows.push([
+      idx + 1,
+      r.tkCode || '',
+      dateStr,
+      requester.region || r.region || '',
+      requester.saleName || '',
+      requester.salePhone || requester.phone || '',
+      requester.ssName || '',
+      r.outletCode || '',
+      r.outletName || '',
+      r.outletPhone || requester.phone || '',
+      r.outletAddress || requester.address || '',
+      _qcagNavListGetBrands(r),
+      status.label || ''
+    ]);
+  });
+
+  const csvContent = '\uFEFF' + rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', `QCAG_DanhSach_YeuCau_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 function qcagNavListGoPage(page) {
   _qcagNavListCurrentPage = page;
   _qcagNavListRenderBody();
@@ -4147,6 +4682,57 @@ function _qcagNavListBuildStatus(r) {
   return qcagDesktopStatusBadge(r);
 }
 
+function qcagNavUpdateMetricsAndCounts(reqs) {
+  const all = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  let total = all.length;
+  let surveyCnt = 0;
+  let processingCnt = 0;
+  let doneCnt = 0;
+
+  let cntSurvey = 0, cntDesign = 0, cntEdit = 0, cntConfirm = 0, cntProc = 0, cntPending = 0, cntDone = 0;
+
+  all.forEach(r => {
+    const status = _qcagNavListBuildStatus(r);
+    if (status.cls === 'survey' || status.cls === 'pending') {
+      surveyCnt++;
+    } else if (status.cls === 'done') {
+      doneCnt++;
+    } else {
+      processingCnt++;
+    }
+
+    if (status.cls === 'survey') cntSurvey++;
+    else if (status.cls === 'pending-design') cntDesign++;
+    else if (status.cls === 'pending-edit') cntEdit++;
+    else if (status.cls === 'pending-confirm') cntConfirm++;
+    else if (status.cls === 'processing') cntProc++;
+    else if (status.cls === 'pending') cntPending++;
+    else if (status.cls === 'done') cntDone++;
+  });
+
+  const kpiTot = document.getElementById('qcagNavKpiTotal');
+  const kpiSurv = document.getElementById('qcagNavKpiSurvey');
+  const kpiProc = document.getElementById('qcagNavKpiProcessing');
+  const kpiDone = document.getElementById('qcagNavKpiDone');
+
+  if (kpiTot) kpiTot.textContent = total;
+  if (kpiSurv) kpiSurv.textContent = surveyCnt;
+  if (kpiProc) kpiProc.textContent = processingCnt;
+  if (kpiDone) kpiDone.textContent = doneCnt;
+
+  const setCnt = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val > 0 ? `(${val})` : '';
+  };
+  setCnt('cntStatusSurvey', cntSurvey);
+  setCnt('cntStatusDesign', cntDesign);
+  setCnt('cntStatusEdit', cntEdit);
+  setCnt('cntStatusConfirm', cntConfirm);
+  setCnt('cntStatusProcessing', cntProc);
+  setCnt('cntStatusPending', cntPending);
+  setCnt('cntStatusDone', cntDone);
+}
+
 function qcagNavRenderList() {
   const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
   const q = _qcagNavListSearchQ;
@@ -4154,6 +4740,8 @@ function qcagNavRenderList() {
   const sf = _qcagNavListStatusFilter;
   const rf = _qcagNavListRegionFilter;
   const yf = _qcagNavListYearFilter;
+
+  qcagNavUpdateMetricsAndCounts(reqs);
 
   const regionPatterns = {
     's4':  /south\s*4|\bs4\b/i,
@@ -4191,6 +4779,7 @@ function qcagNavRenderList() {
           String(requester.region    || '').toLowerCase().includes(q) ||
           String(r.outletCode        || '').toLowerCase().includes(q) ||
           String(r.outletName        || '').toLowerCase().includes(q) ||
+          String(r.outletAddress     || requester.address || '').toLowerCase().includes(q) ||
           _qcagNavListGetBrands(r).toLowerCase().includes(q)
         );
         if (!textMatch) return false;
@@ -4221,49 +4810,492 @@ function _qcagNavListGetBrands(r) {
   return brands.join(', ');
 }
 
+function _qcagNavListGetBrandChipsHtml(r) {
+  const items = qcagDesktopParseJson(r.items, []);
+  const itemArr = Array.isArray(items) ? items : [];
+  const brands = [...new Set(itemArr.map(it => it && it.brand).filter(Boolean))];
+
+  const chips = brands.slice(0, 3).map(b => {
+    const bLower = b.toLowerCase();
+    let cls = 'brand-default';
+    if (bLower.includes('heineken')) cls = 'brand-heineken';
+    else if (bLower.includes('tiger')) cls = 'brand-tiger';
+    else if (bLower.includes('larue')) cls = 'brand-larue';
+    else if (bLower.includes('bia viet') || bLower.includes('bia việt')) cls = 'brand-biaviet';
+    else if (bLower.includes('edelweiss')) cls = 'brand-edelweiss';
+    else if (bLower.includes('strongbow')) cls = 'brand-strongbow';
+    return `<span class="qcag-brand-chip ${cls}">${escapeHtml(b)}</span>`;
+  }).join(' ');
+
+  const extra = brands.length > 3 ? `<span class="qcag-brand-more">+${brands.length - 3}</span>` : '';
+  const itemBadge = `<div class="qcag-item-count-badge font-medium text-xs text-gray-500 mt-0.5"><strong>${itemArr.length}</strong> hạng mục</div>`;
+
+  return `<div class="qcag-brands-wrap flex flex-wrap gap-1">${chips}${extra}</div>${itemBadge}`;
+}
+
 function _qcagNavListRenderBody() {
   const tbody = document.getElementById('qcagNavListBody');
   if (!tbody) return;
 
   const page = _qcagNavListGetPage();
-  const startIdx = (_qcagNavListCurrentPage - 1) * _QCAG_LIST_PAGE_SIZE;
 
   if (page.length === 0) {
-    const colspan = 12;
-    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;padding:32px;color:var(--text-soft,#9ca3af)">Không có dữ liệu</td></tr>`;
+    const colspan = 7;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="qcag-empty-cell">Không tìm thấy yêu cầu nào phù hợp.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = page.map(({ r, idx }) => {
     const requester = qcagDesktopParseJson(r.requester, {});
-    const items = qcagDesktopParseJson(r.items, []);
-    const itemArr = Array.isArray(items) ? items : [];
-    const totalItems = itemArr.length;
-    const brandText = escapeHtml(_qcagNavListGetBrands(r) || '-');
     const status = _qcagNavListBuildStatus(r);
     const key = r.__backendId || JSON.stringify(r);
+    const reqId = r.__backendId || key;
     const isSelected = _qcagNavListSelected.has(key);
     const hasGps = !!(r.outletLat && r.outletLng);
-    const gpsBadge = hasGps
-      ? `<a class="qcag-nav-gps-badge has-gps" href="https://www.google.com/maps?q=${parseFloat(r.outletLat)},${parseFloat(r.outletLng)}" target="_blank" rel="noopener" title="Mở Google Maps">📍 Xem map</a>`
-      : `<span class="qcag-nav-gps-badge no-gps">Không có</span>`;
+    const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '-';
 
-    return `<tr class="${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}" onclick="qcagNavListToggleRowByKey('${escapeHtml(key)}')">
-      <td>${idx + 1}</td>
-      <td title="${escapeHtml(r.tkCode || '')}">${escapeHtml(r.tkCode || '-')}</td>
-      <td>${escapeHtml(requester.region || '-')}</td>
-      <td title="${escapeHtml(requester.saleName || requester.phone || '')}">${escapeHtml(requester.saleName || requester.phone || '-')}</td>
-      <td title="${escapeHtml(requester.ssName || '')}">${escapeHtml(requester.ssName || '-')}</td>
-      <td>${escapeHtml(r.outletCode || '-')}</td>
-      <td title="${escapeHtml(r.outletName || '')}">${escapeHtml(r.outletName || '-')}</td>
-      <td title="${brandText}">${brandText}</td>
-      <td style="text-align:center">${totalItems}</td>
-      <td><span class="qcag-nav-status-badge ${escapeHtml(status.cls)}">${escapeHtml(status.label)}</span></td>
-      <td>${gpsBadge}</td>
+    const brandChipsHtml = _qcagNavListGetBrandChipsHtml(r);
+
+    const mapsSvgPin = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-1px;margin-right:3px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+
+    const gpsBtn = hasGps
+      ? `<a class="qcag-nav-act-btn act-map" href="https://www.google.com/maps?q=${parseFloat(r.outletLat)},${parseFloat(r.outletLng)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Xem vị trí trên bản đồ">${mapsSvgPin}Maps</a>`
+      : '';
+
+    return `<tr class="qcag-table-row ${isSelected ? 'is-selected' : ''}" data-key="${escapeHtml(key)}" onclick="qcagNavListToggleRowByKey('${escapeHtml(key)}')">
+      <td class="cell-stt">${idx + 1}</td>
+      <td class="cell-tk">
+        <div class="qcag-tk-code">${escapeHtml(r.tkCode || '-')}</div>
+        <div class="qcag-tk-date">${escapeHtml(dateStr)}</div>
+      </td>
+      <td class="cell-region-sale">
+        <span class="qcag-region-chip">${escapeHtml(requester.region || r.region || '-')}</span>
+        <div class="qcag-sale-name">${escapeHtml(requester.saleName || requester.phone || '-')}</div>
+        <div class="qcag-ss-name">SS: ${escapeHtml(requester.ssName || '-')}</div>
+      </td>
+      <td class="cell-outlet">
+        <div class="qcag-outlet-name" title="${escapeHtml(r.outletName || '')}">${escapeHtml(r.outletName || '-')}</div>
+        <div class="qcag-outlet-code">Mã: ${escapeHtml(r.outletCode || '-')}</div>
+        <div class="qcag-outlet-addr" title="${escapeHtml(r.outletAddress || requester.address || '')}">${escapeHtml(r.outletAddress || requester.address || '')}</div>
+      </td>
+      <td class="cell-brand">${brandChipsHtml}</td>
+      <td class="cell-status">
+        <span class="qcag-nav-status-badge ${escapeHtml(status.cls)}">
+          <span class="status-dot"></span>${escapeHtml(status.label)}
+        </span>
+      </td>
+      <td class="cell-actions">
+        <div class="qcag-table-actions" onclick="event.stopPropagation()">
+          <button class="qcag-nav-act-btn act-qv" onclick="qcagNavOpenQuickView('${escapeHtml(reqId)}', event)" title="Xem nhanh thông tin chi tiết">Xem nhanh</button>
+          <button class="qcag-nav-act-btn act-open" onclick="qcagNavOpenInMainView('${escapeHtml(reqId)}', event)" title="Mở trên màn hình làm việc chính">Mở trang</button>
+          ${gpsBtn}
+        </div>
+      </td>
     </tr>`;
   }).join('');
+}
 
-  // no check-all checkbox anymore
+function qcagNavListPrintSummaryPDF() {
+  if (!_qcagNavListSelected || _qcagNavListSelected.size === 0) {
+    alert('Vui lòng chọn ít nhất 1 dòng trong danh sách để in bảng danh sách.');
+    return;
+  }
+
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  const targets = reqs.filter(r => {
+    const key = r.__backendId || JSON.stringify(r);
+    return _qcagNavListSelected.has(key) || _qcagNavListSelected.has(r.__backendId);
+  });
+
+  if (!targets || targets.length === 0) {
+    alert('Không tìm thấy dữ liệu yêu cầu được chọn để in bảng danh sách.');
+    return;
+  }
+
+  const currentDateStr = new Date().toLocaleDateString('vi-VN');
+  const ITEMS_PER_PAGE = 12;
+  const pages = [];
+  for (let i = 0; i < targets.length; i += ITEMS_PER_PAGE) {
+    pages.push(targets.slice(i, i + ITEMS_PER_PAGE));
+  }
+
+  const sheetsHtml = pages.map((pageTargets, pageIdx) => {
+    const rowsHtml = pageTargets.map((r, rIdx) => {
+      const globalIdx = pageIdx * ITEMS_PER_PAGE + rIdx + 1;
+      const requester = qcagDesktopParseJson(r.requester, {});
+      const items = qcagDesktopParseJson(r.items, []);
+      const itemArr = Array.isArray(items) ? items : [];
+      const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '-';
+
+      const addressStr = (
+        r.outletAddress || 
+        r.address || 
+        r.outlet_address || 
+        r.outletLocation || 
+        r.fullAddress || 
+        requester.address || 
+        requester.outletAddress || 
+        requester.outlet_address || 
+        requester.fullAddress || 
+        (r.street ? `${r.street}${r.district ? ', ' + r.district : ''}${r.province ? ', ' + r.province : ''}` : '') || 
+        '-'
+      ).trim() || '-';
+
+      const itemsSummaryHtml = itemArr.map((it, iIdx) => {
+        const rawName = (it.type || it.itemType || it.item_type || it.category || it.title || it.name || '').trim();
+        const name = escapeHtml(rawName || `Hạng mục ${iIdx + 1}`);
+        const brand = escapeHtml(it.brand || r.brand || '');
+        const brandText = brand ? ` (${brand})` : '';
+        return `<div><strong>${iIdx + 1}.</strong> ${name}${brandText}</div>`;
+      }).join('') || '<div>Chưa có hạng mục</div>';
+
+      return `
+        <tr>
+          <td style="text-align:center; font-weight:700;">${globalIdx}</td>
+          <td>
+            <div style="font-weight:700; font-size:10px;">${escapeHtml(r.tkCode || '-')}</div>
+            <div style="font-size:8.5px; color:#4b5563;">${escapeHtml(dateStr)}</div>
+          </td>
+          <td>
+            <div class="outlet-name">${escapeHtml(r.outletName || '-')}</div>
+            <div class="outlet-code">Mã: ${escapeHtml(r.outletCode || '-')}</div>
+            <div class="outlet-phone">SĐT: ${escapeHtml(r.outletPhone || requester.phone || '-')}</div>
+          </td>
+          <td style="font-size:9.5px; word-break:break-word;">${escapeHtml(addressStr)}</td>
+          <td>
+            <div style="font-weight:700; font-size:9.5px;">${escapeHtml(requester.saleName || requester.phone || '-')}</div>
+            <div style="font-size:8.5px; color:#4b5563;">SĐT: ${escapeHtml(requester.salePhone || requester.phone || '-')}</div>
+            <div style="font-size:8.5px; color:#4b5563;">KV: ${escapeHtml(requester.region || r.region || '-')}</div>
+          </td>
+          <td style="font-size:9px; line-height:1.3;">${itemsSummaryHtml}</td>
+          <td style="background:#ffffff;"></td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div class="summary-page">
+        <!-- Header -->
+        <div class="summary-header">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <img src="app/assets/qcag-logo.svg" style="height:32px; max-width:130px; object-fit:contain;" alt="QCAG Logo" />
+            <div>
+              <h2 class="company-title">QUẢNG CÁO AN GIANG</h2>
+              <div style="font-size:11px; font-weight:700; color:#111827;">DANH SÁCH TỔNG HỢP CÔNG VIỆC KHẢO SÁT & THI CÔNG (KHỔ NGANG A4)</div>
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div class="summary-meta">Ngày in: <strong>${currentDateStr}</strong></div>
+            <div class="summary-meta">Tổng số điểm: <strong>${targets.length} điểm</strong> | Trang <strong>${pageIdx + 1} / ${pages.length}</strong></div>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th style="width:28px;">STT</th>
+              <th style="width:85px;">Mã TK & Ngày</th>
+              <th style="width:160px;">Thông Tin Outlet</th>
+              <th style="width:230px;">Địa Chỉ Điểm Bán</th>
+              <th style="width:130px;">Sale / SS</th>
+              <th>Danh Sách Hạng Mục Cần Làm</th>
+              <th style="width:120px;">Ghi Chú Field</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }).join('');
+
+  const printDocHtml = `
+    <!DOCTYPE html>
+    <html lang="vi">
+    <head>
+      <meta charset="UTF-8">
+      <title>Bảng Danh Sách Khảo Sát & Thi Công - QCAG</title>
+      <style>
+        @page {
+          size: A4 landscape;
+          margin: 6mm 8mm;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+          font-size: 9.5px;
+          color: #111827;
+          background: #ffffff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .summary-page {
+          page-break-after: always;
+          break-after: page;
+          padding: 2px;
+          min-height: 192mm;
+        }
+        .summary-page:last-child {
+          page-break-after: avoid;
+          break-after: avoid;
+        }
+
+        .summary-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1.5px solid #111827;
+          padding-bottom: 4px;
+          margin-bottom: 6px;
+        }
+        .company-title {
+          font-size: 13.5px;
+          font-weight: 700;
+          color: #111827;
+          margin: 0;
+        }
+        .summary-meta {
+          font-size: 9px;
+          color: #374151;
+        }
+
+        .summary-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 9.5px;
+        }
+        .summary-table th {
+          background: #f3f4f6 !important;
+          color: #111827;
+          font-weight: 700;
+          text-transform: uppercase;
+          font-size: 9px;
+          padding: 5px 4px;
+          border: 1px solid #1e293b;
+          text-align: center;
+        }
+        .summary-table td {
+          padding: 5px 6px;
+          border: 1px solid #334155;
+          vertical-align: top;
+          line-height: 1.3;
+        }
+
+        .outlet-name { font-weight: 700; color: #111827; font-size: 10px; }
+        .outlet-code { font-family: monospace; font-size: 8.5px; color: #4b5563; }
+        .outlet-phone { font-size: 8.5px; color: #111827; font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      ${sheetsHtml}
+      <script>
+        function triggerPrintWhenImagesLoaded() {
+          const imgs = Array.from(document.images);
+          let loaded = 0;
+          const total = imgs.length;
+
+          if (total === 0) {
+            window.focus();
+            window.print();
+            return;
+          }
+
+          function checkAll() {
+            loaded++;
+            if (loaded >= total) {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+              }, 150);
+            }
+          }
+
+          imgs.forEach(img => {
+            if (img.complete) {
+              checkAll();
+            } else {
+              img.onload = checkAll;
+              img.onerror = checkAll;
+            }
+          });
+        }
+
+        if (document.readyState === 'complete') {
+          triggerPrintWhenImagesLoaded();
+        } else {
+          window.addEventListener('load', triggerPrintWhenImagesLoaded);
+        }
+      </script>
+    </body>
+    </html>
+  `;
+
+  let iframe = document.getElementById('qcagNavPrintIframe');
+  if (!iframe) {
+    iframe = document.createElement('iframe');
+    iframe.id = 'qcagNavPrintIframe';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(printDocHtml);
+  doc.close();
+}
+
+/* =====================================================
+   QUICK-VIEW SIDE DRAWER LOGIC
+   ===================================================== */
+let _qcagNavQuickViewCurrentReqId = null;
+
+function qcagNavOpenQuickView(reqId, event) {
+  if (event) event.stopPropagation();
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  const req = reqs.find(r => (r.__backendId || JSON.stringify(r)) === reqId || r.__backendId === reqId);
+  if (!req) return;
+
+  _qcagNavQuickViewCurrentReqId = reqId;
+
+  const backdrop = document.getElementById('qcagNavQuickViewBackdrop');
+  const drawer = document.getElementById('qcagNavQuickViewDrawer');
+  const tkCodeEl = document.getElementById('qcagQvTkCode');
+  const outletTitleEl = document.getElementById('qcagQvOutletTitle');
+  const bodyEl = document.getElementById('qcagNavQuickViewBody');
+
+  if (tkCodeEl) tkCodeEl.textContent = req.tkCode || 'Mã TK';
+  if (outletTitleEl) outletTitleEl.textContent = req.outletName || 'Thông tin Outlet';
+
+  if (bodyEl) {
+    bodyEl.innerHTML = _qcagNavBuildQuickViewBodyHtml(req);
+  }
+
+  if (backdrop) backdrop.classList.remove('hidden');
+  if (drawer) drawer.classList.remove('hidden');
+}
+
+function qcagNavCloseQuickView() {
+  const backdrop = document.getElementById('qcagNavQuickViewBackdrop');
+  const drawer = document.getElementById('qcagNavQuickViewDrawer');
+  if (backdrop) backdrop.classList.add('hidden');
+  if (drawer) drawer.classList.add('hidden');
+  _qcagNavQuickViewCurrentReqId = null;
+}
+
+function qcagNavOpenInMainView(reqId, event) {
+  if (event) event.stopPropagation();
+  qcagNavCloseQuickView();
+  qcagNavClosePanel();
+  if (typeof openQCAGDesktopRequest === 'function') {
+    openQCAGDesktopRequest(reqId);
+  }
+}
+
+function qcagNavOpenCurrentInMainView() {
+  if (_qcagNavQuickViewCurrentReqId) {
+    qcagNavOpenInMainView(_qcagNavQuickViewCurrentReqId);
+  }
+}
+
+function _qcagNavBuildQuickViewBodyHtml(req) {
+  const requester = qcagDesktopParseJson(req.requester, {});
+  const items = qcagDesktopParseJson(req.items, []);
+  const itemArr = Array.isArray(items) ? items : [];
+  const status = _qcagNavListBuildStatus(req);
+  const images = typeof qcagDesktopCollectRequestImageUrls === 'function' ? qcagDesktopCollectRequestImageUrls(req) : [];
+  const createdDate = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : 'N/A';
+
+  const itemsHtml = itemArr.length > 0 ? itemArr.map((it, i) => {
+    const dim = (it.width && it.height) ? `${it.width} x ${it.height} cm` : (it.size || 'N/A');
+    const brand = it.brand ? `<span class="qcag-qv-item-brand">${escapeHtml(it.brand)}</span>` : '';
+    return `
+      <div class="qcag-qv-item-card">
+        <div class="qcag-qv-item-header">
+          <span class="qcag-qv-item-num">#${i + 1}</span>
+          <span class="qcag-qv-item-name">${escapeHtml(it.type || it.name || 'Hạng mục')}</span>
+          ${brand}
+        </div>
+        <div class="qcag-qv-item-specs">
+          <div>📐 Kích thước: <strong>${escapeHtml(dim)}</strong></div>
+          ${it.quantity ? `<div>🔢 Số lượng: <strong>${escapeHtml(it.quantity)}</strong></div>` : ''}
+          ${it.material ? `<div>🛠️ Chất liệu: <span>${escapeHtml(it.material)}</span></div>` : ''}
+          ${it.notes ? `<div class="qcag-qv-item-notes">📝 Ghi chú: ${escapeHtml(it.notes)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('') : '<div class="qcag-qv-empty">Không có thông tin hạng mục</div>';
+
+  const photosHtml = images.length > 0 ? `
+    <div class="qcag-qv-photos-grid">
+      ${images.map(img => `
+        <div class="qcag-qv-photo-item" onclick="if(typeof qcagOpenGallery==='function') qcagOpenGallery('${escapeHtml(img.url || img)}')">
+          <img src="${escapeHtml(img.url || img)}" alt="Ảnh" loading="lazy">
+          ${img.label ? `<span class="qcag-qv-photo-label">${escapeHtml(img.label)}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  ` : '<div class="qcag-qv-empty">Chưa có hình ảnh tài liệu</div>';
+
+  const hasGps = !!(req.outletLat && req.outletLng);
+  const gpsBtn = hasGps
+    ? `<a class="qcag-qv-gps-link" href="https://www.google.com/maps?q=${parseFloat(req.outletLat)},${parseFloat(req.outletLng)}" target="_blank" rel="noopener">📍 Xem trên Google Maps (${req.outletLat.slice(0, 7)}, ${req.outletLng.slice(0, 7)})</a>`
+    : '<span class="qcag-qv-no-gps">Không có tọa độ GPS</span>';
+
+  return `
+    <div class="qcag-qv-section">
+      <div class="qcag-qv-status-row">
+        <span class="qcag-nav-status-badge ${escapeHtml(status.cls)}">${escapeHtml(status.label)}</span>
+        <span class="qcag-qv-date">🕒 Ngày tạo: ${escapeHtml(createdDate)}</span>
+      </div>
+    </div>
+
+    <div class="qcag-qv-section">
+      <h4 class="qcag-qv-sec-title">🏬 Điểm bán & Nhân sự phụ trách</h4>
+      <div class="qcag-qv-info-grid">
+        <div class="qcag-qv-info-item">
+          <span class="lbl">Outlet Code:</span>
+          <span class="val font-mono">${escapeHtml(req.outletCode || 'N/A')}</span>
+        </div>
+        <div class="qcag-qv-info-item">
+          <span class="lbl">Khu vực:</span>
+          <span class="val font-semibold text-blue-600">${escapeHtml(requester.region || req.region || 'N/A')}</span>
+        </div>
+        <div class="qcag-qv-info-item">
+          <span class="lbl">Tên Sale:</span>
+          <span class="val">${escapeHtml(requester.saleName || requester.phone || 'N/A')}</span>
+        </div>
+        <div class="qcag-qv-info-item">
+          <span class="lbl">Tên SS:</span>
+          <span class="val">${escapeHtml(requester.ssName || 'N/A')}</span>
+        </div>
+        <div class="qcag-qv-info-item full">
+          <span class="lbl">Địa chỉ:</span>
+          <span class="val">${escapeHtml(req.outletAddress || requester.address || 'N/A')}</span>
+        </div>
+        <div class="qcag-qv-info-item full">
+          <span class="lbl">Tọa độ GPS:</span>
+          <span class="val">${gpsBtn}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="qcag-qv-section">
+      <h4 class="qcag-qv-sec-title">📦 Danh sách hạng mục thi công (${itemArr.length})</h4>
+      <div class="qcag-qv-items-list">${itemsHtml}</div>
+    </div>
+
+    <div class="qcag-qv-section">
+      <h4 class="qcag-qv-sec-title">🖼️ Hình ảnh tài liệu & Phối cảnh (${images.length})</h4>
+      ${photosHtml}
+    </div>
+  `;
 }
 
 function _qcagNavListRenderPagination() {
