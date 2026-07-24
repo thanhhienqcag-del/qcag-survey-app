@@ -329,11 +329,47 @@ async function fetchProductionApprovals() {
         }
     } catch (e) { console.warn('LocalStorage parse warning:', e); }
 
-    // 3. Fetch App 2 Backend production approvals
+    // 3. Fetch App 2 Backend production approvals & permanent pending quotes
     const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
     const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
         ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
         : defaultApp2Backend;
+
+    try {
+        const resPQ = await fetch(app2Base + '/api/ks/requests/pending-quotes');
+        if (resPQ.ok) {
+            const jsonPQ = await resPQ.json();
+            if (jsonPQ && jsonPQ.ok && Array.isArray(jsonPQ.data)) {
+                const listPQ = jsonPQ.data.map(q => {
+                    const quoteCode = q.quote_code || q.quoteCode || q.id || '---';
+                    const idKey = 'po_q_' + quoteCode + '_' + (q.outlet_code || q.outletCode || '');
+                    return {
+                        __backendId: idKey,
+                        id: idKey,
+                        quoteCode: quoteCode,
+                        tkCode: q.tk_code || q.tkCode || '',
+                        outletName: q.outlet_name || q.outletName || 'Outlet',
+                        outletCode: q.outlet_code || q.outletCode || '---',
+                        saleName: q.sale_name || q.saleName || '',
+                        saleCode: q.sale_code || q.saleCode || '',
+                        salePhone: q.sale_phone || q.salePhone || q.outlet_phone || '',
+                        ssName: q.ss_name || q.ssName || '',
+                        requester: q.sale_name || q.saleName || '',
+                        region: q.area || q.region || 'S16',
+                        amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
+                        items: typeof q.items === 'string' ? (JSON.parse(q.items || '[]')) : (q.items || []),
+                        images: typeof q.images === 'string' ? (JSON.parse(q.images || '[]')) : (q.images || []),
+                        productionApprovalStatus: 'pending',
+                        createdAt: q.created_at || new Date().toISOString()
+                    };
+                });
+                allExtracted = allExtracted.concat(listPQ);
+            }
+        }
+    } catch (e) {
+        console.warn('App 2 pending-quotes fetch warning:', e);
+    }
+
     try {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
         if (res2.ok) {

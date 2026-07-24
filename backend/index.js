@@ -2660,6 +2660,24 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
     }
 });
 
+// GET /api/ks/requests/pending-quotes - Lấy danh sách báo giá chờ duyệt vĩnh viễn từ bảng quotations
+app.get('/api/ks/requests/pending-quotes', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            `SELECT id, quote_code, tk_code, outlet_code, outlet_name, 
+                    sale_code, sale_name, sale_phone, ss_name, area, total_amount, 
+                    items, images, updated_at, created_at, quote_status, spo_status
+             FROM quotations
+             WHERE quote_status = 'pending' OR quote_status IS NULL
+             ORDER BY updated_at DESC`
+        );
+        res.json({ ok: true, data: rows || [] });
+    } catch (err) {
+        console.error('GET /api/ks/requests/pending-quotes error:', err);
+        res.status(500).json({ ok: false, error: 'db_error', data: [] });
+    }
+});
+
 // POST /api/ks/requests/:id/approve-production
 app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
     try {
