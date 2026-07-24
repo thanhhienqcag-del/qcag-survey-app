@@ -283,17 +283,19 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 outletName: q.outlet_name || q.outletName || 'Outlet',
                 outletCode: q.outlet_code || q.outletCode || '---',
                 saleName: q.sale_name || q.saleName || '',
+                saleCode: q.sale_code || q.saleCode || (order && (order.sale_code || order.saleCode)) || '',
+                salePhone: q.sale_phone || q.salePhone || q.outlet_phone || q.outletPhone || (order && (order.sale_phone || order.salePhone)) || '',
                 ssName: q.ss_name || q.ssName || '',
-                requester: q.requester || q.requesterName || order.requester || '',
+                requester: q.requester || q.requesterName || (order && order.requester) || '',
                 region: q.area || q.region || 'S16',
                 amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
                 items: q.items || [],
                 images: q.images || [],
                 designImages: q.design_images || q.designImages || [],
                 qcagImageUrl: q.qcag_image_url || q.qcagImageUrl || null,
-                productionApprovalStatus: q.productionApprovalStatus || order.productionApprovalStatus || 'pending',
-                rejectReason: q.rejectReason || order.rejectReason || null,
-                createdAt: q.created_at || order.created_at || new Date().toISOString()
+                productionApprovalStatus: q.productionApprovalStatus || (order && order.productionApprovalStatus) || 'pending',
+                rejectReason: q.rejectReason || (order && order.rejectReason) || null,
+                createdAt: q.created_at || (order && order.created_at) || new Date().toISOString()
             });
         });
     });
@@ -303,17 +305,7 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 async function fetchProductionApprovals() {
     let allExtracted = [];
 
-    // 1. Check localStorage backups
-    try {
-        if (typeof localStorage !== 'undefined') {
-            const local1 = localStorage.getItem('pending_orders_v1');
-            const local2 = localStorage.getItem('pendingOrders');
-            if (local1) allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(JSON.parse(local1)));
-            if (local2) allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(JSON.parse(local2)));
-        }
-    } catch (e) { console.warn('LocalStorage parse warning:', e); }
-
-    // 2. Fetch App 1 Backend pending orders
+    // 1. Fetch App 1 Backend pending orders (Live API Data first!)
     const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     try {
         const res = await fetch(app1Base + '/pending-orders');
@@ -326,6 +318,16 @@ async function fetchProductionApprovals() {
     } catch (e) {
         console.warn('App 1 pending-orders fetch warning:', e);
     }
+
+    // 2. Check localStorage backups
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const local1 = localStorage.getItem('pending_orders_v1');
+            const local2 = localStorage.getItem('pendingOrders');
+            if (local1) allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(JSON.parse(local1)));
+            if (local2) allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(JSON.parse(local2)));
+        }
+    } catch (e) { console.warn('LocalStorage parse warning:', e); }
 
     // 3. Fetch App 2 Backend production approvals
     const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
@@ -379,12 +381,16 @@ async function fetchProductionApprovals() {
         }
     } catch (_) {}
 
-    // Deduplicate by quoteCode / id
+    // Deduplicate by quoteCode / id - preserving rich fields (saleCode, salePhone) if available
     const dedupMap = new Map();
     allExtracted.forEach(item => {
         const key = item.quoteCode || item.__backendId || item.id;
         if (!dedupMap.has(key)) {
             dedupMap.set(key, item);
+        } else {
+            const existing = dedupMap.get(key);
+            if (!existing.saleCode && item.saleCode) existing.saleCode = item.saleCode;
+            if (!existing.salePhone && item.salePhone) existing.salePhone = item.salePhone;
         }
     });
 
