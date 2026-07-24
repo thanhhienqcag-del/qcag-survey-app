@@ -29,6 +29,49 @@ function normalizeSaleName(s) {
     }
 }
 
+function isNameMatch(n1, n2) {
+    const s1 = normalizeSaleName(n1);
+    const s2 = normalizeSaleName(n2);
+    if (!s1 || !s2) return false;
+    if (s1.includes(s2) || s2.includes(s1)) return true;
+    const words1 = s1.split(' ').filter(w => w.length > 1);
+    const words2 = s2.split(' ').filter(w => w.length > 1);
+    if (words1.length > 0 && words2.length > 0) {
+        const set1 = new Set(words1);
+        const overlap = words2.filter(w => set1.has(w));
+        if (overlap.length >= 2 || (overlap.length === words1.length && overlap.length === words2.length)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isSaleMatch(item, session) {
+    if (!session) return true;
+    const sessionCode = String(session.saleCode || session.userCode || '').trim();
+    const sessionPhone = String(session.phone || '').replace(/\D/g, '');
+    const sessionName = session.saleName || session.name || session.username || '';
+
+    const itemCode = String(item.saleCode || item.sale_code || '').trim();
+    const itemPhone = String(item.salePhone || item.phone || '').replace(/\D/g, '');
+    const itemSaleName = item.saleName || item.sale_name || '';
+    const itemRequester = item.requester || '';
+
+    // 1. Unique ID match by saleCode
+    if (sessionCode && itemCode && sessionCode === itemCode) return true;
+
+    // 2. Unique ID match by phone number
+    if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8 && (sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8)))) return true;
+
+    // 3. Name matching with token intersection
+    if (sessionName) {
+        if (itemSaleName && isNameMatch(itemSaleName, sessionName)) return true;
+        if (itemRequester && isNameMatch(itemRequester, sessionName)) return true;
+    }
+
+    return false;
+}
+
 function getBrandBadgeClass(brand) {
     const b = String(brand || '').toLowerCase().trim();
     if (b.includes('tiger')) {
@@ -349,23 +392,7 @@ async function fetchProductionApprovals() {
 
     // 4. STRICT FILTERING BY LOGGED-IN SALE USER ONLY
     if (typeof currentSession !== 'undefined' && currentSession) {
-        const userSaleName = normalizeSaleName(currentSession.saleName || currentSession.name || currentSession.username || '');
-        const userPhone = String(currentSession.phone || '').trim();
-
-        if (userSaleName) {
-            finalItems = finalItems.filter(item => {
-                const itemSale = normalizeSaleName(item.saleName || '');
-                const itemRequester = normalizeSaleName(item.requester || '');
-
-                if (itemSale) {
-                    return itemSale.includes(userSaleName) || userSaleName.includes(itemSale);
-                }
-                if (itemRequester) {
-                    return itemRequester.includes(userSaleName) || userSaleName.includes(itemRequester);
-                }
-                return false; // Strictly hide quotes that do not belong to this logged-in Sale!
-            });
-        }
+        finalItems = finalItems.filter(item => isSaleMatch(item, currentSession));
     }
 
     _productionApprovalItems = finalItems;
