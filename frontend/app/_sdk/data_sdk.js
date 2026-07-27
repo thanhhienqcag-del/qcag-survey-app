@@ -556,17 +556,11 @@
 
   var _pollTimer = null;
   function _startBackgroundPolling() {
-    if (_pollTimer) clearInterval(_pollTimer);
-    _pollTimer = setInterval(function () {
-      try {
-        if (typeof document !== 'undefined' && document.hidden) return;
-        if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
-          window.dataSdk.refresh().catch(function (e) {
-            console.warn('[dataSdk] bg poll error:', e);
-          });
-        }
-      } catch (e) {}
-    }, 4000);
+    if (_pollTimer) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+    // Background polling disabled to reduce traffic; rely on SSE/invalidation events.
   }
 
   function _cloneStoreRows() {
@@ -772,7 +766,7 @@
           }
         }
 
-        // Setup background polling timer for realtime updates across users
+        // Background polling disabled to reduce traffic; rely on SSE/invalidation events.
         try { _startBackgroundPolling(); } catch (e) {}
 
         return { isOk: true };

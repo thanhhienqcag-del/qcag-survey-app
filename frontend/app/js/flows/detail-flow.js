@@ -574,8 +574,11 @@ async function showRequestDetail(id) {
             ${designSlotHtml}
           </div>
           <div class="mq-preview-cell">
-            <div class="mq-preview-label">Báo giá</div>
-            <div id="mqQuotePreviewSlot" class="mq-preview-empty">Đang tải báo giá...</div>
+            <div class="mq-preview-label flex items-center justify-between">
+              <span>Xem chi tiết</span>
+              <span class="text-[10px] text-gray-400 font-normal">↗</span>
+            </div>
+            <div id="mqQuotePreviewSlot" class="w-full h-[84px] overflow-hidden rounded-lg">Đang tải báo giá...</div>
           </div>
         </div>
         ${ (currentSession && String(currentSession.role || '').toLowerCase() === 'heineken') ? '' :
@@ -771,6 +774,413 @@ async function showRequestDetail(id) {
 
 // ── Bridge / Quotation status loader ─────────────────────────────────
 
+function _renderCompactMobileQuoteSlot(q, backendId) {
+  if (!q) {
+    return `
+      <div class="w-full h-full rounded-lg border border-dashed border-gray-700/80 bg-[#111827]/60 flex flex-col items-center justify-center p-2 text-center select-none">
+        <span class="text-xs text-gray-400 font-medium">Chưa có báo giá</span>
+        <span class="text-[10px] text-gray-400 mt-0.5">QCAG đang xử lý</span>
+      </div>
+    `;
+  }
+
+  const quoteCode = q.quote_code || q.quoteCode || '---';
+  const outletName = q.outlet_name || q.outletName || (currentDetailRequest && currentDetailRequest.outletName) || 'Outlet';
+  const totalAmount = Number(q.total_amount || q.totalAmount || q.amount || q.quote_total) || 0;
+  const totalStr = totalAmount > 0 ? (totalAmount.toLocaleString('vi-VN') + ' đ') : 'Chưa báo giá';
+
+  let itemsList = [];
+  try {
+    itemsList = typeof q.items === 'string' ? JSON.parse(q.items) : (Array.isArray(q.items) ? q.items : []);
+  } catch (_) { itemsList = []; }
+
+  const itemCount = itemsList.length;
+
+  window.__ksQuoteModalCache = window.__ksQuoteModalCache || {};
+  window.__ksQuoteModalCache[String(backendId)] = q;
+
+  return `
+    <div onclick="openFullMobileQuoteModal('${ksEscapeHtml(String(backendId))}')" 
+         class="w-full h-full bg-gradient-to-br from-[#111827] via-[#1b2433] to-[#111827] hover:from-[#1b2433] hover:to-[#1f2937] text-white rounded-lg p-2 border border-emerald-500/40 shadow-md flex flex-col justify-between cursor-pointer transition-all overflow-hidden select-none group">
+      <!-- Dòng 1: Giá to nhất -->
+      <div class="flex items-baseline justify-between">
+        <span class="text-base sm:text-lg font-extrabold text-emerald-400 tracking-tight leading-none">${ksEscapeHtml(totalStr)}</span>
+      </div>
+
+      <!-- Dòng 2: Tên Outlet -->
+      <div class="text-xs font-bold text-white truncate uppercase tracking-wide my-0.5">
+        ${ksEscapeHtml(outletName)}
+      </div>
+
+      <!-- Dòng 3: Mã BG + Hạng mục subtext -->
+      <div class="flex items-center justify-between text-[10px] text-gray-400 pt-1 border-t border-gray-700/60">
+        <span class="font-mono font-medium text-orange-300">BG: ${ksEscapeHtml(quoteCode)}</span>
+        <span class="text-gray-300 font-semibold group-hover:text-blue-400 transition-colors">${itemCount > 0 ? `${itemCount} hạng mục ↗` : 'Chi tiết ↗'}</span>
+      </div>
+    </div>
+  `;
+}
+
+function openFullMobileQuoteModal(backendId) {
+  const q = (window.__ksQuoteModalCache && window.__ksQuoteModalCache[String(backendId)]) || null;
+  if (!q) {
+    showToast('Không có dữ liệu chi tiết báo giá');
+    return;
+  }
+
+  let modal = document.getElementById('fullMobileQuoteModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'fullMobileQuoteModal';
+    modal.className = 'fixed inset-0 z-[9999] bg-[#0b0f17]/95 flex flex-col items-center justify-center p-3 select-none backdrop-blur-md overflow-hidden';
+    document.body.appendChild(modal);
+  }
+
+  const quoteCode = q.quote_code || q.quoteCode || '---';
+  const tkCode = q.tk_code || q.tkCode || (currentDetailRequest && currentDetailRequest.tkCode) || '---';
+  const outletName = q.outlet_name || q.outletName || (currentDetailRequest && currentDetailRequest.outletName) || 'Outlet';
+  const outletCode = q.outlet_code || q.outletCode || (currentDetailRequest && currentDetailRequest.outletCode) || '---';
+  const address = q.address || (currentDetailRequest && currentDetailRequest.address) || '';
+
+  const totalAmount = Number(q.total_amount || q.totalAmount || q.amount || q.quote_total) || 0;
+  const totalStr = totalAmount > 0 ? (totalAmount.toLocaleString('vi-VN') + ' đ') : '---';
+
+  let statusLabel = 'Đã báo giá';
+  let statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
+  if (q.spo_status) {
+    statusLabel = q.spo_status;
+    if (q.spo_status.toLowerCase().includes('approved') || q.spo_status.toLowerCase().includes('duyệt')) {
+      statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
+    } else if (q.spo_status.toLowerCase().includes('cancel') || q.spo_status.toLowerCase().includes('từ chối')) {
+      statusCls = 'bg-red-600/30 text-red-300 border-red-500/50';
+    } else {
+      statusCls = 'bg-amber-600/30 text-amber-300 border-amber-500/50';
+    }
+  }
+
+  let itemsList = [];
+  try {
+    itemsList = typeof q.items === 'string' ? JSON.parse(q.items) : (Array.isArray(q.items) ? q.items : []);
+  } catch (_) { itemsList = []; }
+
+  let previewImg = '';
+  const rawImgs = q.images || q.quote_image_url;
+  if (rawImgs) {
+    if (typeof rawImgs === 'string' && rawImgs.startsWith('http')) {
+      previewImg = rawImgs;
+    } else {
+      let arr = [];
+      if (Array.isArray(rawImgs)) arr = rawImgs;
+      else if (typeof rawImgs === 'string') {
+        try { arr = JSON.parse(rawImgs); } catch(_) {}
+      }
+      if (Array.isArray(arr) && arr.length > 0) {
+        const first = arr[0];
+        if (typeof first === 'string' && first.startsWith('http')) previewImg = first;
+        else if (first && first.data && typeof first.data === 'string' && first.data.startsWith('http')) previewImg = first.data;
+        else if (first && first.url && typeof first.url === 'string' && first.url.startsWith('http')) previewImg = first.url;
+      }
+    }
+  }
+
+  modal.innerHTML = `
+    <div class="w-full max-w-lg bg-[#111827] border border-gray-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto relative text-white">
+      <!-- Fixed Header (Tên quán & Mã BG luôn ở trên, không cuộn theo) -->
+      <div class="bg-[#111827] border-b border-gray-700/80 p-3.5 z-20 flex-shrink-0 flex items-center justify-between">
+        <div class="flex flex-col pr-2">
+          <span class="text-xs font-mono font-bold text-orange-400">MÃ BG: ${ksEscapeHtml(quoteCode)} ${tkCode ? `· ${ksEscapeHtml(tkCode)}` : ''}</span>
+          <h3 class="text-base font-bold text-white uppercase tracking-wide truncate max-w-[240px]">${ksEscapeHtml(outletName)}</h3>
+          <span class="text-xs text-gray-400 truncate max-w-[260px]">${ksEscapeHtml(outletCode)} ${address ? `· ${ksEscapeHtml(address)}` : ''}</span>
+        </div>
+        <button onclick="closeFullMobileQuoteModal()" class="w-9 h-9 bg-red-600/80 hover:bg-red-600 active:bg-red-700 text-white rounded-xl flex items-center justify-center text-lg font-bold shadow-lg flex-shrink-0" title="Đóng">✕</button>
+      </div>
+
+      <!-- Scrollable Body Content -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+        <!-- Dòng 1 & Dòng 2: Trạng thái & Giá (Thành 2 dòng riêng biệt, không chia 2 cột) -->
+        <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-emerald-500/40 rounded-xl p-3.5 space-y-2.5 shadow-lg text-left">
+          <!-- Dòng 1: Trạng thái QCAG / SPO -->
+          <div class="flex items-center justify-between border-b border-gray-700/60 pb-2">
+            <span class="text-xs text-gray-400 font-medium">Trạng thái QCAG:</span>
+            <span class="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg border ${statusCls}">${ksEscapeHtml(statusLabel)}</span>
+          </div>
+
+          <!-- Dòng 2: Tổng tiền Báo giá -->
+          <div class="flex items-center justify-between pt-0.5">
+            <span class="text-xs text-gray-300 font-bold uppercase tracking-wider">Tổng tiền báo giá:</span>
+            <span class="text-xl font-extrabold text-emerald-400">${ksEscapeHtml(totalStr)}</span>
+          </div>
+
+          ${q.spo_number ? `
+            <div class="flex items-center justify-between text-[11px] text-gray-400 pt-1.5 border-t border-gray-800">
+              <span>SPO #: <strong class="text-gray-200">${ksEscapeHtml(q.spo_number)}</strong></span>
+              <span>${q.created_by_name ? `Tạo bởi: ${ksEscapeHtml(q.created_by_name)}` : ''}</span>
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Items Breakdown List -->
+        <div class="space-y-2">
+          <div class="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center justify-between">
+            <span>Hạng mục báo giá (${itemsList.length})</span>
+          </div>
+          <div class="space-y-2">
+            ${itemsList.length > 0 ? itemsList.map((it, idx) => {
+              const content = it.content || it.name || it.type || `Hạng mục ${idx + 1}`;
+              const brand = it.brand || '';
+              const width = it.width ? String(it.width).trim() : '';
+              const height = it.height ? String(it.height).trim() : '';
+              const sizeStr = (width && height) ? `${width}m x ${height}m` : (width || height || '');
+              const qtyStr = it.quantity ? `${it.quantity} ${it.unit || ''}`.trim() : '';
+              const priceStr = it.price ? (Number(it.price).toLocaleString('vi-VN') + ' đ') : '';
+              const lineTotal = it.total || (priceStr ? priceStr : '');
+
+              return `
+                <div class="bg-[#1b2433] rounded-xl p-3 border border-gray-700/60 space-y-1.5 shadow-sm">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="text-sm font-semibold text-white leading-tight flex-1">
+                      <span class="text-orange-400 font-bold mr-1">${idx + 1}.</span>${ksEscapeHtml(content)}
+                    </div>
+                    ${brand ? `<span class="px-2 py-0.5 text-xs font-bold rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 flex-shrink-0">${ksEscapeHtml(brand)}</span>` : ''}
+                  </div>
+                  <div class="grid grid-cols-2 gap-2 text-xs text-gray-300 pt-1 border-t border-gray-700/40">
+                    <div><span class="text-gray-400">Kích thước:</span> <strong class="text-white">${sizeStr ? ksEscapeHtml(sizeStr) : '---'}</strong></div>
+                    <div><span class="text-gray-400">Số lượng:</span> <strong class="text-white">${qtyStr ? ksEscapeHtml(qtyStr) : '---'}</strong></div>
+                    ${priceStr ? `<div><span class="text-gray-400">Đơn giá:</span> <span class="text-gray-200">${ksEscapeHtml(priceStr)}</span></div>` : ''}
+                    ${lineTotal ? `<div><span class="text-gray-400">Thành tiền:</span> <strong class="text-orange-300 font-bold">${ksEscapeHtml(lineTotal)}</strong></div>` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('') : '<div class="text-xs text-gray-400 italic text-center py-3">• Chi tiết các hạng mục sản xuất & thi công</div>'}
+          </div>
+        </div>
+
+        <!-- Preview Image if available -->
+        ${previewImg ? `
+          <div class="space-y-1.5 pt-2 border-t border-gray-700/60">
+            <div class="text-xs font-bold text-gray-300 uppercase tracking-wider">Hình ảnh báo giá / Maquette</div>
+            <div class="w-full flex justify-center bg-[#0b0f17] rounded-xl p-2 border border-gray-800">
+              <img src="${ksEscapeHtml(previewImg)}" onclick="closeFullMobileQuoteModal(); showImageFull('${ksEscapeHtml(previewImg)}', false)" class="max-h-48 w-auto rounded-lg object-contain cursor-pointer hover:opacity-90 transition-opacity shadow-md" alt="Preview báo giá">
+            </div>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Bottom Action Bar (Yêu cầu chỉnh sửa + Đóng cửa sổ) -->
+      <div class="p-3 border-t border-gray-700/80 bg-[#111827] flex-shrink-0 space-y-2">
+        <div class="flex items-center gap-2">
+          <button onclick="toggleQuoteEditPanel()" class="flex-1 py-2.5 px-3 bg-amber-600/90 hover:bg-amber-600 active:bg-amber-700 text-white rounded-xl font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Yêu cầu chỉnh sửa
+          </button>
+          <button onclick="closeFullMobileQuoteModal()" class="py-2.5 px-4 bg-gray-800 hover:bg-gray-700 active:bg-gray-600 text-white rounded-xl font-bold text-xs shadow transition-colors">
+            Đóng cửa sổ
+          </button>
+        </div>
+
+        <!-- Inline Edit Request Input Panel (Expandable) -->
+        <div id="fullQuoteEditPanel" class="hidden pt-2 border-t border-gray-800 space-y-2">
+          <div class="text-xs font-bold text-amber-300 flex items-center justify-between">
+            <span>Nhập nội dung yêu cầu chỉnh sửa:</span>
+            <button onclick="openEditRequestSheetFromModal()" class="text-[10px] text-blue-400 hover:underline">Full mẫu + ảnh 📎</button>
+          </div>
+          <textarea id="fullQuoteEditInput" rows="3" placeholder="Nhập chi tiết nội dung cần chỉnh sửa thiết kế / báo giá..." class="w-full bg-[#1b2433] border border-gray-700/80 rounded-xl p-2.5 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-amber-500 shadow-inner custom-scrollbar"></textarea>
+          <div class="flex items-center justify-end gap-2">
+            <button onclick="toggleQuoteEditPanel()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 rounded-lg font-medium">Hủy</button>
+            <button onclick="submitQuoteEditRequest('${ksEscapeHtml(String(backendId))}')" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-xs text-white rounded-lg font-bold shadow flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              Gửi yêu cầu
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  modal.classList.remove('hidden');
+}
+
+function closeFullMobileQuoteModal() {
+  const modal = document.getElementById('fullMobileQuoteModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleQuoteEditPanel() {
+  const panel = document.getElementById('fullQuoteEditPanel');
+  if (!panel) return;
+  const isHidden = panel.classList.contains('hidden');
+  if (isHidden) {
+    panel.classList.remove('hidden');
+    const ta = document.getElementById('fullQuoteEditInput');
+    if (ta) setTimeout(() => ta.focus(), 100);
+  } else {
+    panel.classList.add('hidden');
+  }
+}
+
+function openEditRequestSheetFromModal() {
+  closeFullMobileQuoteModal();
+  if (typeof openEditRequestSheet === 'function') {
+    openEditRequestSheet();
+  }
+}
+
+async function submitQuoteEditRequest(backendId) {
+  const ta = document.getElementById('fullQuoteEditInput');
+  const text = ta ? ta.value.trim() : '';
+  if (!text) {
+    showToast('Vui lòng nhập nội dung yêu cầu chỉnh sửa');
+    if (ta) ta.focus();
+    return;
+  }
+
+  showLoadingOverlay('Đang gửi yêu cầu chỉnh sửa...');
+  try {
+    let req = currentDetailRequest;
+    if (!req || req.__backendId !== backendId) {
+      req = allRequests.find(r => r.__backendId === backendId) || req;
+    }
+
+    if (!req) {
+      hideLoadingOverlay();
+      showToast('Không tìm thấy thông tin yêu cầu');
+      return;
+    }
+
+    const myRole = (currentSession && currentSession.role) || 'heineken';
+    const myName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Sale';
+
+    const newComment = {
+      id: Date.now().toString(),
+      authorName: myName,
+      authorRole: myRole,
+      createdAt: new Date().toISOString(),
+      text: 'Yêu cầu chỉnh sửa: ' + text,
+      commentType: 'edit-request',
+      editCategories: ['Báo giá / Thiết kế']
+    };
+
+    let commentsList = [];
+    try { commentsList = JSON.parse(req.comments || '[]'); } catch (_) {}
+    commentsList.push(newComment);
+
+    const updated = {
+      ...req,
+      status: 'edit_requested',
+      comments: JSON.stringify(commentsList),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (window.dataSdk) {
+      await window.dataSdk.update(updated);
+    } else {
+      const idx = allRequests.findIndex(r => r.__backendId === backendId);
+      if (idx !== -1) allRequests[idx] = updated;
+      saveAllRequestsToStorage();
+    }
+
+    try {
+      if (typeof sendPushNotification === 'function') {
+        sendPushNotification({
+          title: 'Yêu cầu chỉnh sửa mới',
+          body: `${myName} yêu cầu sửa: ${req.outletName || ''}`,
+          role: 'qcag'
+        });
+      }
+    } catch (_) {}
+
+    hideLoadingOverlay();
+    showToast('Đã gửi yêu cầu chỉnh sửa thành công!');
+    if (ta) ta.value = '';
+    closeFullMobileQuoteModal();
+
+    if (typeof renderDetailView === 'function' && currentDetailRequest) {
+      renderDetailView(backendId);
+    }
+  } catch (e) {
+    console.error('Error submitting quote edit request:', e);
+    hideLoadingOverlay();
+    showToast('Có lỗi khi gửi yêu cầu');
+  }
+}
+
+const QUOTE_PERSISTENT_KEY = 'ks_qcag_quotes_persistent_cache';
+
+window.__qcagQuoteListCache = window.__qcagQuoteListCache || null;
+window.__qcagQuoteCacheTime = window.__qcagQuoteCacheTime || 0;
+window.__qcagQuoteListLoaded = window.__qcagQuoteListLoaded || false;
+
+// Initialize RAM cache instantly from localStorage on script execution
+(function _initQuoteCacheFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(QUOTE_PERSISTENT_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.data) && parsed.data.length > 0) {
+        window.__qcagQuoteListCache = parsed.data;
+        window.__qcagQuoteCacheTime = parsed.timestamp || Date.now();
+        window.__qcagQuoteListLoaded = true;
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load quote cache from localStorage', e);
+  }
+})();
+
+async function _fetchApp1QuoteListWithCache() {
+  const now = Date.now();
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+
+  if (window.__qcagQuoteListCache && (now - window.__qcagQuoteCacheTime < CACHE_TTL)) {
+    window.__qcagQuoteListLoaded = true;
+    return window.__qcagQuoteListCache;
+  }
+
+  const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+  let allQuotes = [];
+
+  try {
+    const res = await fetch(app1Base + '/pending-orders');
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.ok && Array.isArray(json.data)) {
+        for (const order of json.data) {
+          const quotes = Array.isArray(order.quotes) ? order.quotes : [];
+          allQuotes.push(...quotes);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('App 1 pending-orders fetch warning:', e);
+  }
+
+  try {
+    const res2 = await fetch(app1Base + '/quotations');
+    if (res2.ok) {
+      const json2 = await res2.json();
+      if (Array.isArray(json2)) {
+        allQuotes.push(...json2);
+      }
+    }
+  } catch (e) {
+    console.warn('App 1 quotations fetch warning:', e);
+  }
+
+  if (allQuotes.length > 0) {
+    window.__qcagQuoteListCache = allQuotes;
+    window.__qcagQuoteCacheTime = now;
+    try {
+      localStorage.setItem(QUOTE_PERSISTENT_KEY, JSON.stringify({
+        timestamp: now,
+        data: allQuotes
+      }));
+    } catch (e) {}
+  }
+
+  window.__qcagQuoteListLoaded = true;
+  return window.__qcagQuoteListCache || [];
+}
+
 async function _loadBridgeStatus(backendId) {
   const section = document.getElementById('quoteBridgeSection');
   const contentEl = document.getElementById('quoteBridgeContent');
@@ -778,193 +1188,378 @@ async function _loadBridgeStatus(backendId) {
   const quotePreviewSlot = document.getElementById('mqQuotePreviewSlot');
   if (!section || !contentEl || !backendId) return;
 
-  // Always show the section
   section.classList.remove('hidden');
 
   const showFallback = (msg) => {
-    if (headMetaEl) headMetaEl.innerHTML = '';
+    if (headMetaEl) {
+      const qCode = currentDetailRequest && (currentDetailRequest.quoteCode || currentDetailRequest.quote_code);
+      const tkCode = currentDetailRequest && (currentDetailRequest.tkCode || currentDetailRequest.tk_code);
+      headMetaEl.innerHTML = `
+        <div class="flex flex-col items-end text-xs font-mono">
+          ${qCode ? `<span><span class="text-gray-400">Mã BG:</span> <span class="font-bold text-orange-400">${ksEscapeHtml(qCode)}</span></span>` : ''}
+          ${tkCode ? `<span><span class="text-gray-400">Mã TK:</span> <span class="font-bold text-gray-300">${ksEscapeHtml(tkCode)}</span></span>` : ''}
+        </div>
+      `;
+    }
     contentEl.innerHTML = `
       <div class="quote-bridge-rows">
         <div class="quote-bridge-row">
           <span class="quote-bridge-label">Trạng thái</span>
-          <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full qb-status qb-status-pending">Chờ báo giá</span>
+          <span class="inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">Chờ báo giá</span>
         </div>
       </div>
-      <div class="text-xs text-gray-500 mt-2">${msg || 'Chưa có thông tin báo giá từ QCAG'}</div>
+      <div class="text-xs text-gray-400 mt-2">${msg || 'Chưa có thông tin báo giá từ QCAG'}</div>
     `;
-    if (quotePreviewSlot) quotePreviewSlot.textContent = 'Chưa có báo giá';
+    if (quotePreviewSlot) quotePreviewSlot.innerHTML = '<div class="mq-preview-empty text-center p-2 text-xs text-gray-400">Chưa có báo giá</div>';
   };
 
   try {
-    const normalizeBase = (u) => String(u || '').trim().replace(/\/+$/, '');
-    const unique = (arr) => {
-      const out = [];
-      const seen = new Set();
-      arr.forEach((x) => {
-        if (x == null) return;
-        const k = String(x);
-        if (seen.has(k)) return;
-        seen.add(k);
-        out.push(k);
-      });
-      return out;
-    };
+    let quoteData = null;
 
-    const baseCandidates = (() => {
-      const c = [];
-      try {
-        if (window.__env) {
-          if (window.__env.BACKEND_URL) c.push(normalizeBase(window.__env.BACKEND_URL));
-          if (Array.isArray(window.__env.BACKEND_URL_CANDIDATES)) {
-            window.__env.BACKEND_URL_CANDIDATES.forEach((u) => {
-              const x = normalizeBase(u);
-              if (x) c.push(x);
-            });
-          }
-        }
-      } catch (e) {}
-      try {
-        if (window.location && window.location.origin && !/^file:/i.test(window.location.origin)) {
-          c.push(normalizeBase(window.location.origin));
-        }
-      } catch (e) {}
-      c.push('');
-      return unique(c);
-    })();
-
-    // Fast-path: if the current detail request already contains embedded bridge
-    // data from the backend `GET /api/ks/requests/:id`, use it and avoid extra
-    // network calls. This prevents extra egress and loading flicker on mobile.
-    let bridgeData = null;
-    let hasEndpointResponse = false;
-    try {
-      if (currentDetailRequest && currentDetailRequest.bridge) {
-        bridgeData = currentDetailRequest.bridge;
-      }
-    } catch (e) { /* ignore */ }
-
-    if (!bridgeData && typeof currentSession !== 'undefined' && currentSession && currentSession.saleCode && backendId) {
-      try {
-        const baseUrl = (window.__env && window.__env.BACKEND_URL) ? window.__env.BACKEND_URL.replace(/\/+$/, '') : '';
-        const targetCode = (currentDetailRequest && currentDetailRequest.tkCode) || backendId;
-        const url = baseUrl + '/quotations/view?sale_code=' + encodeURIComponent(currentSession.saleCode) + '&quote_code=' + encodeURIComponent(targetCode);
-        const res = await fetch(url);
-        if (res.ok) {
-          bridgeData = await res.json();
-        }
-      } catch (e) {
-        console.warn('Failed to fetch quotation view directly', e);
+    // 1. Check embedded bridge or cached quote data
+    if (currentDetailRequest) {
+      if (currentDetailRequest.bridge && (currentDetailRequest.bridge.quote_code || currentDetailRequest.bridge.items)) {
+        quoteData = currentDetailRequest.bridge;
       }
     }
 
-    if (!bridgeData || Object.keys(bridgeData).length === 0) {
-      showFallback('QCAG chưa cập nhật báo giá cho yêu cầu này.');
+    // 2. Fetch live/cached quote data from App 1 backend
+    if (!quoteData) {
+      const targetTk = currentDetailRequest ? String(currentDetailRequest.tkCode || currentDetailRequest.tk_code || '').trim() : '';
+      const targetOutlet = currentDetailRequest ? String(currentDetailRequest.outletCode || currentDetailRequest.outlet_code || '').trim() : '';
+      const targetQuoteCode = currentDetailRequest ? String(currentDetailRequest.quoteCode || currentDetailRequest.quote_code || '').trim() : '';
+
+      const matches = (q) => {
+        if (!q) return false;
+        const qTk = String(q.tk_code || q.tkCode || '').trim();
+        const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
+        const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
+
+        if (targetQuoteCode && qCode && (qCode === targetQuoteCode)) return true;
+        if (targetTk && qTk && (qTk.toLowerCase() === targetTk.toLowerCase() || qTk.replace(/\D/g, '') === targetTk.replace(/\D/g, ''))) return true;
+        if (targetOutlet && qOutlet && qOutlet === targetOutlet) return true;
+        return false;
+      };
+
+      const cachedQuotes = await _fetchApp1QuoteListWithCache();
+      if (Array.isArray(cachedQuotes)) {
+        for (const q of cachedQuotes) {
+          if (matches(q)) { quoteData = q; break; }
+        }
+      }
+    }
+
+    if (!quoteData) {
+      showFallback('QCAG chưa tạo báo giá cho yêu cầu này.');
       return;
     }
 
-    const b = bridgeData;
+    const q = quoteData;
+    const quoteCode = q.quote_code || q.quoteCode || (currentDetailRequest && currentDetailRequest.quoteCode) || '---';
+    const tkCode = q.tk_code || q.tkCode || (currentDetailRequest && currentDetailRequest.tkCode) || '---';
+    const totalNum = Number(q.total_amount || q.totalAmount || q.amount || q.quote_total) || 0;
+    const totalStr = totalNum > 0 ? (totalNum.toLocaleString('vi-VN') + ' đ') : 'Chưa có tổng tiền';
 
-    const isDeletedInApp1 = (
-      String(b.quote_status || '').toLowerCase() === 'deleted' ||
-      b.quote_deleted === true
-    );
-    const effectiveStatus = isDeletedInApp1 ? 'deleted' : String(b.quote_status || '').toLowerCase();
-    const renderPreviewData = (!isDeletedInApp1 && b.quote_render_data && typeof b.quote_render_data === 'object')
-      ? b.quote_render_data
-      : null;
-    const hasRenderPreview = !!(renderPreviewData && (
-      String(renderPreviewData.quoteCode || '').trim() ||
-      (Array.isArray(renderPreviewData.items) && renderPreviewData.items.length > 0) ||
-      (renderPreviewData.primaryImage && String(renderPreviewData.primaryImage.data || '').trim())
-    ));
-    if (hasRenderPreview) {
-      window.__ksQuoteRenderPreviewCache = window.__ksQuoteRenderPreviewCache || {};
-      window.__ksQuoteRenderPreviewCache[String(backendId)] = renderPreviewData;
-    }
-    const previewCandidateUrl = isDeletedInApp1
-      ? ''
-      : String(b.quote_image_url || b.quote_preview_url || '');
+    // Status badge determination
+    let statusLabel = 'Đã báo giá';
+    let statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
 
-    // Status badge
-    const statusMap = {
-      'pending':     { label: 'Chờ báo giá', cls: 'qb-status qb-status-pending' },
-      'in_progress': { label: 'Đang báo giá', cls: 'qb-status qb-status-in-progress' },
-      'quoted':      { label: 'Đã báo giá', cls: 'qb-status qb-status-quoted' },
-      'confirmed':   { label: 'Đã xác nhận', cls: 'qb-status qb-status-confirmed' },
-      'deleted':     { label: 'Báo giá đã xóa', cls: 'qb-status qb-status-default' },
-    };
-    const st = statusMap[effectiveStatus] || { label: effectiveStatus || '—', cls: 'qb-status qb-status-default' };
-    const statusBadge = `<span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${st.cls}">${st.label}</span>`;
-
-    // Format VND
-    const fmtVnd = (n) => {
-      const num = parseFloat(n);
-      if (!n || isNaN(num)) return '—';
-      return num.toLocaleString('vi-VN') + ' đ';
-    };
-
-    // Format date
-    const fmtDate = (d) => {
-      if (!d) return '—';
-      try { return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-      catch (e) { return d; }
-    };
-
-    const viewBtn = ((!isDeletedInApp1 && previewCandidateUrl)
-      ? `<button type="button" onclick="openQuotePreviewFromSlot(decodeURIComponent('${encodeURIComponent(previewCandidateUrl)}'))"
-           class="quote-bridge-view-btn inline-flex items-center gap-1 px-3 py-1.5 mt-3 text-xs font-semibold rounded-lg transition-colors shadow-sm">
-           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-           Xem báo giá
-         </button>`
-      : ((!isDeletedInApp1 && hasRenderPreview)
-      ? `<button type="button" onclick="openQuotePreviewImageFromBridgeCache(decodeURIComponent('${encodeURIComponent(String(backendId))}'))"
-           class="quote-bridge-view-btn inline-flex items-center gap-1 px-3 py-1.5 mt-3 text-xs font-semibold rounded-lg transition-colors shadow-sm">
-           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-           Xem báo giá
-         </button>`
-      : ''));
-
-    if (headMetaEl) {
-      headMetaEl.innerHTML = b.quote_code
-        ? `<span class="quote-bridge-head-label">Mã BG:</span> <span class="quote-bridge-head-value">${b.quote_code}</span>`
-        : '';
-    }
-
-    if (quotePreviewSlot) {
-      if (isDeletedInApp1) {
-        quotePreviewSlot.textContent = 'Báo giá đã xóa';
-      } else if (previewCandidateUrl) {
-        const rawPreviewUrl = previewCandidateUrl;
-        const safeSrc = rawPreviewUrl.replace(/"/g, '&quot;');
-        const encodedPreviewUrl = encodeURIComponent(rawPreviewUrl);
-        quotePreviewSlot.innerHTML = `<img src="${safeSrc}" class="mq-preview-img cursor-pointer" alt="Preview báo giá" onclick="openQuotePreviewFromSlot(decodeURIComponent('${encodedPreviewUrl}'))" onerror="this.onerror=null;this.parentElement.textContent='Chưa có báo giá';">`;
-      } else if (hasRenderPreview) {
-        const thumbHtml = ksBuildQuotePreviewHtml(renderPreviewData);
-        quotePreviewSlot.innerHTML = `
-          <div class="mq-preview-render-thumb" onclick="openQuotePreviewImageFromBridgeCache(decodeURIComponent('${encodeURIComponent(String(backendId))}'))">
-            <div class="mq-preview-render-canvas">${thumbHtml}</div>
-            <div class="mq-preview-render-overlay">Xem preview báo giá</div>
-          </div>
-        `;
+    if (q.spo_status) {
+      statusLabel = q.spo_status;
+      if (q.spo_status.toLowerCase().includes('approved') || q.spo_status.toLowerCase().includes('duyệt')) {
+        statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
+      } else if (q.spo_status.toLowerCase().includes('cancel') || q.spo_status.toLowerCase().includes('từ chối')) {
+        statusCls = 'bg-red-600/30 text-red-300 border-red-500/50';
       } else {
-        quotePreviewSlot.textContent = 'Chưa có báo giá';
+        statusCls = 'bg-amber-600/30 text-amber-300 border-amber-500/50';
       }
+    } else if (q.is_confirmed == 1 || q.isConfirmed == 1) {
+      statusLabel = 'Đã xác nhận';
+      statusCls = 'bg-blue-600/30 text-blue-300 border-blue-500/50';
     }
 
+    // 1. Update Header Meta (Mã BG & Mã TK)
+    if (headMetaEl) {
+      headMetaEl.innerHTML = `
+        <div class="flex flex-col items-end text-xs font-mono">
+          ${quoteCode ? `<span><span class="text-gray-400">Mã BG:</span> <span class="font-bold text-orange-400">${ksEscapeHtml(quoteCode)}</span></span>` : ''}
+          ${tkCode ? `<span><span class="text-gray-400">Mã TK:</span> <span class="font-bold text-gray-300">${ksEscapeHtml(tkCode)}</span></span>` : ''}
+        </div>
+      `;
+    }
+
+    // 2. Update Báo giá QCAG Status Card Content
     contentEl.innerHTML = `
-      <div class="quote-bridge-rows">
-        <div class="quote-bridge-row"><span class="quote-bridge-label">Trạng thái</span>${statusBadge}</div>
-        ${b.quote_total ? `<div class="quote-bridge-row"><span class="quote-bridge-label">Tổng tiền</span><span class="font-medium quote-bridge-value">${fmtVnd(b.quote_total)}</span></div>` : ''}
-        ${b.quoted_by ? `<div class="quote-bridge-row"><span class="quote-bridge-label">Người BG</span><span class="font-medium quote-bridge-value">${b.quoted_by}</span></div>` : ''}
-        ${b.quote_confirmed_at ? `<div class="quote-bridge-row"><span class="quote-bridge-label">Ngày xác nhận</span><span class="font-medium quote-bridge-value">${fmtDate(b.quote_confirmed_at)}</span></div>` : ''}
-        ${b.tk_code ? `<div class="quote-bridge-row"><span class="quote-bridge-label">Mã TK</span><span class="font-medium font-mono quote-bridge-value">${b.tk_code}</span></div>` : ''}
+      <div class="space-y-2 text-sm">
+        <div class="flex items-center justify-between">
+          <span class="text-gray-400">Trạng thái QCAG:</span>
+          <span class="inline-flex px-2.5 py-1 text-xs font-bold rounded-lg border ${statusCls}">${ksEscapeHtml(statusLabel)}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-gray-400">Tổng tiền báo giá:</span>
+          <span class="text-base font-bold text-orange-400">${ksEscapeHtml(totalStr)}</span>
+        </div>
+        ${q.spo_number ? `
+          <div class="flex items-center justify-between text-xs text-gray-400 pt-1.5 border-t border-gray-700/50">
+            <span>SPO #: <strong class="text-gray-200">${ksEscapeHtml(q.spo_number)}</strong></span>
+            <span>${q.created_by_name ? `Tạo bởi: ${ksEscapeHtml(q.created_by_name)}` : ''}</span>
+          </div>
+        ` : ''}
       </div>
-      ${isDeletedInApp1 ? '<div class="text-xs text-gray-500 mt-2">Báo giá này đã bị xóa khỏi hệ thống App 1.</div>' : ''}
-      ${viewBtn}
     `;
+
+    // 3. Render Compact Mobile Quote Slot into #mqQuotePreviewSlot
+    if (quotePreviewSlot) {
+      quotePreviewSlot.innerHTML = _renderCompactMobileQuoteSlot(q, backendId);
+    }
+
   } catch (e) {
+    console.error('Error loading bridge status:', e);
     showFallback('Không tải được dữ liệu báo giá.');
   }
+}
+
+window._quoteDataMap = window._quoteDataMap || {};
+
+function _renderCompactMobileQuoteSlot(q, backendId) {
+  if (!q) return '';
+  if (backendId) window._quoteDataMap[backendId] = q;
+  if (q.quote_code || q.quoteCode) window._quoteDataMap[q.quote_code || q.quoteCode] = q;
+  window._lastLoadedQuoteData = q;
+
+  const totalNum = Number(q.total_amount || q.totalAmount || q.amount || q.quote_total) || 0;
+  const totalStr = totalNum > 0 ? (totalNum.toLocaleString('vi-VN') + ' đ') : 'Chưa có tổng tiền';
+  const outletName = q.outlet_name || q.outletName || (currentDetailRequest ? currentDetailRequest.outletName : 'Outlet');
+
+  let items = [];
+  if (Array.isArray(q.items)) {
+    items = q.items;
+  } else if (typeof q.items === 'string') {
+    try { items = JSON.parse(q.items); } catch (_) { items = []; }
+  }
+  const itemCount = items.length || 1;
+  const safeBackendId = ksEscapeHtml(backendId || '');
+
+  return `
+    <div onclick="openFullMobileQuoteModal('${safeBackendId}')" class="w-full h-full min-h-[110px] bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/40 rounded-xl p-3 flex flex-col justify-between cursor-pointer transition-all duration-150 shadow-sm active:scale-[0.99]">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-semibold text-gray-300">Xem chi tiết</span>
+        <span class="text-xs font-bold text-emerald-400">↗</span>
+      </div>
+
+      <div class="my-1 min-w-0 overflow-hidden">
+        <div class="text-base sm:text-lg font-extrabold text-emerald-400 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">${ksEscapeHtml(totalStr)}</div>
+        <div class="text-xs text-gray-300 font-medium truncate mt-0.5">${ksEscapeHtml(outletName)}</div>
+      </div>
+
+      <div class="flex items-center justify-between text-xs pt-1.5 border-t border-slate-700/60">
+        <span class="text-orange-400 font-semibold">${itemCount} hạng mục ↗</span>
+      </div>
+    </div>
+  `;
+}
+
+function openFullMobileQuoteModal(backendId, directQuoteData) {
+  const req = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === backendId) : currentDetailRequest;
+  
+  let q = directQuoteData || (window._quoteDataMap && backendId && window._quoteDataMap[backendId]);
+  if (!q && req && req.bridge) q = req.bridge;
+  if (!q && window._lastLoadedQuoteData) q = window._lastLoadedQuoteData;
+
+  // Fallback search in cached quotes list
+  if (!q && Array.isArray(window.__qcagQuoteListCache)) {
+    const targetTk = req ? String(req.tkCode || req.tk_code || '').trim() : '';
+    const targetOutlet = req ? String(req.outletCode || req.outlet_code || '').trim() : '';
+    const targetQuoteCode = req ? String(req.quoteCode || req.quote_code || '').trim() : '';
+
+    q = window.__qcagQuoteListCache.find(item => {
+      if (!item) return false;
+      const qCode = String(item.quote_code || item.quoteCode || item.id || '').trim();
+      const qTk = String(item.tk_code || item.tkCode || '').trim();
+      const qOutlet = String(item.outlet_code || item.outletCode || '').trim();
+
+      if (targetQuoteCode && qCode && targetQuoteCode === qCode) return true;
+      if (targetTk && qTk && (qTk.toLowerCase() === targetTk.toLowerCase() || qTk.replace(/\D/g, '') === qTk.replace(/\D/g, ''))) return true;
+      if (targetOutlet && qOutlet && targetOutlet === qOutlet) return true;
+      return false;
+    });
+  }
+
+  if (!q) {
+    if (typeof showToast === 'function') showToast('Đang nạp dữ liệu báo giá...');
+    return;
+  }
+  window._lastLoadedQuoteData = q;
+
+  const totalNum = Number(q.total_amount || q.totalAmount || q.amount || q.quote_total) || 0;
+  const totalStr = totalNum > 0 ? (totalNum.toLocaleString('vi-VN') + ' đ') : 'Chưa có tổng tiền';
+  const outletName = q.outlet_name || q.outletName || (req ? req.outletName : 'Outlet');
+  const outletCode = q.outlet_code || q.outletCode || (req ? req.outletCode : '---');
+  const address = q.address || q.outlet_address || (req ? req.address : '');
+  const quoteCode = q.quote_code || q.quoteCode || (req ? req.quoteCode : '---');
+  const tkCode = q.tk_code || q.tkCode || (req ? req.tkCode : '---');
+
+  let items = [];
+  if (Array.isArray(q.items)) {
+    items = q.items;
+  } else if (typeof q.items === 'string') {
+    try { items = JSON.parse(q.items); } catch (_) { items = []; }
+  }
+
+  let quoteImages = [];
+  const rawImgs = q.images || q.image_url || q.qcag_image_url || q.designImages || q.design;
+  if (Array.isArray(rawImgs)) {
+    quoteImages = rawImgs;
+  } else if (typeof rawImgs === 'string') {
+    try {
+      const parsed = JSON.parse(rawImgs);
+      if (Array.isArray(parsed)) quoteImages = parsed;
+      else if (rawImgs.startsWith('http')) quoteImages = [rawImgs];
+    } catch (_) {
+      if (rawImgs.startsWith('http')) quoteImages = [rawImgs];
+    }
+  }
+  if (quoteImages.length === 0 && req) {
+    const reqDesign = req.design || req.designImages;
+    if (Array.isArray(reqDesign)) quoteImages = reqDesign;
+    else if (typeof reqDesign === 'string') {
+      try {
+        const parsed = JSON.parse(reqDesign);
+        if (Array.isArray(parsed)) quoteImages = parsed;
+        else if (reqDesign.startsWith('http')) quoteImages = [reqDesign];
+      } catch (_) {
+        if (reqDesign.startsWith('http')) quoteImages = [reqDesign];
+      }
+    }
+  }
+
+  const existing = document.getElementById('fullMobileQuoteModal');
+  if (existing) existing.remove();
+
+  let statusLabel = 'Đã báo giá';
+  let statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
+  if (q.spo_status) {
+    statusLabel = q.spo_status;
+    if (q.spo_status.toLowerCase().includes('approved') || q.spo_status.toLowerCase().includes('duyệt')) {
+      statusCls = 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50';
+    } else if (q.spo_status.toLowerCase().includes('cancel') || q.spo_status.toLowerCase().includes('từ chối')) {
+      statusCls = 'bg-red-600/30 text-red-300 border-red-500/50';
+    } else {
+      statusCls = 'bg-amber-600/30 text-amber-300 border-amber-500/50';
+    }
+  }
+
+  const itemsHtml = items.map((it, idx) => {
+    const codeStr = it.code ? `${it.code}. ` : `${idx + 1}. `;
+    const content = ksEscapeHtml(it.content || it.name || 'Hạng mục');
+    const brand = ksEscapeHtml(it.brand || '');
+    const width = it.width ? `${it.width}m` : '-';
+    const height = it.height ? `${it.height}m` : '-';
+    const qty = `${it.quantity || 1} ${it.unit || 'm²'}`;
+    const priceNum = Number(it.price || 0);
+    const priceStr = priceNum > 0 ? (priceNum.toLocaleString('vi-VN') + ' đ') : '---';
+    const totalNumItem = Number(it.total || (priceNum * (Number(it.quantity) || 1))) || 0;
+    const totalItemStr = totalNumItem > 0 ? (totalNumItem.toLocaleString('vi-VN') + ' đ') : '---';
+
+    return `
+      <div class="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 space-y-2">
+        <div class="flex items-start justify-between">
+          <div class="font-bold text-sm text-gray-100">${codeStr}${content}</div>
+          ${brand ? `<span class="text-xs px-2 py-0.5 rounded bg-emerald-600/20 text-emerald-400 font-bold border border-emerald-500/30">${brand}</span>` : ''}
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs text-gray-300 pt-1 border-t border-slate-800/60">
+          <div>Kích thước: <strong class="text-gray-200">${width} x ${height}</strong></div>
+          <div>Số lượng: <strong class="text-gray-200">${qty}</strong></div>
+          <div>Đơn giá: <strong class="text-gray-300">${priceStr}</strong></div>
+          <div>Thành tiền: <strong class="text-amber-400 font-bold text-sm">${totalItemStr}</strong></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const modalHtml = `
+    <div id="fullMobileQuoteModal" class="fixed inset-0 z-[999] bg-slate-950 flex flex-col overflow-hidden animate-fadeIn">
+      <!-- Fixed Sticky Header -->
+      <div class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-md px-4 py-3.5 border-b border-slate-800 flex items-start justify-between shadow-lg">
+        <div class="min-w-0 pr-2">
+          <div class="text-xs font-mono text-amber-500 font-bold tracking-wider">MÃ BG: ${ksEscapeHtml(quoteCode)} · ${ksEscapeHtml(tkCode)}</div>
+          <h2 class="text-lg font-extrabold text-white truncate mt-0.5">${ksEscapeHtml(outletName)}</h2>
+          <div class="text-xs text-gray-400 truncate mt-0.5">${ksEscapeHtml(outletCode)} ${address ? '· ' + ksEscapeHtml(address) : ''}</div>
+        </div>
+        <button onclick="closeFullMobileQuoteModal()" class="w-9 h-9 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center text-base font-bold shadow-md active:scale-95 flex-shrink-0">✕</button>
+      </div>
+
+      <!-- Scrollable Body -->
+      <div class="flex-1 overflow-y-auto p-4 space-y-4">
+        <!-- 2-Row Stacked Status & Total Price -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <span class="text-xs text-gray-400 font-medium">Trạng thái QCAG:</span>
+            <span class="px-2.5 py-1 text-xs font-bold rounded-lg border ${statusCls}">${ksEscapeHtml(statusLabel)}</span>
+          </div>
+          <div class="flex items-center justify-between pt-0.5">
+            <span class="text-xs text-gray-400 font-medium">Tổng tiền báo giá:</span>
+            <span class="text-lg font-extrabold text-amber-400">${ksEscapeHtml(totalStr)}</span>
+          </div>
+        </div>
+
+        <!-- Items Header -->
+        <div class="flex items-center justify-between pt-1">
+          <h3 class="text-xs font-bold text-gray-400 tracking-wider uppercase">Danh sách hạng mục (${items.length})</h3>
+        </div>
+
+        <!-- Items Container -->
+        <div class="space-y-2.5">
+          ${itemsHtml || '<div class="text-center py-6 text-xs text-gray-400">Không có thông tin hạng mục</div>'}
+        </div>
+
+        <!-- HÌNH ẢNH BÁO GIÁ / MAQUETTE Section -->
+        ${quoteImages.length > 0 ? `
+          <div class="space-y-2 pt-2">
+            <h3 class="text-xs font-bold text-gray-400 tracking-wider uppercase">HÌNH ẢNH BÁO GIÁ / MAQUETTE</h3>
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5">
+              ${quoteImages.map(imgItem => {
+                const cleanUrl = typeof imgItem === 'string' ? imgItem : (imgItem.data || imgItem.url || imgItem.src);
+                if (!cleanUrl || typeof cleanUrl !== 'string' || !cleanUrl.startsWith('http')) return '';
+                return `
+                  <img src="${ksEscapeHtml(cleanUrl)}" onclick="openMqImagePreview('${ksEscapeHtml(cleanUrl)}')" class="w-full max-h-[350px] object-contain rounded-lg border border-slate-700/60 bg-black/40 cursor-pointer hover:opacity-90 transition-opacity">
+                `;
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Bottom Bar -->
+      <div class="bg-slate-900/95 border-t border-slate-800 p-3.5 flex items-center justify-between gap-3">
+        <button onclick="openEditRequestSheet()" class="flex-1 py-3 px-4 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-2">
+          <span>✏️ Yêu cầu chỉnh sửa</span>
+        </button>
+        <button onclick="closeFullMobileQuoteModal()" class="py-3 px-5 rounded-xl bg-slate-800 text-gray-300 text-xs font-bold active:scale-95 transition-all">Đóng cửa sổ</button>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+  // Hide floating FAB edit button while quote modal is open
+  try {
+    const fab = document.getElementById('editRequestFab');
+    if (fab) fab.classList.add('hidden');
+  } catch (_) {}
+}
+
+function closeFullMobileQuoteModal() {
+  const modal = document.getElementById('fullMobileQuoteModal');
+  if (modal) modal.remove();
+
+  // Restore floating FAB edit button if on detail screen
+  try {
+    const fab = document.getElementById('editRequestFab');
+    if (fab && typeof currentDetailRequest !== 'undefined' && currentDetailRequest && currentDetailRequest.type === 'new') {
+      fab.classList.remove('hidden');
+    }
+  } catch (_) {}
 }
 
 function ksEscapeHtml(value) {

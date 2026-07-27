@@ -2,6 +2,8 @@
 
 const crypto = require('crypto');
 
+const pendingSyncTimers = new Map();
+
 function safeJsonParse(str, fallback = []) {
   if (!str) return fallback;
   try {
@@ -571,6 +573,26 @@ async function syncRequest(pool, id) {
 /**
  * Delete a request from the new tables.
  */
+function scheduleSyncRequest(pool, id, delayMs = null) {
+  if (!id) return;
+  const key = String(id);
+  const existing = pendingSyncTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  const debounceMs = Number.isFinite(delayMs) && delayMs > 0
+    ? delayMs
+    : Number(process.env.KS_SYNC_DEBOUNCE_MS || 2000);
+  const timer = setTimeout(() => {
+    pendingSyncTimers.delete(key);
+    syncRequest(pool, id).catch((err) => {
+      console.error(`[dual-write] syncRequest background failed for id=${id}:`, err);
+    });
+  }, debounceMs);
+  timer.unref && timer.unref();
+  pendingSyncTimers.set(key, timer);
+}
+
 async function deleteRequest(pool, id) {
   if (!id) return;
   try {
@@ -674,7 +696,8 @@ async function deleteProductionOrder(pool, id) {
 module.exports = {
   syncQuotation: async () => {},
   deleteQuotation: async () => {},
-  syncRequest: async () => {},
+  syncRequest,
+  scheduleSyncRequest,
   deleteRequest: async () => {},
   syncProductionOrder: async () => {},
   deleteProductionOrder: async () => {}

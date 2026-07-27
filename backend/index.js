@@ -15,7 +15,7 @@ const mysql = require('./lib/mysql-compat');
 const crypto = require('crypto');
 const { Storage } = require('@google-cloud/storage');
 const { uploadBuffer } = require('./storage');
-const { syncRequest } = require('./lib/dual-write');
+const { scheduleSyncRequest } = require('./lib/dual-write');
 const { resolveKsRequestsOptions } = require('./lib/ks-request-query');
 
 const gcs = new Storage();
@@ -2634,22 +2634,30 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
 
         try {
             const [rows2] = await pool.query(
-                `SELECT id, backend_id, tk_code, outlet_code, outlet_name,
+                `SELECT id, backend_id, tk_code, outlet_code, outlet_name, design_images,
                         production_approval_status, production_reject_reason, production_approved_at, production_approved_by
-                 FROM ks_requests_view
-                 WHERE production_approval_status IS NOT NULL AND production_approval_status != ''`
+                 FROM ks_requests_view`
             );
             (rows2 || []).forEach(r => {
-                const key = r.tk_code || r.backend_id || String(r.id);
-                if (key && !approvalsMap[key]) {
-                    approvalsMap[key] = {
-                        quoteCode: key,
-                        status: r.production_approval_status || 'pending',
-                        approvedBy: r.production_approved_by || null,
-                        approvedAt: r.production_approved_at || null,
-                        reason: r.production_reject_reason || null
-                    };
-                }
+                const keys = [r.tk_code, r.backend_id, r.outlet_code, String(r.id)].filter(Boolean);
+                keys.forEach(k => {
+                    const key = String(k).trim();
+                    if (!approvalsMap[key]) {
+                        approvalsMap[key] = {
+                            quoteCode: key,
+                            status: r.production_approval_status || 'pending',
+                            approvedBy: r.production_approved_by || null,
+                            approvedAt: r.production_approved_at || null,
+                            reason: r.production_reject_reason || null,
+                            designImages: r.design_images || null
+                        };
+                    } else {
+                        if (r.design_images) approvalsMap[key].designImages = r.design_images;
+                        if (r.production_approval_status && approvalsMap[key].status === 'pending') {
+                            approvalsMap[key].status = r.production_approval_status;
+                        }
+                    }
+                });
             });
         } catch (_) {}
 
@@ -2657,24 +2665,6 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
     } catch (err) {
         console.error('GET /api/ks/requests/production-approvals error:', err);
         res.status(500).json({ ok: false, error: 'db_error', data: {} });
-    }
-});
-
-// GET /api/ks/requests/pending-quotes - Lấy danh sách báo giá chờ duyệt vĩnh viễn từ bảng quotations
-app.get('/api/ks/requests/pending-quotes', async (req, res) => {
-    try {
-        const [rows] = await pool.query(
-            `SELECT id, quote_code, tk_code, outlet_code, outlet_name, 
-                    sale_code, sale_name, sale_phone, ss_name, area, total_amount, 
-                    items, images, updated_at, created_at, quote_status, spo_status
-             FROM quotations
-             WHERE quote_status = 'pending' OR quote_status IS NULL
-             ORDER BY updated_at DESC`
-        );
-        res.json({ ok: true, data: rows || [] });
-    } catch (err) {
-        console.error('GET /api/ks/requests/pending-quotes error:', err);
-        res.status(500).json({ ok: false, error: 'db_error', data: [] });
     }
 });
 
@@ -2998,10 +2988,8 @@ app.post('/api/ks/requests', async (req, res) => {
             [tkCode, statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
         );
 
-        // Dual-write sync (non-blocking)
-        syncRequest(pool, insertId).catch(syncErr => {
-            console.error('[dual-write] syncRequest background failed:', syncErr);
-        });
+        // Dual-write sync (non-blocking, debounced)
+        scheduleSyncRequest(pool, insertId);
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
         wsInvalidate('ks_requests');
@@ -3176,10 +3164,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
 
-        // Dual-write sync (non-blocking)
-        syncRequest(pool, rowId).catch(syncErr => {
-            console.error('[dual-write] syncRequest background failed:', syncErr);
-        });
+        // Dual-write sync (non-blocking, debounced)
+        scheduleSyncRequest(pool, rowId);
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');
@@ -3333,10 +3319,8 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
             [newOutletCode, newMqFolder, newDesignImages, rowId]
         );
 
-        // Dual-write sync (non-blocking)
-        syncRequest(pool, rowId).catch(syncErr => {
-            console.error('[dual-write] syncRequest background failed:', syncErr);
-        });
+        // Dual-write sync (non-blocking, debounced)
+        scheduleSyncRequest(pool, rowId);
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');

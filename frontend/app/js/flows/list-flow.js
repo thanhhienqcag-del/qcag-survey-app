@@ -174,11 +174,90 @@ function updateRequestCount() {
     const wc = document.getElementById('warrantyCount');
     if (wc) wc.textContent = warrantyCount;
   } catch (e) {
-    // defensive: ignore DOM update errors
     console.warn('Failed to update request counters', e);
   }
-  // Ensure home stats update even if some list elements are missing
   try { updateHomeStats(); } catch (e) { console.warn('updateHomeStats error', e); }
+}
+
+function _normalizeForMatch(str) {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getCardQuoteBadge(req) {
+  if (!req) return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' };
+
+  if (req.type === 'warranty') {
+    const dsState = getWarrantyState(req);
+    return DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.warranty_pending;
+  }
+
+  // 1. Direct check: embedded quote data
+  if (req.quoteCode || req.quote_code || req.quoteTotal || req.quote_total) {
+    return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
+  }
+  if (req.bridge && (req.bridge.quote_code || req.bridge.items || req.bridge.total_amount)) {
+    return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
+  }
+
+  // 2. Check cached quotes using multi-layered criteria
+  const cached = window.__qcagQuoteListCache;
+  if (Array.isArray(cached) && cached.length > 0) {
+    const rOutlet = String(req.outletCode || req.outlet_code || '').trim();
+    const rTkRaw = String(req.tkCode || req.tk_code || '').trim().toLowerCase();
+    const rTkDigits = rTkRaw.replace(/\D/g, '');
+    const rQCode = String(req.quoteCode || req.quote_code || '').trim();
+    const rNameNorm = _normalizeForMatch(req.outletName);
+
+    const hasMatch = cached.some(q => {
+      if (!q) return false;
+      const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
+      const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
+      const qTkRaw = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
+      const qTkDigits = qTkRaw.replace(/\D/g, '');
+      const qNameNorm = _normalizeForMatch(q.outlet_name || q.outletName);
+
+      // Match 1: Quote Code
+      if (rQCode && qCode && rQCode === qCode) return true;
+
+      // Match 2: Outlet Code (if valid code and not "Chưa có code" / "---")
+      if (rOutlet && qOutlet && rOutlet !== '---' && qOutlet !== 'Chưa có code' && rOutlet === qOutlet) return true;
+
+      // Match 3: TK Code digits
+      if (rTkDigits && qTkDigits && rTkDigits.length >= 4 && qTkDigits.length >= 4 && rTkDigits === qTkDigits) return true;
+
+      // Match 4: Name containment
+      if (rNameNorm && qNameNorm && rNameNorm.length >= 4 && qNameNorm.length >= 4) {
+        if (rNameNorm.includes(qNameNorm) || qNameNorm.includes(rNameNorm)) return true;
+      }
+
+      return false;
+    });
+
+    if (hasMatch) {
+      return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
+    } else {
+      return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
+    }
+  }
+
+  // 3. If quotes list is NOT loaded yet (đang chờ load báo giá)
+  if (!window.__qcagQuoteListLoaded) {
+    if (typeof _fetchApp1QuoteListWithCache === 'function') {
+      _fetchApp1QuoteListWithCache().then(() => {
+        if (typeof renderRequestList === 'function') renderRequestList();
+      }).catch(() => {});
+    }
+    return { label: '...', cls: 'bg-gray-700/40 text-gray-400 font-mono tracking-widest animate-pulse px-2' };
+  }
+
+  // 4. Quote list finished loading and no quote found
+  return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
 }
 
 function renderRequestList() {
@@ -188,7 +267,6 @@ function renderRequestList() {
   // Restrict visibility: users only see requests they created
   filtered = filtered.filter(r => {
     try {
-      // Nếu là QCAG Admin, cho phép xem tất cả dữ liệu
       if (currentSession && currentSession.role === 'qcag') return true;
 
       const reqOwner = JSON.parse(r.requester || '{}');
@@ -202,7 +280,6 @@ function renderRequestList() {
     filtered = filtered.filter(r => {
       let imgs = []; try { imgs = JSON.parse(r.acceptanceImages || '[]'); } catch (e) {}
       if (imgs && imgs.length > 0 && imgs[0] !== '...') return false;
-      // Backward-compat: check designImages too
       try { const di = JSON.parse(r.designImages || '[]'); if (di.length > 0 && di[0] !== '...') return false; } catch (e) {}
       return true;
     });
@@ -210,7 +287,6 @@ function renderRequestList() {
     filtered = filtered.filter(r => {
       let imgs = []; try { imgs = JSON.parse(r.acceptanceImages || '[]'); } catch (e) {}
       if (imgs && imgs.length > 0 && imgs[0] !== '...') return true;
-      // Backward-compat: check designImages too
       try { const di = JSON.parse(r.designImages || '[]'); if (di.length > 0 && di[0] !== '...') return true; } catch (e) {}
       return false;
     });
@@ -274,8 +350,7 @@ function renderRequestList() {
   container.innerHTML = pageSlice.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
-    const dsState = req.type === 'warranty' ? getWarrantyState(req) : getRequestDesignState(req);
-    const badge = DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.waiting;
+    const badge = getCardQuoteBadge(req);
     const tkName = req.designCreatedBy || req.designLastEditedBy || null;
     const lastUpdated = req.designLastEditedAt ? (() => {
       const d = new Date(req.designLastEditedAt);
@@ -318,12 +393,12 @@ function renderRequestList() {
        } else if (hasDesignPlaceholder) {
          thumbHtml = `<div id="thumb-${req.__backendId}" class="w-full h-32 bg-gray-700 rounded-t-xl flex items-center justify-center p-4 text-center" style="animation:pulse 1.5s ease-in-out infinite">
               <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            </div>`;
+             </div>`;
        } else {
          thumbHtml = `<div onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-full h-32 bg-gray-100 rounded-t-xl flex flex-col items-center justify-center text-gray-400 p-2 text-center cursor-pointer">
               ${fallbackIconHtml}
               <span class="text-xs">Chưa có MQ</span>
-            </div>`;
+             </div>`;
        }
 
        return `
@@ -346,14 +421,13 @@ function renderRequestList() {
        if (preview) {
          thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`;
        } else if (hasDesignPlaceholder) {
-         // Placeholder skeleton — will be replaced by lazy loader below
          thumbHtml = `<div id="thumb-${req.__backendId}" class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
               <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            </div>`;
+             </div>`;
        } else {
          thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
               <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
-            </button>`;
+             </button>`;
        }
 
        return `
@@ -452,6 +526,97 @@ function renderRequestList() {
       await Promise.all(fetchPromises);
     })();
   }
+
+  // Trigger Mobile Whats New modal (shown only once per version)
+  try {
+    if (typeof checkAndShowMobileWhatsNewModal === 'function') {
+      setTimeout(() => checkAndShowMobileWhatsNewModal(), 500);
+    }
+  } catch (_) {}
+}
+
+function checkAndShowMobileWhatsNewModal() {
+  const CURRENT_VERSION = 'v2.8.0';
+  
+  // Only show on Mobile view (< 768px or if mobile element exists)
+  if (window.innerWidth >= 768) return;
+
+  // Check if user has already seen this version
+  let seenVersion = '';
+  try {
+    seenVersion = localStorage.getItem('ks_whats_new_version');
+  } catch (_) {}
+
+  if (seenVersion === CURRENT_VERSION) return;
+
+  // Don't duplicate if already open
+  if (document.getElementById('mobileWhatsNewModal')) return;
+
+  const modalHtml = `
+    <div id="mobileWhatsNewModal" class="fixed inset-0 z-[9999] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+      <div class="w-full max-w-sm bg-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-2xl space-y-4 text-white relative overflow-hidden">
+        
+        <!-- Top Accent Light -->
+        <div class="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
+        <!-- Header -->
+        <div class="flex items-center justify-between">
+          <span class="px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wider rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-sm">
+            ✨ Cập nhật mới ${CURRENT_VERSION}
+          </span>
+          <button onclick="closeMobileWhatsNewModal('${CURRENT_VERSION}')" class="text-gray-400 hover:text-white text-lg font-bold w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 active:scale-95">✕</button>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-extrabold text-white leading-tight">Tính Năng Mới Đã Sẵn Sàng!</h3>
+          <p class="text-xs text-gray-300 mt-1">Trải nghiệm ngay các cải tiến vượt trội giúp theo dõi báo giá & xác nhận sản xuất siêu tốc.</p>
+        </div>
+
+        <!-- Updates List -->
+        <div class="space-y-3 pt-1">
+          <!-- Update 1 -->
+          <div class="bg-slate-800/90 border border-slate-700/60 rounded-xl p-3 flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-base flex-shrink-0 font-bold">⚡</div>
+            <div class="space-y-0.5">
+              <h4 class="text-xs font-bold text-emerald-300">Báo Giá Tức Thì & Chi Tiết (0s)</h4>
+              <p class="text-[11px] text-gray-300 leading-relaxed">
+                Tự động nhận diện nhãn <strong class="text-emerald-400">Đã có báo giá</strong>, xem nhanh giá tổng 1 dòng và mở bảng báo giá chi tiết full-screen kèm ảnh Maquette.
+              </p>
+            </div>
+          </div>
+
+          <!-- Update 2 -->
+          <div class="bg-slate-800/90 border border-slate-700/60 rounded-xl p-3 flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center text-base flex-shrink-0 font-bold">🏭</div>
+            <div class="space-y-0.5">
+              <h4 class="text-xs font-bold text-amber-300">Xác Nhận Sản Xuất Cải Tiến</h4>
+              <p class="text-[11px] text-gray-300 leading-relaxed">
+                Luôn tự động mở tab <strong class="text-amber-400">Chờ duyệt</strong> đầu tiên và hiển thị ảnh Preview Maquette sắc nét cho từng thẻ sản xuất.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Button -->
+        <div class="pt-2">
+          <button onclick="closeMobileWhatsNewModal('${CURRENT_VERSION}')" class="w-full py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 active:scale-[0.98] text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+            <span>🚀 Đã hiểu & Khám phá ngay</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeMobileWhatsNewModal(versionStr) {
+  const modal = document.getElementById('mobileWhatsNewModal');
+  if (modal) modal.remove();
+  try {
+    localStorage.setItem('ks_whats_new_version', versionStr || 'v2.8.0');
+  } catch (_) {}
 }
 
 function switchListTab(tab) {

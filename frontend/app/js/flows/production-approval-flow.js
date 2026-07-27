@@ -96,32 +96,52 @@ function getBrandBadgeClass(brand) {
 }
 
 function parseMqDesignImages(item) {
+    if (!item) return [];
     let images = [];
-    const rawDesign = item.designImages || item.design_images;
-    if (rawDesign) {
-        if (Array.isArray(rawDesign)) images = images.concat(rawDesign);
-        else if (typeof rawDesign === 'string') {
-            try { const p = JSON.parse(rawDesign); if (Array.isArray(p)) images = images.concat(p); } catch(_) {}
+
+    const sources = [
+        item.designImages,
+        item.design_images,
+        item.images,
+        item.image_url,
+        item.quote_image_url,
+        item.qcag_image_url,
+        item.qcagImageUrl,
+        item.design,
+        item.image
+    ];
+
+    sources.forEach(src => {
+        if (!src) return;
+        if (Array.isArray(src)) {
+            images = images.concat(src);
+        } else if (typeof src === 'string') {
+            const trimmed = src.trim();
+            if (trimmed.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) images = images.concat(parsed);
+                } catch (_) {}
+            } else if (trimmed.startsWith('http')) {
+                images.push(trimmed);
+            }
         }
-    }
-    const rawImages = item.images;
-    if (rawImages) {
-        let arr = [];
-        if (Array.isArray(rawImages)) arr = rawImages;
-        else if (typeof rawImages === 'string') {
-            try { arr = JSON.parse(rawImages); } catch(_) {}
+    });
+
+    const cleanImages = [];
+    images.forEach(img => {
+        if (!img) return;
+        if (typeof img === 'string' && img !== '...' && img.startsWith('http')) {
+            cleanImages.push(img);
+        } else if (typeof img === 'object') {
+            const url = img.data || img.url || img.src || img.link;
+            if (typeof url === 'string' && url.startsWith('http')) {
+                cleanImages.push(url);
+            }
         }
-        if (Array.isArray(arr)) {
-            arr.forEach(img => {
-                if (typeof img === 'string' && img.startsWith('http')) images.push(img);
-                else if (img && typeof img.data === 'string' && img.data.startsWith('http')) images.push(img.data);
-                else if (img && typeof img.url === 'string' && img.url.startsWith('http')) images.push(img.url);
-            });
-        }
-    }
-    const qcagUrl = item.qcag_image_url || item.qcagImageUrl;
-    if (qcagUrl && typeof qcagUrl === 'string' && qcagUrl.startsWith('http')) images.push(qcagUrl);
-    return Array.from(new Set(images.filter(img => typeof img === 'string' && img !== '...' && img.startsWith('http'))));
+    });
+
+    return Array.from(new Set(cleanImages));
 }
 
 /** Full-Screen MQ Image Lightbox Viewer with Zooming, Drag & Pan, and Integrated 3 Action Buttons */
@@ -276,12 +296,31 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
             if (!q) return;
             const quoteCode = q.quote_code || q.quoteCode || q.id || '---';
             const idKey = 'po_q_' + quoteCode + '_' + (q.outlet_code || q.outletCode || '');
+
+            let ksReq = null;
+            if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+                const targetTk = String(q.tk_code || q.tkCode || '').trim();
+                const targetOutlet = String(q.outlet_code || q.outletCode || '').trim();
+                ksReq = allRequests.find(r => {
+                    const rTk = String(r.tkCode || r.tk_code || '').trim();
+                    const rOutlet = String(r.outletCode || r.outlet_code || '').trim();
+                    const rQCode = String(r.quoteCode || r.quote_code || '').trim();
+                    if (quoteCode && rQCode && quoteCode === rQCode) return true;
+                    if (targetTk && rTk && (rTk.toLowerCase() === targetTk.toLowerCase() || rTk.replace(/\D/g, '') === targetTk.replace(/\D/g, ''))) return true;
+                    if (targetOutlet && rOutlet && rOutlet === targetOutlet) return true;
+                    return false;
+                });
+            }
+
+            const designImgs = q.design_images || q.designImages || (ksReq ? (ksReq.design || ksReq.designImages) : []) || [];
+            const quoteImgs = q.images || q.quote_image_url || [];
+
             results.push({
                 __backendId: idKey,
                 id: idKey,
                 quoteCode: quoteCode,
-                outletName: q.outlet_name || q.outletName || 'Outlet',
-                outletCode: q.outlet_code || q.outletCode || '---',
+                outletName: q.outlet_name || q.outletName || (ksReq ? ksReq.outletName : 'Outlet'),
+                outletCode: q.outlet_code || q.outletCode || (ksReq ? ksReq.outletCode : '---'),
                 saleName: q.sale_name || q.saleName || '',
                 saleCode: q.sale_code || q.saleCode || (order && (order.sale_code || order.saleCode)) || '',
                 salePhone: q.sale_phone || q.salePhone || q.outlet_phone || q.outletPhone || (order && (order.sale_phone || order.salePhone)) || '',
@@ -290,8 +329,9 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 region: q.area || q.region || 'S16',
                 amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
                 items: q.items || [],
-                images: q.images || [],
-                designImages: q.design_images || q.designImages || [],
+                images: quoteImgs,
+                designImages: designImgs,
+                design: ksReq ? (ksReq.design || ksReq.designImages) : null,
                 qcagImageUrl: q.qcag_image_url || q.qcagImageUrl || null,
                 productionApprovalStatus: q.productionApprovalStatus || (order && order.productionApprovalStatus) || 'pending',
                 rejectReason: q.rejectReason || (order && order.rejectReason) || null,
@@ -329,47 +369,11 @@ async function fetchProductionApprovals() {
         }
     } catch (e) { console.warn('LocalStorage parse warning:', e); }
 
-    // 3. Fetch App 2 Backend production approvals & permanent pending quotes
+    // 3. Fetch App 2 Backend production approvals
     const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
     const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
         ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
         : defaultApp2Backend;
-
-    try {
-        const resPQ = await fetch(app2Base + '/api/ks/requests/pending-quotes');
-        if (resPQ.ok) {
-            const jsonPQ = await resPQ.json();
-            if (jsonPQ && jsonPQ.ok && Array.isArray(jsonPQ.data)) {
-                const listPQ = jsonPQ.data.map(q => {
-                    const quoteCode = q.quote_code || q.quoteCode || q.id || '---';
-                    const idKey = 'po_q_' + quoteCode + '_' + (q.outlet_code || q.outletCode || '');
-                    return {
-                        __backendId: idKey,
-                        id: idKey,
-                        quoteCode: quoteCode,
-                        tkCode: q.tk_code || q.tkCode || '',
-                        outletName: q.outlet_name || q.outletName || 'Outlet',
-                        outletCode: q.outlet_code || q.outletCode || '---',
-                        saleName: q.sale_name || q.saleName || '',
-                        saleCode: q.sale_code || q.saleCode || '',
-                        salePhone: q.sale_phone || q.salePhone || q.outlet_phone || '',
-                        ssName: q.ss_name || q.ssName || '',
-                        requester: q.sale_name || q.saleName || '',
-                        region: q.area || q.region || 'S16',
-                        amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
-                        items: typeof q.items === 'string' ? (JSON.parse(q.items || '[]')) : (q.items || []),
-                        images: typeof q.images === 'string' ? (JSON.parse(q.images || '[]')) : (q.images || []),
-                        productionApprovalStatus: 'pending',
-                        createdAt: q.created_at || new Date().toISOString()
-                    };
-                });
-                allExtracted = allExtracted.concat(listPQ);
-            }
-        }
-    } catch (e) {
-        console.warn('App 2 pending-quotes fetch warning:', e);
-    }
-
     try {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
         if (res2.ok) {
@@ -379,16 +383,27 @@ async function fetchProductionApprovals() {
                 const list = Array.isArray(json2.data) ? json2.data : [];
                 allExtracted = allExtracted.concat(list);
                 
-                // Merge status map from backend into allExtracted
+                // Merge status map and design_images from backend into allExtracted
                 allExtracted.forEach(item => {
                     const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
                     const cleanCode = extractQuoteCodeFromIdKey(rawCode);
-                    const approvalObj = (cleanCode && map[cleanCode]) || (rawCode && map[rawCode]);
+                    const outletCode = String(item.outletCode || item.outlet_code || '').trim();
+                    const tkCode = String(item.tkCode || item.tk_code || '').trim();
+
+                    const approvalObj = (cleanCode && map[cleanCode]) || 
+                                        (rawCode && map[rawCode]) || 
+                                        (tkCode && map[tkCode]) || 
+                                        (outletCode && map[outletCode]);
+
                     if (approvalObj) {
-                        item.productionApprovalStatus = approvalObj.status || item.productionApprovalStatus;
-                        item.rejectReason = approvalObj.reason || item.rejectReason;
-                        item.approvedBy = approvalObj.approvedBy || item.approvedBy;
-                        item.approvedAt = approvalObj.approvedAt || item.approvedAt;
+                        if (approvalObj.status) item.productionApprovalStatus = approvalObj.status;
+                        if (approvalObj.reason) item.rejectReason = approvalObj.reason;
+                        if (approvalObj.approvedBy) item.approvedBy = approvalObj.approvedBy;
+                        if (approvalObj.approvedAt) item.approvedAt = approvalObj.approvedAt;
+                        if (approvalObj.designImages) {
+                            item.designImages = approvalObj.designImages;
+                            item.design_images = approvalObj.designImages;
+                        }
                     }
                 });
             }
@@ -443,12 +458,6 @@ async function fetchProductionApprovals() {
     const pendingCount = finalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
     const approvedCount = finalItems.filter(i => i.productionApprovalStatus === 'approved').length;
 
-    // Auto-switch to 'approved' tab if pending is 0 and approved has items
-    if (_productionApprovalTab === 'pending' && pendingCount === 0 && approvedCount > 0) {
-        _productionApprovalTab = 'approved';
-        setProductionApprovalTab('approved');
-    }
-
     const modal = document.getElementById('productionApprovalModal');
     if (modal && !modal.classList.contains('hidden')) {
         renderProductionApprovalList();
@@ -472,18 +481,12 @@ function openProductionApprovalModal() {
     if (!modal) return;
     modal.classList.remove('hidden');
 
+    // Always set and open 'pending' tab (Chờ duyệt) first
+    setProductionApprovalTab('pending');
+
     fetchProductionApprovals().then(() => {
-        const pendingCount = _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
-        const approvedCount = _productionApprovalItems.filter(i => i.productionApprovalStatus === 'approved').length;
-
-        if (pendingCount === 0 && approvedCount > 0) {
-            setProductionApprovalTab('approved');
-        } else {
-            setProductionApprovalTab(_productionApprovalTab || 'pending');
-        }
+        renderProductionApprovalList();
     });
-
-    renderProductionApprovalList();
 }
 
 function closeProductionApprovalModal() {
