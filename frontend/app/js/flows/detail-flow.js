@@ -1136,6 +1136,11 @@ async function _fetchApp1QuoteListWithCache() {
     return window.__qcagQuoteListCache;
   }
 
+  if (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag') {
+    window.__qcagQuoteListLoaded = true;
+    return [];
+  }
+
   const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
   let allQuotes = [];
 

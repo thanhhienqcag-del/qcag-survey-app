@@ -6,7 +6,9 @@
  */
 
 let _productionApprovalItems = [];
+let _productionApprovalBadgeCount = 0;
 let _productionApprovalTab = 'pending'; // 'pending' | 'approved' | 'rejected'
+let _productionApprovalActive = false;
 let _currentZoomScale = 1;
 let _currentPanX = 0;
 let _currentPanY = 0;
@@ -345,10 +347,10 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 async function fetchProductionApprovals() {
     let allExtracted = [];
 
-    // 1. Fetch App 1 Backend pending orders (Live API Data first!)
+    // 1. Fetch App 1 Backend pending orders summary only
     const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     try {
-        const res = await fetch(app1Base + '/pending-orders');
+        const res = await fetch(app1Base + '/pending-orders?summary=1');
         if (res.ok) {
             const json = await res.json();
             if (json && json.ok && Array.isArray(json.data)) {
@@ -467,7 +469,9 @@ async function fetchProductionApprovals() {
 function updateProductionApprovalBadge() {
     const badge = document.getElementById('productionApprovalBadge');
     if (!badge) return;
-    const pendingCount = _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
+    const pendingCount = _productionApprovalItems.length > 0
+        ? _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length
+        : _productionApprovalBadgeCount;
     if (pendingCount > 0) {
         badge.textContent = String(pendingCount);
         badge.classList.remove('hidden');
@@ -476,10 +480,34 @@ function updateProductionApprovalBadge() {
     }
 }
 
+function resolveProductionApprovalBase() {
+    const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    return (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
+        : defaultApp2Backend;
+}
+
+async function fetchProductionApprovalBadgeCount() {
+    const app2Base = resolveProductionApprovalBase();
+    try {
+        const res = await fetch(app2Base + '/api/ks/requests/production-approvals-count');
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json && json.ok && json.data) {
+            _productionApprovalBadgeCount = Number(json.data.pending || 0);
+            updateProductionApprovalBadge();
+        }
+    } catch (e) {
+        console.warn('fetchProductionApprovalBadgeCount warning:', e);
+    }
+}
+
 function openProductionApprovalModal() {
     const modal = document.getElementById('productionApprovalModal');
     if (!modal) return;
     modal.classList.remove('hidden');
+
+    _productionApprovalActive = true;
 
     // Always set and open 'pending' tab (Chờ duyệt) first
     setProductionApprovalTab('pending');
@@ -492,6 +520,7 @@ function openProductionApprovalModal() {
 function closeProductionApprovalModal() {
     const modal = document.getElementById('productionApprovalModal');
     if (modal) modal.classList.add('hidden');
+    _productionApprovalActive = false;
 }
 
 function setProductionApprovalTab(tab) {
@@ -1024,6 +1053,7 @@ function submitRejectReason() {
 // Efficient Event-Driven Sync: Realtime SSE + Event-Driven Refresh
 if (typeof window !== 'undefined') {
     const triggerSingleFetch = () => {
+        if (!_productionApprovalActive) return;
         if (typeof fetchProductionApprovals === 'function') {
             fetchProductionApprovals();
         }
@@ -1037,24 +1067,27 @@ if (typeof window !== 'undefined') {
         }
         const res = String(payload && payload.resource || '').toLowerCase();
         if (res === 'pending_orders' || res === 'ks_requests' || res === 'quotations') {
+            fetchProductionApprovalBadgeCount();
             triggerSingleFetch();
         }
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(triggerSingleFetch, 400);
-    });
-
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        setTimeout(triggerSingleFetch, 200);
-    }
-
-    // Refresh when user returns to / focuses the app tab
+    // Refresh badge count when user returns to / focuses the app tab
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            triggerSingleFetch();
+            if (_productionApprovalActive) triggerSingleFetch();
+            else fetchProductionApprovalBadgeCount();
         }
     });
 
-    window.addEventListener('focus', triggerSingleFetch);
+    window.addEventListener('focus', () => {
+        if (_productionApprovalActive) triggerSingleFetch();
+        else fetchProductionApprovalBadgeCount();
+    });
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        fetchProductionApprovalBadgeCount();
+    } else {
+        document.addEventListener('DOMContentLoaded', fetchProductionApprovalBadgeCount);
+    }
 }

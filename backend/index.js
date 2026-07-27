@@ -2606,6 +2606,75 @@ app.get('/pending-orders', async (req, res) => {
     }
 });
 
+// GET /api/ks/requests/production-approvals-count
+app.get('/api/ks/requests/production-approvals-count', async (req, res) => {
+    try {
+        await ensureProductionApprovalsTable();
+        const approvalsMap = {};
+
+        try {
+            const [rows] = await pool.query(
+                `SELECT quote_code, status, approved_by, approved_at, reject_reason, updated_at FROM ks_production_approvals`
+            );
+            (rows || []).forEach(r => {
+                if (r && r.quote_code) {
+                    approvalsMap[r.quote_code] = {
+                        quoteCode: r.quote_code,
+                        status: r.status || 'pending'
+                    };
+                }
+            });
+        } catch (e) {
+            console.warn('SELECT ks_production_approvals query error:', e);
+        }
+
+        try {
+            const [rows2] = await pool.query(
+                `SELECT id, backend_id, tk_code, outlet_code, production_approval_status
+                 FROM ks_requests_view`
+            );
+            (rows2 || []).forEach(r => {
+                const keys = [r.tk_code, r.backend_id, r.outlet_code, String(r.id)].filter(Boolean);
+                keys.forEach(k => {
+                    const key = String(k).trim();
+                    if (!approvalsMap[key]) {
+                        approvalsMap[key] = {
+                            quoteCode: key,
+                            status: r.production_approval_status || 'pending'
+                        };
+                    } else {
+                        if (r.production_approval_status && approvalsMap[key].status === 'pending') {
+                            approvalsMap[key].status = r.production_approval_status;
+                        }
+                    }
+                });
+            });
+        } catch (_) {}
+
+        const counts = { pending: 0, approved: 0, rejected: 0, total: 0 };
+        Object.values(approvalsMap).forEach(item => {
+            const status = String(item.status || 'pending').toLowerCase();
+            if (status === 'approved') counts.approved += 1;
+            else if (status === 'rejected') counts.rejected += 1;
+            else counts.pending += 1;
+            counts.total += 1;
+        });
+
+        const etag = '"' + crypto.createHash('md5').update(JSON.stringify(counts)).digest('hex') + '"';
+        const clientEtag = req.headers['if-none-match'];
+        res.setHeader('ETag', etag);
+        res.setHeader('Cache-Control', 'no-cache');
+        if (clientEtag && clientEtag === etag) {
+            return res.status(304).end();
+        }
+
+        return res.json({ ok: true, data: counts });
+    } catch (err) {
+        console.error('GET /api/ks/requests/production-approvals-count error:', err);
+        return res.status(500).json({ ok: false, error: 'db_error', data: { pending: 0, approved: 0, rejected: 0, total: 0 } });
+    }
+});
+
 // GET /api/ks/requests/production-approvals
 app.get('/api/ks/requests/production-approvals', async (req, res) => {
     try {

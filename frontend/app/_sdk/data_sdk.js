@@ -16,6 +16,8 @@
   var _esEverConnected = false;
   var _refreshTimer = null;
   var _refreshInFlight = null;
+  var _refreshCooldownMs = 2000;
+  var _lastRefreshIssuedAt = 0;
   var _rtVisibilityBound = false;
   // Tăng pageSize lên 300 để load đủ dữ liệu trong 1 lần fetch.
   // Backend đã cho phép tối đa 300 records/page. storeMaxRows = 2000
@@ -74,11 +76,15 @@
     // default delay to reduce aggressive polling during event storms.
     var ms = Number(delayMs);
     if (!(ms >= 0)) ms = 1000; // default 1s debounce
+    var now = Date.now();
     try {
       // If a refresh is already scheduled or currently running, skip scheduling
       // to prevent repeated HTTP fetches during high-frequency events.
       if (_refreshTimer || _refreshInFlight) return;
+      // Skip duplicate refreshes that happen within a short cooldown window.
+      if (_lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) return;
     } catch (e) {}
+    _lastRefreshIssuedAt = now;
     _refreshTimer = setTimeout(function () {
       _refreshTimer = null;
       try {
@@ -783,6 +789,11 @@
       if (_refreshInFlight) {
         try { return await _refreshInFlight; } catch (e) { return { isOk: false }; }
       }
+      var now = Date.now();
+      if (_lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) {
+        return { isOk: true, reason: 'cooldown' };
+      }
+      _lastRefreshIssuedAt = now;
 
       _refreshInFlight = (async function () {
       try {

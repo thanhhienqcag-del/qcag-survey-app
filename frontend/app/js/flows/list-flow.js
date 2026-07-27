@@ -248,6 +248,9 @@ function getCardQuoteBadge(req) {
 
   // 3. If quotes list is NOT loaded yet (đang chờ load báo giá)
   if (!window.__qcagQuoteListLoaded) {
+    if (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag') {
+      return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
+    }
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache().then(() => {
         if (typeof renderRequestList === 'function') renderRequestList();
