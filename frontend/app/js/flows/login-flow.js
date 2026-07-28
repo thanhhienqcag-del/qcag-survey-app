@@ -107,7 +107,7 @@ function loginHK2Submit() {
   const saved = (() => {
     try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
   })();
-    if (!_loginTBAOn) {
+  if (!_loginTBAOn) {
     const ssName = document.getElementById('hkSSName').value.trim();
     if (!ssName) { showToast('Vui lòng điền tên SS/SE'); return; }
     currentSession = { role: 'heineken', ...saved, region: _loginSelectedRegion, isTBA: false, ssCode: '', ssName };
@@ -180,13 +180,16 @@ function launchApp() {
   updateSessionBar();
   if (typeof loadAccountProfile === 'function') loadAccountProfile();
   initHomeAndLoad();
+  if (typeof fetchProductionApprovalBadgeCount === 'function') {
+    fetchProductionApprovalBadgeCount();
+  }
   // Best-effort: initialize push subscription after login
   try {
     if (window.pushHelpers && typeof window.pushHelpers.initPush === 'function') {
-      const phone    = currentSession && currentSession.phone    || null;
-      const role     = currentSession && currentSession.role     || null;
+      const phone = currentSession && currentSession.phone || null;
+      const role = currentSession && currentSession.role || null;
       const saleCode = currentSession && currentSession.saleCode || null;
-      window.pushHelpers.initPush(phone, role, saleCode).then(function(res) {
+      window.pushHelpers.initPush(phone, role, saleCode).then(function (res) {
         if (!res || !res.ok) {
           const e = res && res.error;
           if (e && e !== 'Push not supported' && e !== 'Notifications not supported' && e !== 'Permission not granted') {
@@ -195,20 +198,20 @@ function launchApp() {
         } else {
           console.log('[push] initPush succeeded');
         }
-        try { updateHomePushBtn(); } catch (_) {}
-      }).catch(function(err) {
+        try { updateHomePushBtn(); } catch (_) { }
+      }).catch(function (err) {
         console.warn('[push] initPush exception:', err);
-        try { updateHomePushBtn(); } catch (_) {}
+        try { updateHomePushBtn(); } catch (_) { }
       });
     }
-  } catch (e) {}
+  } catch (e) { }
   if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
     showScreen('qcagDesktopScreen'); // show skeleton behind overlay while data loads
     return;
   }
   showScreen('homeScreen');
-  try { updateHomePushBtn(); } catch (_) {}
-  try { updateHomeInstallBtn(); } catch (_) {}
+  try { updateHomePushBtn(); } catch (_) { }
+  try { updateHomeInstallBtn(); } catch (_) { }
 }
 
 function updateSessionBar() {
@@ -245,8 +248,8 @@ function updateHomePushBtn() {
     dot.className = 'mobile-push-bell-dot' + (perm === 'granted' ? ' on' : perm === 'denied' ? ' denied' : '');
   }
   btn.title = perm === 'granted' ? 'Thông báo đang bật'
-            : perm === 'denied'  ? 'Thông báo bị chặn'
-            : 'Bật thông báo';
+    : perm === 'denied' ? 'Thông báo bị chặn'
+      : 'Bật thông báo';
   btn.disabled = false;
 }
 
@@ -257,8 +260,8 @@ async function homePushBtnClick() {
   }
   if (!window.pushHelpers) { showToast('Trình duyệt không hỗ trợ thông báo đẩy'); return; }
 
-  const phone    = currentSession && currentSession.phone    || null;
-  const role     = currentSession && currentSession.role     || null;
+  const phone = currentSession && currentSession.phone || null;
+  const role = currentSession && currentSession.role || null;
   const saleCode = currentSession && currentSession.saleCode || null;
   try {
     const res = await window.pushHelpers.initPush(phone, role, saleCode);
@@ -302,7 +305,7 @@ function updateHomeInstallBtn() {
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-                    || (window.navigator && window.navigator.standalone === true);
+    || (window.navigator && window.navigator.standalone === true);
 
   if (isStandalone) {
     // Already installed — hide button
@@ -319,7 +322,7 @@ function updateHomeInstallBtn() {
 async function homeInstallBtnClick() {
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
-                    || (window.navigator && window.navigator.standalone === true);
+    || (window.navigator && window.navigator.standalone === true);
 
   if (isStandalone) { showToast('App đã được cài đặt rồi!'); return; }
 

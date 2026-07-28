@@ -574,23 +574,8 @@ async function syncRequest(pool, id) {
  * Delete a request from the new tables.
  */
 function scheduleSyncRequest(pool, id, delayMs = null) {
-  if (!id) return;
-  const key = String(id);
-  const existing = pendingSyncTimers.get(key);
-  if (existing) {
-    clearTimeout(existing);
-  }
-  const debounceMs = Number.isFinite(delayMs) && delayMs > 0
-    ? delayMs
-    : Number(process.env.KS_SYNC_DEBOUNCE_MS || 2000);
-  const timer = setTimeout(() => {
-    pendingSyncTimers.delete(key);
-    syncRequest(pool, id).catch((err) => {
-      console.error(`[dual-write] syncRequest background failed for id=${id}:`, err);
-    });
-  }, debounceMs);
-  timer.unref && timer.unref();
-  pendingSyncTimers.set(key, timer);
+  // Tat dual-write ngam de giam thieu xai bang thong va xoa/chen lap lai tren Neon PostgreSQL
+  return;
 }
 
 async function deleteRequest(pool, id) {
@@ -694,11 +679,11 @@ async function deleteProductionOrder(pool, id) {
 }
 
 module.exports = {
-  syncQuotation: async () => {},
-  deleteQuotation: async () => {},
+  syncQuotation: async () => { },
+  deleteQuotation: async () => { },
   syncRequest,
   scheduleSyncRequest,
-  deleteRequest: async () => {},
-  syncProductionOrder: async () => {},
-  deleteProductionOrder: async () => {}
+  deleteRequest: async () => { },
+  syncProductionOrder: async () => { },
+  deleteProductionOrder: async () => { }
 };

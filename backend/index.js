@@ -39,7 +39,7 @@ function sseWrite(res, payload) {
         // Named event makes client-side handling clearer.
         res.write(`event: invalidate\n`);
         res.write(`data: ${data}\n\n`);
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function sseBroadcast(payload) {
@@ -55,7 +55,7 @@ function sseBroadcast(payload) {
                 sseClients.delete(res);
             }
         });
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function wsEncodeTextFrame(str) {
@@ -96,9 +96,9 @@ function wsBroadcast(payload) {
         wsClients.forEach((c) => {
             try {
                 if (c && !c.destroyed) c.write(frame);
-            } catch (_) {}
+            } catch (_) { }
         });
-    } catch (_) {}
+    } catch (_) { }
 }
 
 // ── In-memory cache for GET /api/ks/requests ──────────────────────────────────
@@ -161,7 +161,7 @@ function wsTryParseFrames(buf, onFrame) {
         }
 
         if (fin) {
-            try { onFrame({ opcode, payload }); } catch (_) {}
+            try { onFrame({ opcode, payload }); } catch (_) { }
         }
         offset += frameLen;
     }
@@ -184,7 +184,7 @@ function startWsHeartbeat(intervalMs) {
                 }
                 sock.__wsAlive = false;
                 sock.write(wsEncodeControlFrame(0x9)); // ping
-            } catch (_) {}
+            } catch (_) { }
         });
     }, ms);
     timer.unref && timer.unref();
@@ -241,7 +241,7 @@ server.on('upgrade', (req, socket, head) => {
                     return;
                 }
                 socket.__wsBuf = (parsed && parsed.remaining) ? parsed.remaining : Buffer.alloc(0);
-            } catch (_) {}
+            } catch (_) { }
         });
 
         socket.on('close', () => {
@@ -251,7 +251,7 @@ server.on('upgrade', (req, socket, head) => {
             wsClients.delete(socket);
         });
     } catch (e) {
-        try { socket.destroy(); } catch (_) {}
+        try { socket.destroy(); } catch (_) { }
     }
 });
 
@@ -271,7 +271,7 @@ app.use((req, res, next) => {
         if (!res.getHeader('Access-Control-Allow-Methods')) res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
         if (!res.getHeader('Access-Control-Allow-Headers')) res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
         if (String(req.method || '').toUpperCase() === 'OPTIONS') return res.status(200).end();
-    } catch (e) {}
+    } catch (e) { }
     return next();
 });
 
@@ -305,7 +305,7 @@ app.use((req, res, next) => {
             res.setHeader('Retry-After', String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)));
             return res.status(429).json({ ok: false, error: 'rate_limited' });
         }
-    } catch (e) {}
+    } catch (e) { }
     return next();
 });
 
@@ -340,11 +340,11 @@ app.get('/events', (req, res) => {
         pingTimer.unref && pingTimer.unref();
 
         req.on('close', () => {
-            try { clearInterval(pingTimer); } catch (_) {}
+            try { clearInterval(pingTimer); } catch (_) { }
             sseClients.delete(res);
         });
     } catch (e) {
-        try { res.end(); } catch (_) {}
+        try { res.end(); } catch (_) { }
     }
 });
 
@@ -489,7 +489,7 @@ function getBearerToken(req) {
 }
 
 function requireAuth(requiredRole) {
-    return async function(req, res, next) {
+    return async function (req, res, next) {
         const token = getBearerToken(req);
         const payload = verifyToken(token);
         if (!payload || !payload.username) {
@@ -842,6 +842,7 @@ async function initKsDB() {
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_outlet_code_btree_lower ON ks_requests USING btree (LOWER(TRIM(outlet_code)))',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_status ON ks_requests (status)',
         'CREATE INDEX IF NOT EXISTS idx_ks_requests_tk_code ON ks_requests (tk_code)',
+        'CREATE INDEX IF NOT EXISTS idx_ks_production_approvals_quote_code ON ks_production_approvals (quote_code)',
     ];
     for (const sql of ksIndexes) {
         try {
@@ -855,9 +856,9 @@ async function initKsDB() {
 
 // ── Push notification helper ──────────────────────────────────────────
 async function sendKsPush({ title, body, data = {}, targetPhone = null }) {
-    const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
+    const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
-    const VAPID_SUBJECT = process.env.VAPID_SUBJECT     || 'mailto:admin@qcag.vn';
+    const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@qcag.vn';
     if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
     const webpush = require('web-push');
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
@@ -1056,7 +1057,7 @@ const QUOTATION_SELECT_COLUMNS = [
     'tk_code',
 ].join(', ');
 
-app.get('/db-health', async(req, res) => {
+app.get('/db-health', async (req, res) => {
     // Always ping Neon directly — do not gate on dbReady flag so
     // callers can monitor actual connectivity even after a restart.
     try {
@@ -1081,7 +1082,7 @@ app.get('/db-health', async(req, res) => {
     }
 });
 
-app.post('/auth/register', async(req, res) => {
+app.post('/auth/register', async (req, res) => {
     await ensureDbInitStarted();
     const phone = req.body && req.body.phone != null ? String(req.body.phone).trim() : '';
     const name = req.body && req.body.name != null ? String(req.body.name).trim() : '';
@@ -1104,7 +1105,7 @@ app.post('/auth/register', async(req, res) => {
     res.json({ ok: true });
 });
 
-app.post('/auth/login', async(req, res) => {
+app.post('/auth/login', async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && req.body.username != null ? String(req.body.username).trim() : '';
     const password = req.body && req.body.password != null ? String(req.body.password) : '';
@@ -1132,11 +1133,11 @@ app.post('/auth/login', async(req, res) => {
     }
 
     const token = signToken({
-            sub: user.id,
-            username: user.username,
-            name: user.name || null,
-            role: user.role,
-        },
+        sub: user.id,
+        username: user.username,
+        name: user.name || null,
+        role: user.role,
+    },
         60 * 60 * 24 * 7 // 7 days
     );
 
@@ -1151,16 +1152,16 @@ app.post('/auth/login', async(req, res) => {
     });
 });
 
-app.get('/auth/me', requireAuth(), async(req, res) => {
+app.get('/auth/me', requireAuth(), async (req, res) => {
     res.json({ ok: true, user: { username: req.user.username, name: req.user.name, role: req.user.role } });
 });
 
-app.post('/auth/logout', async(req, res) => {
+app.post('/auth/logout', async (req, res) => {
     // Stateless token: client deletes token. Keep endpoint for UX parity.
     res.json({ ok: true });
 });
 
-app.get('/auth/admin/pending', requireAuth('admin'), async(req, res) => {
+app.get('/auth/admin/pending', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const [rows] = await pool.query(
         `SELECT username, name
@@ -1171,7 +1172,7 @@ app.get('/auth/admin/pending', requireAuth('admin'), async(req, res) => {
     res.json({ ok: true, pending: rows || [] });
 });
 
-app.post('/auth/admin/approve', requireAuth('admin'), async(req, res) => {
+app.post('/auth/admin/approve', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && (req.body.username != null || req.body.phone != null) ?
         String(req.body.username != null ? req.body.username : req.body.phone).trim() :
@@ -1181,7 +1182,7 @@ app.post('/auth/admin/approve', requireAuth('admin'), async(req, res) => {
     res.json({ ok: true });
 });
 
-app.get('/auth/admin/users', requireAuth('admin'), async(req, res) => {
+app.get('/auth/admin/users', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const [rows] = await pool.query(
         `SELECT username, name, role, approved, created_at
@@ -1202,7 +1203,7 @@ app.get('/auth/admin/users', requireAuth('admin'), async(req, res) => {
 
 // ============ PUBLIC: Get approved users (for dropdown selection) ============
 // No auth required - returns only username + name for approved users
-app.get('/users/approved', async(req, res) => {
+app.get('/users/approved', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const [rows] = await pool.query(
@@ -1224,7 +1225,7 @@ app.get('/users/approved', async(req, res) => {
     }
 });
 
-app.post('/auth/admin/update', requireAuth('admin'), async(req, res) => {
+app.post('/auth/admin/update', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && (req.body.username != null || req.body.phone != null) ?
         String(req.body.username != null ? req.body.username : req.body.phone).trim() :
@@ -1240,7 +1241,7 @@ app.post('/auth/admin/update', requireAuth('admin'), async(req, res) => {
     res.json({ ok: true });
 });
 
-app.post('/auth/admin/delete', requireAuth('admin'), async(req, res) => {
+app.post('/auth/admin/delete', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && (req.body.username != null || req.body.phone != null) ?
         String(req.body.username != null ? req.body.username : req.body.phone).trim() :
@@ -1251,7 +1252,7 @@ app.post('/auth/admin/delete', requireAuth('admin'), async(req, res) => {
     res.json({ ok: true });
 });
 
-app.post('/auth/admin/change-password', requireAuth('admin'), async(req, res) => {
+app.post('/auth/admin/change-password', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const old_password = req.body && req.body.old_password != null ? String(req.body.old_password) : '';
     const new_password = req.body && req.body.new_password != null ? String(req.body.new_password) : '';
@@ -1285,7 +1286,7 @@ function parseBeforeCreatedAt(raw) {
         return null;
     }
 }
-app.get('/quotations/view', async(req, res) => {
+app.get('/quotations/view', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const saleCode = req.query.sale_code;
@@ -1293,7 +1294,7 @@ app.get('/quotations/view', async(req, res) => {
         if (!saleCode || !quoteCode) {
             return res.status(400).json({ error: 'Missing sale_code or quote_code' });
         }
-        
+
         const [rows] = await pool.query(
             `SELECT ${QUOTATION_SELECT_COLUMNS}
              FROM quotations
@@ -1301,7 +1302,7 @@ app.get('/quotations/view', async(req, res) => {
              LIMIT 1`,
             [saleCode, quoteCode, quoteCode]
         );
-        
+
         if (rows && rows.length > 0) {
             const shrunk = shrinkQuotationImages(rows);
             return res.json(shrunk[0]);
@@ -1314,7 +1315,7 @@ app.get('/quotations/view', async(req, res) => {
     }
 });
 
-app.get('/quotations', async(req, res) => {
+app.get('/quotations', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const limitRaw = Number(req.query && req.query.limit);
@@ -1450,7 +1451,7 @@ app.get('/quotations', async(req, res) => {
     }
 });
 
-app.post('/quotations', async(req, res) => {
+app.post('/quotations', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const year = new Date().getFullYear().toString().slice(-2);
@@ -1558,7 +1559,7 @@ app.post('/quotations', async(req, res) => {
         } catch (err) {
             try {
                 await conn.rollback();
-            } catch (_) {}
+            } catch (_) { }
             // rethrow to outer handler
             throw err;
         } finally {
@@ -1566,7 +1567,7 @@ app.post('/quotations', async(req, res) => {
         }
 
         res.json({ ok: true, id: insertId, quote_code: quoteCode });
-        
+
         // Fetch new row and broadcast with data for instant display
         try {
             const [rows] = await pool.query('SELECT * FROM quotations WHERE id = ?', [insertId]);
@@ -1668,13 +1669,13 @@ async function updateQuotationById(id, body) {
     return result;
 }
 
-app.patch('/quotations/:id', async(req, res) => {
+app.patch('/quotations/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
 
     const result = await updateQuotationById(id, req.body);
     if (!result || result.affectedRows === 0) return res.status(404).json({ ok: false, error: 'Not found' });
-    
+
     // Fetch updated row and broadcast with data for instant local cache update
     try {
         const [rows] = await pool.query('SELECT * FROM quotations WHERE id = ?', [id]);
@@ -1686,17 +1687,17 @@ app.patch('/quotations/:id', async(req, res) => {
     } catch (err) {
         wsInvalidate('quotations', { action: 'update', id });
     }
-    
+
     res.json({ ok: true });
 });
 
-app.put('/quotations/:id', async(req, res) => {
+app.put('/quotations/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
 
     const result = await updateQuotationById(id, req.body);
     if (!result || result.affectedRows === 0) return res.status(404).json({ ok: false, error: 'Not found' });
-    
+
     // Fetch updated row and broadcast with data for instant local cache update
     try {
         const [rows] = await pool.query('SELECT * FROM quotations WHERE id = ?', [id]);
@@ -1708,11 +1709,11 @@ app.put('/quotations/:id', async(req, res) => {
     } catch (err) {
         wsInvalidate('quotations', { action: 'update', id });
     }
-    
+
     res.json({ ok: true });
 });
 
-app.delete('/quotations/:id', async(req, res) => {
+app.delete('/quotations/:id', async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
     const [result] = await pool.query('DELETE FROM quotations WHERE id = ?', [id]);
@@ -1721,7 +1722,7 @@ app.delete('/quotations/:id', async(req, res) => {
 });
 
 // Admin-only: force-set created_by / created_by_name for a specific quote (data correction)
-app.patch('/admin/quotations/:id/set-creator', requireAuth('admin'), async(req, res) => {
+app.patch('/admin/quotations/:id/set-creator', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: 'Invalid id' });
@@ -1739,11 +1740,11 @@ app.patch('/admin/quotations/:id/set-creator', requireAuth('admin'), async(req, 
     try {
         const [rows] = await pool.query('SELECT * FROM quotations WHERE id = ?', [id]);
         if (rows && rows[0]) wsInvalidate('quotations', { action: 'update', id, data: rows[0] });
-    } catch (_) {}
+    } catch (_) { }
     res.json({ ok: true });
 });
 
-app.get('/production-orders', async(req, res) => {
+app.get('/production-orders', async (req, res) => {
     const [rows] = await pool.query(`
     SELECT *
     FROM production_orders
@@ -1752,27 +1753,27 @@ app.get('/production-orders', async(req, res) => {
     res.json(rows);
 });
 
-app.post('/production-orders', async(req, res) => {
+app.post('/production-orders', async (req, res) => {
     const b = req.body && typeof req.body === 'object' ? req.body : {};
     const items = normalizeBodyValue(b.items);
     const quoteKeys = normalizeBodyValue(b.quote_keys);
-        const now = new Date();
+    const now = new Date();
 
     await pool.query(
         `
             INSERT INTO production_orders (items, quote_keys, spo_number, order_number, notes, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
-            items,
-            quoteKeys,
-            toNullableString(b.spo_number),
-            toNullableString(b.order_number),
-            normalizeBodyValue(b.notes),
-                        now,
-                        now,
-        ]
+        items,
+        quoteKeys,
+        toNullableString(b.spo_number),
+        toNullableString(b.order_number),
+        normalizeBodyValue(b.notes),
+        now,
+        now,
+    ]
     );
-    
+
     // Delete all pending orders after creating production order
     try {
         await pool.query('DELETE FROM pending_orders');
@@ -1780,12 +1781,12 @@ app.post('/production-orders', async(req, res) => {
     } catch (err) {
         console.error('Error clearing pending orders:', err);
     }
-    
+
     res.json({ ok: true });
     wsInvalidate('production-orders', { action: 'create' });
 });
 
-app.post('/qcag/submit', async(req, res) => {
+app.post('/qcag/submit', async (req, res) => {
     const { quote_ids, status, note } = req.body || {};
     if (!Array.isArray(quote_ids) || !status) return res.status(400).json({ ok: false });
     await pool.query(
@@ -1799,7 +1800,7 @@ app.post('/qcag/submit', async(req, res) => {
     wsInvalidate('quotations', { action: 'qcag-submit', quote_ids });
 });
 
-app.post('/inspections', async(req, res) => {
+app.post('/inspections', async (req, res) => {
     const { quotation_id, status, note } = req.body || {};
     if (!quotation_id || !status) return res.status(400).json({ ok: false });
     await pool.query(
@@ -1824,7 +1825,7 @@ app.get('/pending-orders', async (req, res) => {
              FROM pending_orders
              ORDER BY created_at DESC`
         );
-        
+
         // Parse quotes JSON for each row
         const orders = (rows || []).map(row => {
             let quotes = [];
@@ -1842,7 +1843,7 @@ app.get('/pending-orders', async (req, res) => {
                 totalAmount: Number(row.total_amount) || 0
             };
         });
-        
+
         res.json({ ok: true, data: orders });
     } catch (err) {
         console.error('GET /pending-orders error:', err && err.message ? err.message : err);
@@ -1855,7 +1856,7 @@ app.post('/pending-orders', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const b = req.body && typeof req.body === 'object' ? req.body : {};
-        
+
         const id = b.id ? String(b.id).trim() : ('pending_' + Date.now());
         const createdBy = b.createdBy ? String(b.createdBy).trim() : 'User';
         const createdAt = b.createdAt ? Number(b.createdAt) : Date.now();
@@ -1863,7 +1864,7 @@ app.post('/pending-orders', async (req, res) => {
         const totalPoints = Number(b.totalPoints) || quotes.length || 0;
         const totalAmount = Number(b.totalAmount) || 0;
         const quotesJson = JSON.stringify(quotes);
-        
+
         // Upsert: INSERT ... ON CONFLICT DO UPDATE
         await pool.query(
             `INSERT INTO pending_orders (id, created_by, created_by_name, created_at, quotes, total_points, total_amount, updated_at)
@@ -1875,10 +1876,10 @@ app.post('/pending-orders', async (req, res) => {
                 updated_at = NOW()`,
             [id, createdBy, createdBy, createdAt, quotesJson, totalPoints, totalAmount]
         );
-        
+
         // Notify other clients via WebSocket/SSE
         wsInvalidate('pending_orders', { action: 'upsert', id });
-        
+
         res.json({ ok: true, id });
     } catch (err) {
         console.error('POST /pending-orders error:', err && err.message ? err.message : err);
@@ -1891,17 +1892,17 @@ app.delete('/pending-orders/:id', async (req, res) => {
     try {
         await ensureDbInitStarted();
         const id = req.params.id ? String(req.params.id).trim() : '';
-        
+
         if (!id) {
             return res.status(400).json({ ok: false, error: 'missing_id' });
         }
-        
+
         // Get the order first to return its quotes
         const [[existing]] = await pool.query(
             'SELECT quotes FROM pending_orders WHERE id = ? LIMIT 1',
             [id]
         );
-        
+
         let quotes = [];
         if (existing && existing.quotes) {
             try {
@@ -1910,12 +1911,12 @@ app.delete('/pending-orders/:id', async (req, res) => {
                 quotes = [];
             }
         }
-        
+
         await pool.query('DELETE FROM pending_orders WHERE id = ?', [id]);
-        
+
         // Notify other clients
         wsInvalidate('pending_orders', { action: 'delete', id });
-        
+
         res.json({ ok: true, quotes });
     } catch (err) {
         console.error('DELETE /pending-orders error:', err && err.message ? err.message : err);
@@ -1927,10 +1928,10 @@ app.delete('/pending-orders/:id', async (req, res) => {
 app.delete('/pending-orders', async (req, res) => {
     try {
         await ensureDbInitStarted();
-        
+
         // Get all orders first to return their quotes
         const [rows] = await pool.query('SELECT quotes FROM pending_orders');
-        
+
         let allQuotes = [];
         (rows || []).forEach(row => {
             try {
@@ -1938,14 +1939,14 @@ app.delete('/pending-orders', async (req, res) => {
                 if (Array.isArray(quotes)) {
                     allQuotes = allQuotes.concat(quotes);
                 }
-            } catch (e) {}
+            } catch (e) { }
         });
-        
+
         await pool.query('DELETE FROM pending_orders');
-        
+
         // Notify other clients
         wsInvalidate('pending_orders', { action: 'clear' });
-        
+
         res.json({ ok: true, quotes: allQuotes });
     } catch (err) {
         console.error('DELETE /pending-orders (all) error:', err && err.message ? err.message : err);
@@ -2080,7 +2081,7 @@ ${recentText || '(không có dữ liệu)'}
 });
 
 // ========== ADMIN MOJIBAKE RECOVERY ==========
-app.post('/api/admin/mojibake/recover', async(req, res) => {
+app.post('/api/admin/mojibake/recover', async (req, res) => {
     try {
         const body = req.body || {};
         const secret = String(body.secret || '');
@@ -2110,9 +2111,9 @@ app.post('/api/admin/mojibake/recover', async(req, res) => {
             const existingColumns = new Set((columnRows || []).map((r) => String(r.column_name || '')));
             const effectiveFields = [...allowedFields].filter((f) => existingColumns.has(f));
 
-                        let syncedCreatedByName = 0;
-                        if (syncCreatedByFromUsers && existingColumns.has('created_by') && existingColumns.has('created_by_name')) {
-                                const [syncResult] = await conn.query(`
+            let syncedCreatedByName = 0;
+            if (syncCreatedByFromUsers && existingColumns.has('created_by') && existingColumns.has('created_by_name')) {
+                const [syncResult] = await conn.query(`
                                         UPDATE quotations SET created_by_name = u.name
                                         FROM users u
                                         WHERE u.username = quotations.created_by
@@ -2125,8 +2126,8 @@ app.post('/api/admin/mojibake/recover', async(req, res) => {
                                                 OR quotations.created_by_name LIKE '%�%'
                                             )
                                 `);
-                                syncedCreatedByName = Number(syncResult && syncResult.affectedRows ? syncResult.affectedRows : 0);
-                        }
+                syncedCreatedByName = Number(syncResult && syncResult.affectedRows ? syncResult.affectedRows : 0);
+            }
 
             for (const field of effectiveFields) {
                 const [rows] = await conn.query(
@@ -2214,7 +2215,7 @@ app.post('/api/admin/mojibake/recover', async(req, res) => {
 
             try {
                 wsInvalidate('quotations', { action: 'mojibake_recover' });
-            } catch (_) {}
+            } catch (_) { }
 
             return res.json({
                 ok: true,
@@ -2283,36 +2284,36 @@ function ksRowToApp(row, lightweight = false) {
     }
     return {
         __backendId: row.backend_id || ('db_' + row.id),
-        id:                  row.id,
-        tkCode:              row.tk_code || '',
-        type:                row.type || 'new',
-        outletCode:          row.outlet_code || '',
-        outletName:          row.outlet_name || '',
-        address:             row.address || '',
-        outletLat:           row.outlet_lat || '',
-        outletLng:           row.outlet_lng || '',
-        locationSource:      row.location_source || 'manual',
-        phone:               row.phone || '',
-        items:               row.items || '[]',
-        content:             row.content || '',
-        oldContent:          Boolean(row.old_content),
-        oldContentExtra:     row.old_content_extra || '',
-        oldContentImages:    row.old_content_images || '[]',
-        statusImages:        row.status_images || '[]',
-        designImages:        row.design_images || '[]',
-        acceptanceImages:    row.acceptance_images || '[]',
-        comments:            commentsStr,
-        requester:           row.requester || '{}',
-        status:              row.status || 'pending',
-        editingRequestedAt:  safeIsoDate(row.editing_requested_at),
-        mqFolder:            row.mq_folder || null,
-        designCreatedBy:     row.design_created_by  || null,
-        designCreatedAt:     safeIsoDate(row.design_created_at),
-        designLastEditedBy:  row.design_last_edited_by  || null,
-        designLastEditedAt:  safeIsoDate(row.design_last_edited_at),
-        designFilename:      row.design_filename || '',
-        createdAt:           safeIsoDate(row.created_at),
-        updatedAt:           safeIsoDate(row.updated_at),
+        id: row.id,
+        tkCode: row.tk_code || '',
+        type: row.type || 'new',
+        outletCode: row.outlet_code || '',
+        outletName: row.outlet_name || '',
+        address: row.address || '',
+        outletLat: row.outlet_lat || '',
+        outletLng: row.outlet_lng || '',
+        locationSource: row.location_source || 'manual',
+        phone: row.phone || '',
+        items: row.items || '[]',
+        content: row.content || '',
+        oldContent: Boolean(row.old_content),
+        oldContentExtra: row.old_content_extra || '',
+        oldContentImages: row.old_content_images || '[]',
+        statusImages: row.status_images || '[]',
+        designImages: row.design_images || '[]',
+        acceptanceImages: row.acceptance_images || '[]',
+        comments: commentsStr,
+        requester: row.requester || '{}',
+        status: row.status || 'pending',
+        editingRequestedAt: safeIsoDate(row.editing_requested_at),
+        mqFolder: row.mq_folder || null,
+        designCreatedBy: row.design_created_by || null,
+        designCreatedAt: safeIsoDate(row.design_created_at),
+        designLastEditedBy: row.design_last_edited_by || null,
+        designLastEditedAt: safeIsoDate(row.design_last_edited_at),
+        designFilename: row.design_filename || '',
+        createdAt: safeIsoDate(row.created_at),
+        updatedAt: safeIsoDate(row.updated_at),
     };
 }
 
@@ -2378,7 +2379,7 @@ app.get('/api/ks/health', async (req, res) => {
             ensureDbInitStarted(),
             new Promise((_, reject) => setTimeout(() => reject(new Error('init_timeout')), 8000))
         ]);
-    } catch (_) {}
+    } catch (_) { }
 
     const snapshot = getDbHealthSnapshot();
     if (!snapshot.dbReady) {
@@ -2404,23 +2405,23 @@ app.get('/api/ks/proxy-image', async (req, res) => {
     try {
         const url = req.query.url;
         if (!url) return res.status(400).send('Missing url parameter');
-        
+
         if (!url.startsWith('https://storage.googleapis.com/')) {
             return res.status(403).send('Forbidden URL domain');
         }
-        
+
         const response = await fetch(url);
         if (!response.ok) {
             return res.status(response.status).send(`Failed to fetch image: ${response.statusText}`);
         }
-        
+
         const contentType = response.headers.get('content-type') || 'image/png';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
-        
+
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
-        
+
         return res.send(buffer);
     } catch (error) {
         console.error('proxy-image error:', error);
@@ -2570,7 +2571,7 @@ async function ensurePendingOrdersTable() {
                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
             )
         `);
-    } catch (_) {}
+    } catch (_) { }
 }
 
 // GET /pending-orders
@@ -2649,7 +2650,7 @@ app.get('/api/ks/requests/production-approvals-count', async (req, res) => {
                     }
                 });
             });
-        } catch (_) {}
+        } catch (_) { }
 
         const counts = { pending: 0, approved: 0, rejected: 0, total: 0 };
         Object.values(approvalsMap).forEach(item => {
@@ -2703,7 +2704,7 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
 
         try {
             const [rows2] = await pool.query(
-                `SELECT id, backend_id, tk_code, outlet_code, outlet_name, design_images,
+                `SELECT id, backend_id, tk_code, outlet_code, outlet_name,
                         production_approval_status, production_reject_reason, production_approved_at, production_approved_by
                  FROM ks_requests_view`
             );
@@ -2717,18 +2718,16 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
                             status: r.production_approval_status || 'pending',
                             approvedBy: r.production_approved_by || null,
                             approvedAt: r.production_approved_at || null,
-                            reason: r.production_reject_reason || null,
-                            designImages: r.design_images || null
+                            reason: r.production_reject_reason || null
                         };
                     } else {
-                        if (r.design_images) approvalsMap[key].designImages = r.design_images;
                         if (r.production_approval_status && approvalsMap[key].status === 'pending') {
                             approvalsMap[key].status = r.production_approval_status;
                         }
                     }
                 });
             });
-        } catch (_) {}
+        } catch (_) { }
 
         res.json({ ok: true, data: approvalsMap });
     } catch (err) {
@@ -2770,7 +2769,7 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
                  WHERE backend_id = ? OR id = ? OR tk_code = ?`,
                 [approvedBy, rawId, parseInt(rawId, 10) || 0, quoteCode]
             );
-        } catch (_) {}
+        } catch (_) { }
 
         sseBroadcast({ type: 'production_approvals', action: 'approved', quoteCode });
         wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'approved' });
@@ -2816,7 +2815,7 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
                  WHERE backend_id = ? OR id = ? OR tk_code = ?`,
                 [reason, rejectedBy, rawId, parseInt(rawId, 10) || 0, quoteCode]
             );
-        } catch (_) {}
+        } catch (_) { }
 
         sseBroadcast({ type: 'production_approvals', action: 'rejected', quoteCode });
         wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'rejected' });
@@ -2862,7 +2861,7 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
                  WHERE backend_id = ? OR id = ? OR tk_code = ?`,
                 [editNote, rawId, parseInt(rawId, 10) || 0, quoteCode]
             );
-        } catch (_) {}
+        } catch (_) { }
 
         sseBroadcast({ type: 'production_approvals', action: 'pending-edit', quoteCode });
         wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'pending-edit' });
@@ -3046,9 +3045,9 @@ app.post('/api/ks/requests', async (req, res) => {
         }
 
         // Step 3: Upload any base64 images to GCS using tk_code as folder
-        const statusImgsJson     = await ksAutoUploadImages(normalizeBodyValue(b.statusImages)     || '[]', tkCode, 'hien-trang');
+        const statusImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.statusImages) || '[]', tkCode, 'hien-trang');
         const oldContentImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.oldContentImages) || '[]', tkCode, 'hien-trang');
-        const designImgsJson     = await ksAutoUploadImages(normalizeBodyValue(b.designImages)     || '[]', tkCode, 'mq');
+        const designImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.designImages) || '[]', tkCode, 'mq');
         const acceptanceImgsJson = await ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages) || '[]', tkCode, 'mq');
 
         // Step 4: Update row with GCS URLs + tk_code
@@ -3082,21 +3081,21 @@ async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
     let arr;
     try { arr = JSON.parse(jsonStr || '[]'); } catch (_) { return jsonStr; }
     if (!Array.isArray(arr) || arr.length === 0) return jsonStr;
-    const safeMq  = String(mqFolder  || 'misc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+    const safeMq = String(mqFolder || 'misc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
     const safeSub = String(subfolder || 'misc').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 32);
-    const bucket  = gcs.bucket(ksBucket);
+    const bucket = gcs.bucket(ksBucket);
     const uploaded = await Promise.all(arr.map(async (item) => {
         if (typeof item !== 'string') return item;
         const m = item.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
         if (!m) return item; // already a URL or non-image → keep
         const mimetype = m[1];
-        const buffer   = Buffer.from(m[2], 'base64');
+        const buffer = Buffer.from(m[2], 'base64');
         let ext = 'bin';
         if (mimetype === 'image/jpeg') ext = 'jpg';
-        else if (mimetype === 'image/png')  ext = 'png';
+        else if (mimetype === 'image/png') ext = 'png';
         else if (mimetype === 'image/webp') ext = 'webp';
-        else if (mimetype === 'image/gif')  ext = 'gif';
-        const rand     = crypto.randomBytes(6).toString('hex');
+        else if (mimetype === 'image/gif') ext = 'gif';
+        const rand = crypto.randomBytes(6).toString('hex');
         const filename = `ks-surveys/${safeMq}/${safeSub}/${Date.now()}_${rand}.${ext}`;
         try {
             await bucket.file(filename).save(buffer, { contentType: mimetype });
@@ -3136,26 +3135,26 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         if ('acceptanceImages' in b) b.acceptanceImages = await ksAutoUploadImages(normalizeBodyValue(b.acceptanceImages), folderForUpload, 'mq');
 
         const fields = [], vals = [];
-        const maybeStr  = (k, col) => { if (k in b) { fields.push(`${col} = ?`); vals.push(toNullableString(b[k])); } };
+        const maybeStr = (k, col) => { if (k in b) { fields.push(`${col} = ?`); vals.push(toNullableString(b[k])); } };
         const maybeJson = (k, col) => { if (k in b) { fields.push(`${col} = ?`); vals.push(normalizeBodyValue(b[k])); } };
 
-        maybeStr('type',             'type');
-        maybeStr('outletName',       'outlet_name');
-        maybeStr('address',          'address');
-        maybeStr('outletLat',        'outlet_lat');
-        maybeStr('outletLng',        'outlet_lng');
-        maybeStr('locationSource',   'location_source');
-        maybeStr('phone',            'phone');
-        maybeJson('items',           'items');
-        maybeStr('content',          'content');
-        if ('oldContent' in b)       { fields.push('old_content = ?'); vals.push(b.oldContent ? 1 : 0); }
-        maybeStr('oldContentExtra',  'old_content_extra');
-        maybeJson('oldContentImages','old_content_images');
-        maybeJson('statusImages',    'status_images');
-        maybeJson('comments',        'comments');
-        maybeJson('requester',       'requester');
-        maybeStr('status',           'status');
-        maybeStr('designFilename',   'design_filename');
+        maybeStr('type', 'type');
+        maybeStr('outletName', 'outlet_name');
+        maybeStr('address', 'address');
+        maybeStr('outletLat', 'outlet_lat');
+        maybeStr('outletLng', 'outlet_lng');
+        maybeStr('locationSource', 'location_source');
+        maybeStr('phone', 'phone');
+        maybeJson('items', 'items');
+        maybeStr('content', 'content');
+        if ('oldContent' in b) { fields.push('old_content = ?'); vals.push(b.oldContent ? 1 : 0); }
+        maybeStr('oldContentExtra', 'old_content_extra');
+        maybeJson('oldContentImages', 'old_content_images');
+        maybeJson('statusImages', 'status_images');
+        maybeJson('comments', 'comments');
+        maybeJson('requester', 'requester');
+        maybeStr('status', 'status');
+        maybeStr('designFilename', 'design_filename');
         if ('editingRequestedAt' in b) {
             fields.push('editing_requested_at = ?');
             vals.push(b.editingRequestedAt ? new Date(b.editingRequestedAt) : null);
@@ -3216,14 +3215,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         }
 
         // designImages and acceptanceImages updated with their own fields
-        maybeJson('designImages',    'design_images');
-        maybeJson('acceptanceImages','acceptance_images');
+        maybeJson('designImages', 'design_images');
+        maybeJson('acceptanceImages', 'acceptance_images');
 
         // Design author tracking fields
-        maybeStr('designCreatedBy',    'design_created_by');
-        if ('designCreatedAt' in b)    { fields.push('design_created_at = ?');     vals.push(b.designCreatedAt     ? new Date(b.designCreatedAt)     : null); }
+        maybeStr('designCreatedBy', 'design_created_by');
+        if ('designCreatedAt' in b) { fields.push('design_created_at = ?'); vals.push(b.designCreatedAt ? new Date(b.designCreatedAt) : null); }
         maybeStr('designLastEditedBy', 'design_last_edited_by');
-        if ('designLastEditedAt' in b) { fields.push('design_last_edited_at = ?'); vals.push(b.designLastEditedAt  ? new Date(b.designLastEditedAt)  : null); }
+        if ('designLastEditedAt' in b) { fields.push('design_last_edited_at = ?'); vals.push(b.designLastEditedAt ? new Date(b.designLastEditedAt) : null); }
 
         if (fields.length === 0) return res.json({ ok: true, message: 'no_changes' });
 
@@ -3243,12 +3242,12 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         try {
             const becomingDone = b.status === 'done' && current.status !== 'done';
             const isEditConfirm = becomingDone && ('designLastEditedBy' in b);
-            const isFirstMQ     = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
+            const isFirstMQ = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
 
             if (isEditConfirm || isFirstMQ) {
                 // Lấy số điện thoại của Sale Heineken (người đang quản lý yêu cầu)
                 let requesterPhone = null;
-                try { requesterPhone = (JSON.parse(updated.requester || '{}') || {}).phone || null; } catch (_) {}
+                try { requesterPhone = (JSON.parse(updated.requester || '{}') || {}).phone || null; } catch (_) { }
 
                 // Sử dụng mã tk_code đã sinh cố định lưu trong DB để đảm bảo đồng nhất
                 const tkCode = updated.tk_code || updated.backend_id || ('db_' + updated.id);
@@ -3288,7 +3287,7 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
     try {
         const id = req.params.id;
         const deleteReason = req.body && req.body.reason ? String(req.body.reason).trim() : '';
-        
+
         let [[row]] = await pool.query('SELECT * FROM ks_requests WHERE backend_id = ? LIMIT 1', [id]);
         if (!row) {
             [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
@@ -3299,7 +3298,7 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
 
         // Perform deletion
         await pool.query('DELETE FROM ks_requests WHERE id = ?', [rowId]);
-        
+
         // Log the deletion to console (automatically stored in cloud logs)
         console.log(`[DELETED] Request ID ${rowId} (backendId: ${row.backend_id}) deleted. Reason: ${deleteReason}`);
 
@@ -3317,10 +3316,10 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
 // Fallback flat path (no backendId): ks-attachments/{ts}_{rand}.{ext}
 app.post('/api/ks/upload', async (req, res) => {
     try {
-        const dataUrl      = req.body && req.body.dataUrl      != null ? String(req.body.dataUrl)      : '';
-        const filenameHint = req.body && req.body.filename     != null ? String(req.body.filename)     : '';
-        const backendIdRaw = req.body && req.body.backendId    != null ? String(req.body.backendId)    : '';
-        const folderRaw    = req.body && req.body.folder       != null ? String(req.body.folder)       : '';
+        const dataUrl = req.body && req.body.dataUrl != null ? String(req.body.dataUrl) : '';
+        const filenameHint = req.body && req.body.filename != null ? String(req.body.filename) : '';
+        const backendIdRaw = req.body && req.body.backendId != null ? String(req.body.backendId) : '';
+        const folderRaw = req.body && req.body.folder != null ? String(req.body.folder) : '';
         if (!dataUrl) return res.status(400).json({ ok: false, error: 'missing_dataUrl' });
         const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
         if (!m) return res.status(400).json({ ok: false, error: 'invalid_dataUrl' });
@@ -3334,11 +3333,11 @@ app.post('/api/ks/upload', async (req, res) => {
         else if (mimetype === 'image/webp') ext = 'webp';
         else if (mimetype === 'image/gif') ext = 'gif';
         const rand = crypto.randomBytes(6).toString('hex');
-        const ts   = Date.now();
+        const ts = Date.now();
         let filename;
         if (backendIdRaw) {
-            const safeId  = backendIdRaw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-            const safeFld = folderRaw   ? folderRaw.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 64) : 'misc';
+            const safeId = backendIdRaw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+            const safeFld = folderRaw ? folderRaw.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 64) : 'misc';
             filename = `ks-surveys/${safeId}/${safeFld}/${ts}_${rand}.${ext}`;
         } else {
             const safeHint = String(filenameHint || '').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60);
@@ -3369,10 +3368,10 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
         }
         if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'not_found' });
         const current = rows[0];
-        const rowId   = current.id;
+        const rowId = current.id;
         const oldMqFolder = current.mq_folder;
         const newMqFolder = ksSafeMqFolder(newOutletCode);
-        const ksBucket    = process.env.KS_GCS_BUCKET;
+        const ksBucket = process.env.KS_GCS_BUCKET;
 
         let remap = {};
         if (oldMqFolder && ksBucket && oldMqFolder !== newMqFolder) {
@@ -3471,10 +3470,10 @@ app.use((err, req, res, next) => {
             res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
             res.status(500).json({ ok: false, error: 'internal_error' });
         } else {
-            try { res.end(); } catch (_) {}
+            try { res.end(); } catch (_) { }
         }
     } catch (e) {
-        try { if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal_error' }); } catch (_) {}
+        try { if (!res.headersSent) res.status(500).json({ ok: false, error: 'internal_error' }); } catch (_) { }
     }
 });
 
@@ -3490,7 +3489,7 @@ process.on('uncaughtException', (err) => {
     } catch (_) { process.exit(1); }
 });
 
-app.post('/images/upload', async(req, res) => {
+app.post('/images/upload', async (req, res) => {
     try {
         const dataUrl = req.body && req.body.dataUrl != null ? String(req.body.dataUrl) : '';
         const filenameHint = req.body && req.body.filename != null ? String(req.body.filename) : '';
@@ -3571,12 +3570,12 @@ async function streamImageFromBucket(res, bucketName, objectName) {
     stream.on('error', (e) => {
         console.error('images stream error:', e && e.message ? e.message : String(e));
         if (!res.headersSent) res.status(500);
-        try { res.end(); } catch (_) {}
+        try { res.end(); } catch (_) { }
     });
     stream.pipe(res);
 }
 
-app.get('/images/v/:b64', async(req, res) => {
+app.get('/images/v/:b64', async (req, res) => {
     try {
         const bucketName = process.env.GCS_BUCKET;
         if (!bucketName) return res.status(500).send('GCS_BUCKET is not set');
@@ -3590,7 +3589,7 @@ app.get('/images/v/:b64', async(req, res) => {
     }
 });
 
-app.get('/images/view', async(req, res) => {
+app.get('/images/view', async (req, res) => {
     try {
         const bucketName = process.env.GCS_BUCKET;
         if (!bucketName) return res.status(500).send('GCS_BUCKET is not set');

@@ -123,7 +123,7 @@ function parseMqDesignImages(item) {
                 try {
                     const parsed = JSON.parse(trimmed);
                     if (Array.isArray(parsed)) images = images.concat(parsed);
-                } catch (_) {}
+                } catch (_) { }
             } else if (trimmed.startsWith('http')) {
                 images.push(trimmed);
             }
@@ -299,8 +299,13 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
             const quoteCode = q.quote_code || q.quoteCode || q.id || '---';
             const idKey = 'po_q_' + quoteCode + '_' + (q.outlet_code || q.outletCode || '');
 
+            // Ensure local storage requests are loaded if allRequests is empty in memory
+            if ((typeof allRequests === 'undefined' || !Array.isArray(allRequests) || allRequests.length === 0) && typeof loadAllRequestsFromStorage === 'function') {
+                try { loadAllRequestsFromStorage(); } catch (_) { }
+            }
+
             let ksReq = null;
-            if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+            if (typeof allRequests !== 'undefined' && Array.isArray(allRequests) && allRequests.length > 0) {
                 const targetTk = String(q.tk_code || q.tkCode || '').trim();
                 const targetOutlet = String(q.outlet_code || q.outletCode || '').trim();
                 ksReq = allRequests.find(r => {
@@ -314,8 +319,9 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 });
             }
 
-            const designImgs = q.design_images || q.designImages || (ksReq ? (ksReq.design || ksReq.designImages) : []) || [];
-            const quoteImgs = q.images || q.quote_image_url || [];
+            // Prioritize direct images on quote payload, fallback to matched survey request
+            const quoteImgs = q.images || q.quote_image_url || q.qcag_image_url || [];
+            const designImgs = q.design_images || q.designImages || (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs : null) || (ksReq ? (ksReq.design || ksReq.designImages) : []) || [];
 
             results.push({
                 __backendId: idKey,
@@ -347,10 +353,10 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 async function fetchProductionApprovals() {
     let allExtracted = [];
 
-    // 1. Fetch App 1 Backend pending orders summary only
+    // 1. Fetch App 1 Backend full pending orders (with images included)
     const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     try {
-        const res = await fetch(app1Base + '/pending-orders?summary=1');
+        const res = await fetch(app1Base + '/pending-orders');
         if (res.ok) {
             const json = await res.json();
             if (json && json.ok && Array.isArray(json.data)) {
@@ -373,8 +379,8 @@ async function fetchProductionApprovals() {
 
     // 3. Fetch App 2 Backend production approvals
     const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
-    const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
-        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+    const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
         : defaultApp2Backend;
     try {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
@@ -384,7 +390,7 @@ async function fetchProductionApprovals() {
                 const map = (typeof json2.data === 'object' && !Array.isArray(json2.data)) ? json2.data : {};
                 const list = Array.isArray(json2.data) ? json2.data : [];
                 allExtracted = allExtracted.concat(list);
-                
+
                 // Merge status map and design_images from backend into allExtracted
                 allExtracted.forEach(item => {
                     const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
@@ -392,10 +398,10 @@ async function fetchProductionApprovals() {
                     const outletCode = String(item.outletCode || item.outlet_code || '').trim();
                     const tkCode = String(item.tkCode || item.tk_code || '').trim();
 
-                    const approvalObj = (cleanCode && map[cleanCode]) || 
-                                        (rawCode && map[rawCode]) || 
-                                        (tkCode && map[tkCode]) || 
-                                        (outletCode && map[outletCode]);
+                    const approvalObj = (cleanCode && map[cleanCode]) ||
+                        (rawCode && map[rawCode]) ||
+                        (tkCode && map[tkCode]) ||
+                        (outletCode && map[outletCode]);
 
                     if (approvalObj) {
                         if (approvalObj.status) item.productionApprovalStatus = approvalObj.status;
@@ -432,7 +438,7 @@ async function fetchProductionApprovals() {
                 });
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 
     // Deduplicate by quoteCode / id - preserving rich fields (saleCode, salePhone) if available
     const dedupMap = new Map();
@@ -488,15 +494,8 @@ function resolveProductionApprovalBase() {
 }
 
 async function fetchProductionApprovalBadgeCount() {
-    const app2Base = resolveProductionApprovalBase();
     try {
-        const res = await fetch(app2Base + '/api/ks/requests/production-approvals-count');
-        if (!res.ok) return;
-        const json = await res.json();
-        if (json && json.ok && json.data) {
-            _productionApprovalBadgeCount = Number(json.data.pending || 0);
-            updateProductionApprovalBadge();
-        }
+        await fetchProductionApprovals();
     } catch (e) {
         console.warn('fetchProductionApprovalBadgeCount warning:', e);
     }
@@ -508,6 +507,11 @@ function openProductionApprovalModal() {
     modal.classList.remove('hidden');
 
     _productionApprovalActive = true;
+
+    // Load local storage requests backup if memory cache is uninitialized
+    if ((typeof allRequests === 'undefined' || !Array.isArray(allRequests) || allRequests.length === 0) && typeof loadAllRequestsFromStorage === 'function') {
+        try { loadAllRequestsFromStorage(); } catch (_) { }
+    }
 
     // Always set and open 'pending' tab (Chờ duyệt) first
     setProductionApprovalTab('pending');
@@ -634,16 +638,16 @@ function renderProductionApprovalList() {
                     <!-- 2. Bullet Items List (BOTTOM - WITH DESKTOP QCAG BRAND BADGE COLORS) -->
                     <div class="${mqImages.length > 0 ? 'pt-2 border-t border-gray-800/80' : ''} space-y-1.5">
                         ${itemsList.length > 0 ? itemsList.map(it => {
-                            const brand = it.brand || it.brandName || '';
-                            const brandClass = getBrandBadgeClass(brand);
-                            return `
+            const brand = it.brand || it.brandName || '';
+            const brandClass = getBrandBadgeClass(brand);
+            return `
                                 <div class="text-xs text-gray-300 flex items-start gap-1.5">
                                     <span class="text-orange-400 mt-0.5">•</span>
                                     <span class="flex-1">${escapeHtml(it.name || it.type || it.content || 'Hạng mục thi công')} ${it.size ? `(${escapeHtml(it.size)})` : ''}</span>
                                     ${brand ? `<span class="px-2 py-0.5 text-[10px] font-bold rounded-lg ${brandClass}">${escapeHtml(brand)}</span>` : ''}
                                 </div>
                             `;
-                        }).join('') : '<div class="text-xs text-gray-400 italic">• Hạng mục sản xuất & thi công theo báo giá</div>'}
+        }).join('') : '<div class="text-xs text-gray-400 italic">• Hạng mục sản xuất & thi công theo báo giá</div>'}
                     </div>
                 </div>
 
@@ -814,7 +818,7 @@ function approveProductionItem(idKey) {
 
     item.productionApprovalStatus = 'approved';
     item.approvedAt = new Date().toISOString();
-    
+
     // Save to instant local storage cache
     try {
         if (typeof localStorage !== 'undefined') {
@@ -826,12 +830,12 @@ function approveProductionItem(idKey) {
             if (rawCode) cache[rawCode] = payload;
             localStorage.setItem('ks_production_approvals_cache', JSON.stringify(cache));
         }
-    } catch (_) {}
+    } catch (_) { }
 
     // Notify API backend
     const cleanTargetCode = extractQuoteCodeFromIdKey(idKey || item.quoteCode) || idKey;
-    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
-        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
         : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(cleanTargetCode) + '/approve-production', {
         method: 'POST',
@@ -864,7 +868,7 @@ function approveProductionItem(idKey) {
     setTimeout(() => {
         const card = actionContainer ? actionContainer.closest('.bg-\\[\\#1b2433\\]') : null;
         const remainingPending = _productionApprovalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
-        
+
         if (card && _productionApprovalTab === 'pending') {
             card.style.transition = 'all 0.4s ease-out';
             card.style.opacity = '0';
@@ -935,8 +939,8 @@ function confirmRequestEditProduction(idKey, note) {
     item.rejectReason = String(note || 'Yêu cầu chỉnh sửa').trim();
 
     // Send edit request to Desktop QCAG
-    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
-        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
         : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/request-edit-production', {
         method: 'POST',
@@ -1009,8 +1013,8 @@ function confirmRejectProduction(idKey, reason) {
     }
 
     // Notify API backend
-    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) 
-        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '') 
+    const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
         : 'https://ks-backend-493469512136.asia-southeast1.run.app';
     fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/reject-production', {
         method: 'POST',
@@ -1061,9 +1065,9 @@ if (typeof window !== 'undefined') {
 
     // Realtime SSE listener: Update instantly when App 1 adds a pending order or updates approval status
     const origHook = window.__ksOnInvalidate;
-    window.__ksOnInvalidate = function(payload) {
+    window.__ksOnInvalidate = function (payload) {
         if (typeof origHook === 'function') {
-            try { origHook(payload); } catch (_) {}
+            try { origHook(payload); } catch (_) { }
         }
         const res = String(payload && payload.resource || '').toLowerCase();
         if (res === 'pending_orders' || res === 'ks_requests' || res === 'quotations') {
