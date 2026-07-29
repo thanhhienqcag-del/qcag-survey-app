@@ -87,6 +87,13 @@ function getBrandBadgeClass(brand) {
     return 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
 }
 
+function isValidImgUrl(val) {
+    if (!val || typeof val !== 'string') return false;
+    const s = val.trim();
+    if (s === '...' || s === 'null' || s === 'undefined' || s.length < 5) return false;
+    return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('data:image/') || s.startsWith('blob:') || s.startsWith('/');
+}
+
 function parseMqDesignImages(item) {
     if (!item) return [];
     let images = [];
@@ -100,8 +107,22 @@ function parseMqDesignImages(item) {
         item.qcag_image_url,
         item.qcagImageUrl,
         item.design,
-        item.image
+        item.image,
+        item.survey_image,
+        item.survey_images,
+        item.surveyImage
     ];
+
+    if (Array.isArray(item.items)) {
+        item.items.forEach(it => {
+            if (it) {
+                if (it.image) sources.push(it.image);
+                if (it.images) sources.push(it.images);
+                if (it.imageUrl) sources.push(it.imageUrl);
+                if (it.design_images) sources.push(it.design_images);
+            }
+        });
+    }
 
     sources.forEach(src => {
         if (!src) return;
@@ -113,8 +134,9 @@ function parseMqDesignImages(item) {
                 try {
                     const parsed = JSON.parse(trimmed);
                     if (Array.isArray(parsed)) images = images.concat(parsed);
+                    else if (typeof parsed === 'string') images.push(parsed);
                 } catch (_) { }
-            } else if (trimmed.startsWith('http')) {
+            } else if (isValidImgUrl(trimmed)) {
                 images.push(trimmed);
             }
         }
@@ -123,19 +145,20 @@ function parseMqDesignImages(item) {
     const cleanImages = [];
     images.forEach(img => {
         if (!img) return;
-        if (typeof img === 'string' && img !== '...' && img.startsWith('http')) {
-            cleanImages.push(img);
+        if (typeof img === 'string') {
+            const trimmed = img.trim();
+            if (isValidImgUrl(trimmed)) cleanImages.push(trimmed);
         } else if (typeof img === 'object') {
-            const url = img.data || img.url || img.src || img.link;
-            if (typeof url === 'string' && url.startsWith('http')) {
-                cleanImages.push(url);
+            const url = img.data || img.url || img.src || img.link || img.base64;
+            if (typeof url === 'string') {
+                const trimmed = url.trim();
+                if (isValidImgUrl(trimmed)) cleanImages.push(trimmed);
             }
         }
     });
 
     const uniqueImages = Array.from(new Set(cleanImages));
-    // Chỉ hiển thị đúng 1 hình mới nhất đang hiển thị ở Yêu cầu (loại bỏ toàn bộ hình ảnh cũ)
-    return uniqueImages.length > 0 ? uniqueImages.slice(-1) : [];
+    return uniqueImages;
 }
 
 /** Full-Screen MQ Image Lightbox Viewer with Zooming, Drag & Pan, and Integrated 3 Action Buttons */
@@ -485,30 +508,14 @@ function resolveProductionApprovalBase() {
         : defaultApp2Backend;
 }
 
+function handleMqImageClick(el, idKey) {
+    if (!el) return;
+    const url = el.getAttribute('data-img-url') || el.src;
+    openMqImagePreview(url, idKey);
+}
+
 async function fetchProductionApprovalBadgeCount() {
     try {
-        const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
-        const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
-            ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
-            : defaultApp2Backend;
-
-        const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
-        const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
-        let countUrl = app2Base + '/api/ks/requests/production-approvals-count';
-        const params = [];
-        if (sessionCode) params.push('sale_code=' + encodeURIComponent(sessionCode));
-        if (sessionPhone) params.push('sale_phone=' + encodeURIComponent(sessionPhone));
-        if (params.length > 0) countUrl += '?' + params.join('&');
-
-        const res = await fetch(countUrl);
-        if (res.ok) {
-            const json = await res.json();
-            if (json && json.ok && json.data) {
-                _productionApprovalBadgeCount = Number(json.data.pending) || 0;
-                updateProductionApprovalBadge();
-                return;
-            }
-        }
         await fetchProductionApprovals();
     } catch (e) {
         console.warn('fetchProductionApprovalBadgeCount warning:', e);
@@ -643,7 +650,7 @@ function renderProductionApprovalList() {
                         <div class="w-full flex justify-center items-center py-1">
                             <div class="flex gap-2 overflow-x-auto justify-center items-center max-w-full">
                                 ${mqImages.map(img => `
-                                    <img src="${escapeHtml(img)}" onclick="openMqImagePreview('${escapeHtml(img)}', '${idKey}')" class="max-h-56 w-auto max-w-full rounded-xl border border-gray-700/80 object-contain shadow-md cursor-pointer hover:opacity-95 transition-opacity" alt="MQ Design">
+                                    <img src="${escapeHtml(img)}" data-img-url="${escapeHtml(img)}" onclick="handleMqImageClick(this, '${idKey}')" class="max-h-56 w-auto max-w-full rounded-xl border border-gray-700/80 object-contain shadow-md cursor-pointer hover:opacity-95 transition-opacity" alt="MQ Design">
                                 `).join('')}
                             </div>
                         </div>
