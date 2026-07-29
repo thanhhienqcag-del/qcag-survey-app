@@ -270,6 +270,13 @@ app.use((req, res, next) => {
         if (!res.getHeader('Access-Control-Allow-Origin')) res.setHeader('Access-Control-Allow-Origin', '*');
         if (!res.getHeader('Access-Control-Allow-Methods')) res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
         if (!res.getHeader('Access-Control-Allow-Headers')) res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        
+        // Cache static assets (CSV ward mappings, images, fonts) for 1 year
+        const url = String(req.url || '').toLowerCase();
+        if (/\.(csv|png|jpg|jpeg|webp|svg|woff2|woff|ttf)$/i.test(url)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+
         if (String(req.method || '').toUpperCase() === 'OPTIONS') return res.status(200).end();
     } catch (e) { }
     return next();
@@ -2321,13 +2328,10 @@ const KS_REQUESTS_SELECT_SQL = `
     SELECT id, backend_id, tk_code, type, outlet_code, outlet_name, address,
            outlet_lat, outlet_lng, phone, items, content,
            old_content, old_content_extra, status, requester, comments,
+           status_images, design_images, acceptance_images, old_content_images,
            editing_requested_at, mq_folder, created_at, updated_at,
            design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
-           design_filename,
-           CASE WHEN design_images IS NOT NULL AND length(design_images) > 4 AND design_images != '[]' THEN '["..."]' ELSE '[]' END as design_images,
-           CASE WHEN status_images IS NOT NULL AND length(status_images) > 4 AND status_images != '[]' THEN '["..."]' ELSE '[]' END as status_images,
-           CASE WHEN acceptance_images IS NOT NULL AND length(acceptance_images) > 4 AND acceptance_images != '[]' THEN '["..."]' ELSE '[]' END as acceptance_images,
-           CASE WHEN old_content_images IS NOT NULL AND length(old_content_images) > 4 AND old_content_images != '[]' THEN '["..."]' ELSE '[]' END as old_content_images
+           design_filename
     FROM ks_requests_view
 `;
 
@@ -2440,6 +2444,68 @@ app.get('/api/ks/requests', async (req, res) => {
         const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
         const outletCodeRaw = String(req.query && (req.query.outlet_code || req.query.outletCode) || '').trim();
         const { updatedSinceRaw, updatedSince } = resolveKsRequestsOptions(req.query || {});
+
+        // Sale-specific query path (for Mobile Heineken): return all requests AND images for THAT Sale ONLY
+        const salePhoneRaw = String(req.query && (req.query.sale_phone || req.query.phone || req.query.salePhone) || '').trim();
+        const saleCodeRaw = String(req.query && (req.query.sale_code || req.query.saleCode) || '').trim();
+        const searchQRaw = String(req.query && (req.query.q || req.query.search || req.query.query) || '').trim().toLowerCase();
+
+        // Indexed Server Search path (for Desktop QCAG deep searching past records beyond page 1)
+        if (searchQRaw) {
+            const qTerm = `%${searchQRaw}%`;
+            const [rows] = await pool.query(
+                `SELECT id, backend_id, tk_code, type, outlet_code, outlet_name, address,
+                        outlet_lat, outlet_lng, phone, items, content,
+                        old_content, old_content_extra, status, requester, comments,
+                        status_images, design_images, acceptance_images, old_content_images,
+                        editing_requested_at, mq_folder, created_at, updated_at,
+                        design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
+                        design_filename
+                 FROM ks_requests_view
+                 WHERE LOWER(tk_code) LIKE ? OR LOWER(outlet_code) LIKE ? OR LOWER(outlet_name) LIKE ? OR LOWER(design_filename) LIKE ? OR LOWER(phone) LIKE ? OR LOWER(requester) LIKE ?
+                 ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+                [qTerm, qTerm, qTerm, qTerm, qTerm, qTerm]
+            );
+            const mapped = rows.map(r => ksRowToApp(r, true));
+            return res.json({
+                ok: true,
+                data: mapped,
+                paging: { total: mapped.length, limit, offset, hasMore: mapped.length === limit }
+            });
+        }
+
+        if (salePhoneRaw || saleCodeRaw) {
+            const conds = [];
+            const params = [];
+            if (salePhoneRaw) {
+                params.push(salePhoneRaw, `%${salePhoneRaw}%`);
+                conds.push("(phone = ? OR requester LIKE ?)");
+            }
+            if (saleCodeRaw) {
+                params.push(`%${saleCodeRaw}%`);
+                conds.push("(requester LIKE ?)");
+            }
+
+            const [rows] = await pool.query(
+                `SELECT id, backend_id, tk_code, type, outlet_code, outlet_name, address,
+                        outlet_lat, outlet_lng, phone, items, content,
+                        old_content, old_content_extra, status, requester, comments,
+                        status_images, design_images, acceptance_images, old_content_images,
+                        editing_requested_at, mq_folder, created_at, updated_at,
+                        design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
+                        design_filename
+                 FROM ks_requests_view
+                 WHERE ${conds.join(' OR ')}
+                 ORDER BY created_at DESC`,
+                params
+            );
+            const mapped = rows.map(r => ksRowToApp(r, false)); // Full details + images included for this Sale!
+            return res.json({
+                ok: true,
+                data: mapped,
+                paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false }
+            });
+        }
 
         // Specific outlet query path: return all requests for a given outlet code with full details
         if (outletCodeRaw && outletCodeRaw.toLowerCase() !== 'new outlet') {
@@ -2577,7 +2643,6 @@ async function ensurePendingOrdersTable() {
 // GET /pending-orders
 app.get('/pending-orders', async (req, res) => {
     try {
-        await ensurePendingOrdersTable();
         const [rows] = await pool.query(
             `SELECT id, created_by, total_points, total_amount, area_list, status, quotes_json, created_at, updated_at
              FROM ks_pending_orders
@@ -2610,7 +2675,6 @@ app.get('/pending-orders', async (req, res) => {
 // GET /api/ks/requests/production-approvals-count
 app.get('/api/ks/requests/production-approvals-count', async (req, res) => {
     try {
-        await ensureProductionApprovalsTable();
         const approvalsMap = {};
 
         try {
@@ -2679,7 +2743,6 @@ app.get('/api/ks/requests/production-approvals-count', async (req, res) => {
 // GET /api/ks/requests/production-approvals
 app.get('/api/ks/requests/production-approvals', async (req, res) => {
     try {
-        await ensureProductionApprovalsTable();
         const approvalsMap = {};
 
         try {
@@ -2739,7 +2802,6 @@ app.get('/api/ks/requests/production-approvals', async (req, res) => {
 // POST /api/ks/requests/:id/approve-production
 app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
     try {
-        await ensureProductionApprovalsTable();
         const rawId = req.params.id;
         const quoteCode = extractQuoteCode(rawId);
         const b = req.body || {};
@@ -2783,7 +2845,6 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
 // POST /api/ks/requests/:id/reject-production
 app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
     try {
-        await ensureProductionApprovalsTable();
         const rawId = req.params.id;
         const quoteCode = extractQuoteCode(rawId);
         const b = req.body || {};
@@ -2829,7 +2890,6 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
 // POST /api/ks/requests/:id/request-edit-production
 app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
     try {
-        await ensureProductionApprovalsTable();
         const rawId = req.params.id;
         const quoteCode = extractQuoteCode(rawId);
         const b = req.body || {};
@@ -3414,6 +3474,7 @@ app.get('/api/ks/settings/:key', async (req, res) => {
 // ======================== END KS MOBILE API ========================
 
 async function start() {
+    try { await ensureProductionApprovalsTable(); await ensurePendingOrdersTable(); } catch (_) {}
     const preferredPort = Number(PORT) || 3000;
     const candidatePorts = (!process.env.K_SERVICE)
         ? Array.from(new Set([preferredPort, 3101, 3102]))

@@ -539,7 +539,7 @@ function renderRequestList() {
 }
 
 function checkAndShowMobileWhatsNewModal() {
-  const CURRENT_VERSION = 'v2.8.0';
+  const CURRENT_VERSION = 'v3.0.0';
   
   // Only show on Mobile view (< 768px or if mobile element exists)
   if (window.innerWidth >= 768) return;

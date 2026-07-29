@@ -35,17 +35,7 @@ function isNameMatch(n1, n2) {
     const s1 = normalizeSaleName(n1);
     const s2 = normalizeSaleName(n2);
     if (!s1 || !s2) return false;
-    if (s1.includes(s2) || s2.includes(s1)) return true;
-    const words1 = s1.split(' ').filter(w => w.length > 1);
-    const words2 = s2.split(' ').filter(w => w.length > 1);
-    if (words1.length > 0 && words2.length > 0) {
-        const set1 = new Set(words1);
-        const overlap = words2.filter(w => set1.has(w));
-        if (overlap.length >= 2 || (overlap.length === words1.length && overlap.length === words2.length)) {
-            return true;
-        }
-    }
-    return false;
+    return s1 === s2;
 }
 
 function isSaleMatch(item, session) {
@@ -54,9 +44,9 @@ function isSaleMatch(item, session) {
     const sessionPhone = String(session.phone || '').replace(/\D/g, '');
     const sessionName = session.saleName || session.name || session.username || '';
 
-    const itemCode = String(item.saleCode || item.sale_code || '').trim();
-    const itemPhone = String(item.salePhone || item.phone || '').replace(/\D/g, '');
-    const itemSaleName = item.saleName || item.sale_name || '';
+    const itemCode = String(item.saleCode || item.sale_code || item.createdBy || item.created_by || '').trim();
+    const itemPhone = String(item.salePhone || item.phone || item.outletPhone || item.outlet_phone || '').replace(/\D/g, '');
+    const itemSaleName = item.saleName || item.sale_name || item.createdByName || item.created_by_name || '';
     const itemRequester = item.requester || '';
 
     // 1. Unique ID match by saleCode
@@ -65,7 +55,7 @@ function isSaleMatch(item, session) {
     // 2. Unique ID match by phone number
     if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8 && (sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8)))) return true;
 
-    // 3. Name matching with token intersection
+    // 3. Strict exact name match only
     if (sessionName) {
         if (itemSaleName && isNameMatch(itemSaleName, sessionName)) return true;
         if (itemRequester && isNameMatch(itemRequester, sessionName)) return true;
@@ -143,7 +133,9 @@ function parseMqDesignImages(item) {
         }
     });
 
-    return Array.from(new Set(cleanImages));
+    const uniqueImages = Array.from(new Set(cleanImages));
+    // Chỉ hiển thị đúng 1 hình mới nhất đang hiển thị ở Yêu cầu (loại bỏ toàn bộ hình ảnh cũ)
+    return uniqueImages.length > 0 ? uniqueImages.slice(-1) : [];
 }
 
 /** Full-Screen MQ Image Lightbox Viewer with Zooming, Drag & Pan, and Integrated 3 Action Buttons */
@@ -306,15 +298,9 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 
             let ksReq = null;
             if (typeof allRequests !== 'undefined' && Array.isArray(allRequests) && allRequests.length > 0) {
-                const targetTk = String(q.tk_code || q.tkCode || '').trim();
-                const targetOutlet = String(q.outlet_code || q.outletCode || '').trim();
                 ksReq = allRequests.find(r => {
-                    const rTk = String(r.tkCode || r.tk_code || '').trim();
-                    const rOutlet = String(r.outletCode || r.outlet_code || '').trim();
                     const rQCode = String(r.quoteCode || r.quote_code || '').trim();
                     if (quoteCode && rQCode && quoteCode === rQCode) return true;
-                    if (targetTk && rTk && (rTk.toLowerCase() === targetTk.toLowerCase() || rTk.replace(/\D/g, '') === targetTk.replace(/\D/g, ''))) return true;
-                    if (targetOutlet && rOutlet && rOutlet === targetOutlet) return true;
                     return false;
                 });
             }
@@ -329,8 +315,8 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 quoteCode: quoteCode,
                 outletName: q.outlet_name || q.outletName || (ksReq ? ksReq.outletName : 'Outlet'),
                 outletCode: q.outlet_code || q.outletCode || (ksReq ? ksReq.outletCode : '---'),
-                saleName: q.sale_name || q.saleName || '',
-                saleCode: q.sale_code || q.saleCode || (order && (order.sale_code || order.saleCode)) || '',
+                saleName: q.sale_name || q.saleName || q.created_by_name || (order && (order.created_by_name || order.sale_name)) || '',
+                saleCode: q.sale_code || q.saleCode || q.created_by || (order && (order.sale_code || order.saleCode || order.created_by)) || '',
                 salePhone: q.sale_phone || q.salePhone || q.outlet_phone || q.outletPhone || (order && (order.sale_phone || order.salePhone)) || '',
                 ssName: q.ss_name || q.ssName || '',
                 requester: q.requester || q.requesterName || (order && order.requester) || '',
@@ -353,10 +339,16 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 async function fetchProductionApprovals() {
     let allExtracted = [];
 
-    // 1. Fetch App 1 Backend full pending orders (with images included)
+    // 1. Fetch App 1 Backend pending orders (summary mode + sale filtered to save bandwidth)
     const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     try {
-        const res = await fetch(app1Base + '/pending-orders');
+        const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
+        const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
+        let url1 = app1Base + '/pending-orders?summary=1';
+        if (sessionCode) url1 += '&sale_code=' + encodeURIComponent(sessionCode);
+        if (sessionPhone) url1 += '&sale_phone=' + encodeURIComponent(sessionPhone);
+
+        const res = await fetch(url1);
         if (res.ok) {
             const json = await res.json();
             if (json && json.ok && Array.isArray(json.data)) {
@@ -495,6 +487,28 @@ function resolveProductionApprovalBase() {
 
 async function fetchProductionApprovalBadgeCount() {
     try {
+        const defaultApp2Backend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
+        const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+            ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
+            : defaultApp2Backend;
+
+        const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
+        const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
+        let countUrl = app2Base + '/api/ks/requests/production-approvals-count';
+        const params = [];
+        if (sessionCode) params.push('sale_code=' + encodeURIComponent(sessionCode));
+        if (sessionPhone) params.push('sale_phone=' + encodeURIComponent(sessionPhone));
+        if (params.length > 0) countUrl += '?' + params.join('&');
+
+        const res = await fetch(countUrl);
+        if (res.ok) {
+            const json = await res.json();
+            if (json && json.ok && json.data) {
+                _productionApprovalBadgeCount = Number(json.data.pending) || 0;
+                updateProductionApprovalBadge();
+                return;
+            }
+        }
         await fetchProductionApprovals();
     } catch (e) {
         console.warn('fetchProductionApprovalBadgeCount warning:', e);
@@ -1054,25 +1068,33 @@ function submitRejectReason() {
     if (idKey) confirmRejectProduction(idKey, reason);
 }
 
-// Efficient Event-Driven Sync: Realtime SSE + Event-Driven Refresh
+// Efficient Event-Driven Sync: Realtime SSE + Event-Driven Refresh (Throttled for Bandwidth Saving)
 if (typeof window !== 'undefined') {
-    const triggerSingleFetch = () => {
+    let _lastFetchTime = 0;
+    const triggerSingleFetch = (force) => {
         if (!_productionApprovalActive) return;
+        const now = Date.now();
+        if (!force && now - _lastFetchTime < 3000) return; // 3-second throttle for passive events
+        _lastFetchTime = now;
         if (typeof fetchProductionApprovals === 'function') {
-            fetchProductionApprovals();
+            fetchProductionApprovals().then(() => {
+                if (typeof renderProductionApprovalsView === 'function') {
+                    try { renderProductionApprovalsView(); } catch (_) { }
+                }
+            });
         }
     };
 
-    // Realtime SSE listener: Update instantly when App 1 adds a pending order or updates approval status
+    // Realtime SSE listener: Update instantly when App 1 or App 2 adds/updates a pending order or approval status
     const origHook = window.__ksOnInvalidate;
     window.__ksOnInvalidate = function (payload) {
         if (typeof origHook === 'function') {
             try { origHook(payload); } catch (_) { }
         }
         const res = String(payload && payload.resource || '').toLowerCase();
-        if (res === 'pending_orders' || res === 'ks_requests' || res === 'quotations') {
+        if (!res || res === 'pending_orders' || res === 'pending-orders' || res === 'production-orders' || res === 'ks_requests' || res === 'quotations' || res === 'ks_production_approvals') {
             fetchProductionApprovalBadgeCount();
-            triggerSingleFetch();
+            triggerSingleFetch(true); // Force immediate realtime update on screen!
         }
     };
 

@@ -70,27 +70,26 @@
     _es = null;
   }
 
-  function _scheduleRefresh(delayMs) {
+  function _scheduleRefresh(delayMs, force) {
     // Debounced refresh: coalesce bursts of invalidate events and avoid
-    // scheduling a refresh while one is already in-flight. Use a larger
-    // default delay to reduce aggressive polling during event storms.
+    // scheduling a refresh while one is already in-flight.
     var ms = Number(delayMs);
     if (!(ms >= 0)) ms = 1000; // default 1s debounce
     var now = Date.now();
     try {
-      // If a refresh is already scheduled or currently running, skip scheduling
-      // to prevent repeated HTTP fetches during high-frequency events.
-      if (_refreshTimer || _refreshInFlight) return;
-      // Skip duplicate refreshes that happen within a short cooldown window.
-      if (_lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) return;
+      if (!force) {
+        if (_refreshTimer || _refreshInFlight) return;
+        if (_lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) return;
+      }
     } catch (e) {}
+    if (_refreshTimer) { clearTimeout(_refreshTimer); _refreshTimer = null; }
     _lastRefreshIssuedAt = now;
     _refreshTimer = setTimeout(function () {
       _refreshTimer = null;
       try {
         if (typeof document !== 'undefined' && document.hidden) return;
         if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
-          window.dataSdk.refresh().catch(function (e) {
+          window.dataSdk.refresh(Boolean(force)).catch(function (e) {
             console.warn('[dataSdk] scheduled refresh failed', e);
           });
         }
@@ -110,7 +109,7 @@
         _clearEsRetry();
         if (_esEverConnected) {
           // Reconnect after a gap — fetch fresh data to catch any missed events
-          _scheduleRefresh(200);
+          _scheduleRefresh(200, true);
         }
         _esEverConnected = true;
       };
@@ -119,15 +118,19 @@
         try {
           var payload = ev && ev.data ? JSON.parse(ev.data) : null;
           if (!payload) return;
-          if (String(payload.resource || '').toLowerCase() === 'ks_requests') {
-            _esRetryMs = 1000; // successful message → reset backoff
-            var action = String(payload.action || '').toLowerCase();
+          _esRetryMs = 1000; // successful message → reset backoff
 
-            // ── Inline cache patch: instant UI update without HTTP round-trip ──
-            // If the SSE payload contains `data`, patch the local store immediately
-            // (like App-1 pattern).  A background refresh still fires to ensure
-            // consistency, but the UI updates in <100ms instead of waiting for
-            // the HTTP fetch to return.
+          // ── Always fire global invalidation hook for ALL resources ──
+          if (typeof window.__ksOnInvalidate === 'function') {
+            try { window.__ksOnInvalidate(payload); } catch (hookErr) {
+              console.warn('[dataSdk] __ksOnInvalidate hook error:', hookErr);
+            }
+          }
+
+          var resType = String(payload.resource || '').toLowerCase();
+          var action = String(payload.action || '').toLowerCase();
+
+          if (!resType || resType === 'ks_requests') {
             var patched = false;
             if (payload.data) {
               var row = _normalizeRequestRow(payload.data);
@@ -143,16 +146,16 @@
                   }
                   if (patched && _onDataChanged) _onDataChanged(_cloneStoreRows());
                 }
-                _scheduleRefresh(120);
+                _scheduleRefresh(120, true);
                 return;
               }
               if (payload.action === 'create') {
-                // New row: add if not already present
+                // New row: add to beginning of store if not already present
                 var exists = false;
                 for (var pi = 0; pi < _store.length; pi++) {
                   if (_store[pi].__backendId === bid) { exists = true; _store[pi] = row; break; }
                 }
-                if (!exists) _store.push(row);
+                if (!exists) _store.unshift(row);
                 if (_store.length > _storeMaxRows) {
                   _store = _store.slice(0, _storeMaxRows);
                   _storeTruncated = true;
@@ -161,12 +164,11 @@
               } else if (payload.action === 'update' || payload.action === 'upsert') {
                 for (var ui = 0; ui < _store.length; ui++) {
                   if (_store[ui].__backendId === bid) {
-                    // Merge fields (keep existing fields, overwrite changed ones)
                     for (var key in row) {
-                  if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
-                  if (_shouldPreserveExistingField(key, row[key], _store[ui][key])) continue;
-                  _store[ui][key] = row[key];
-                }
+                      if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
+                      if (_shouldPreserveExistingField(key, row[key], _store[ui][key])) continue;
+                      _store[ui][key] = row[key];
+                    }
                     patched = true;
                     break;
                   }
@@ -192,17 +194,10 @@
               }
             }
 
-            // Fire global invalidation hook (for desktop banner notifications)
-            if (typeof window.__ksOnInvalidate === 'function') {
-              try { window.__ksOnInvalidate(payload); } catch (hookErr) {
-                console.warn('[dataSdk] __ksOnInvalidate hook error:', hookErr);
-              }
-            }
-
-            // Only full-refresh when payload is not enough to patch safely.
-            if (!patched || (action !== 'create' && action !== 'update' && action !== 'upsert' && action !== 'delete')) {
-              _scheduleRefresh(300);
-            }
+            _scheduleRefresh(150, true);
+          } else {
+            // For all other resources (quotations, pending_orders, production-orders, etc.)
+            _scheduleRefresh(150, true);
           }
         } catch (e) {}
       });
@@ -498,7 +493,18 @@
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
       try {
-        var firstUrl = endpoint + '?limit=' + encodeURIComponent(String(_requestsPageSize)) + '&offset=0';
+        var _saleExtra = '';
+        try {
+          var _ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
+          if (!_ses && typeof window !== 'undefined' && window.currentSession) _ses = window.currentSession;
+          if (_ses && String(_ses.role || '').toLowerCase() !== 'qcag') {
+            var _phone = _ses.phone || _ses.salePhone || _ses.userPhone || '';
+            var _code = _ses.saleCode || _ses.userCode || _ses.code || '';
+            if (_phone) _saleExtra += '&sale_phone=' + encodeURIComponent(String(_phone).trim());
+            if (_code) _saleExtra += '&sale_code=' + encodeURIComponent(String(_code).trim());
+          }
+        } catch (_) {}
+        var firstUrl = endpoint + '?limit=' + encodeURIComponent(String(_requestsPageSize)) + '&offset=0' + _saleExtra;
         var startTime = Date.now();
         var res = await _fetchWithDedup(firstUrl, { headers: headers });
         if (res.status === 304) {
@@ -782,7 +788,7 @@
       }
     },
 
-    async refresh() {
+    async refresh(force) {
       if (typeof document !== 'undefined' && document.hidden) {
         return { isOk: false, reason: 'hidden' };
       }
@@ -790,10 +796,13 @@
         try { return await _refreshInFlight; } catch (e) { return { isOk: false }; }
       }
       var now = Date.now();
-      if (_lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) {
+      if (!force && _lastRefreshIssuedAt && (now - _lastRefreshIssuedAt) < _refreshCooldownMs) {
         return { isOk: true, reason: 'cooldown' };
       }
       _lastRefreshIssuedAt = now;
+      if (force) {
+        _lastEtag = null;
+      }
 
       _refreshInFlight = (async function () {
       try {
@@ -974,6 +983,24 @@
       } catch (e) {
         console.error('[dataSdk] getOne error:', e);
         return { isOk: false };
+      }
+    },
+
+    async search(query, limit) {
+      try {
+        var q = String(query || '').trim();
+        if (!q) return { isOk: true, data: [] };
+        var l = Number(limit) || 100;
+        var url = '/api/ks/requests?q=' + encodeURIComponent(q) + '&limit=' + encodeURIComponent(String(l));
+        var response = await _fetchJsonWithRetry(url, {}, true);
+        if (!response.ok) return { isOk: false, data: [] };
+        var result = response.body || {};
+        if (!result.ok || !Array.isArray(result.data)) return { isOk: false, data: [] };
+        var mapped = _normalizeRequestRows(result.data);
+        return { isOk: true, data: mapped };
+      } catch (e) {
+        console.error('[dataSdk] search error:', e);
+        return { isOk: false, data: [] };
       }
     },
 

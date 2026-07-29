@@ -1144,8 +1144,15 @@ async function _fetchApp1QuoteListWithCache() {
   const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
   let allQuotes = [];
 
+  const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
+  const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
+  const sessionName = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleName || currentSession.name || currentSession.username || '') : '';
+
   try {
-    const res = await fetch(app1Base + '/pending-orders');
+    let url1 = app1Base + '/pending-orders?summary=1';
+    if (sessionCode) url1 += '&sale_code=' + encodeURIComponent(sessionCode);
+    if (sessionPhone) url1 += '&sale_phone=' + encodeURIComponent(sessionPhone);
+    const res = await fetch(url1);
     if (res.ok) {
       const json = await res.json();
       if (json && json.ok && Array.isArray(json.data)) {
@@ -1160,7 +1167,11 @@ async function _fetchApp1QuoteListWithCache() {
   }
 
   try {
-    const res2 = await fetch(app1Base + '/quotations');
+    let url2 = app1Base + '/quotations?lite=1&limit=200';
+    if (sessionCode) url2 += '&sale_code=' + encodeURIComponent(sessionCode);
+    if (sessionPhone) url2 += '&sale_phone=' + encodeURIComponent(sessionPhone);
+    if (sessionName) url2 += '&sale_name=' + encodeURIComponent(sessionName);
+    const res2 = await fetch(url2);
     if (res2.ok) {
       const json2 = await res2.json();
       if (Array.isArray(json2)) {
