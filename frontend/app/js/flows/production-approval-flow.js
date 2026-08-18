@@ -610,13 +610,16 @@ async function fetchProductionApprovals() {
                     const cleanCode = extractQuoteCodeFromIdKey(rawCode);
                     const approvalCacheObj = (cleanCode && localCache[cleanCode]) || (rawCode && localCache[rawCode]);
                     
-                    if (item.productionApprovalStatus === 'pending') {
-                        if (cleanCode && localCache[cleanCode]) { delete localCache[cleanCode]; cacheChanged = true; }
-                        if (rawCode && localCache[rawCode]) { delete localCache[rawCode]; cacheChanged = true; }
-                    } else if (approvalCacheObj) {
-                        item.productionApprovalStatus = approvalCacheObj.status || item.productionApprovalStatus;
-                        if (approvalCacheObj.reason) item.rejectReason = approvalCacheObj.reason;
-                        if (approvalCacheObj.approvedAt) item.approvedAt = approvalCacheObj.approvedAt;
+                    if (approvalCacheObj && approvalCacheObj.status) {
+                        if (item.productionApprovalStatus === 'pending' || !item.productionApprovalStatus) {
+                            item.productionApprovalStatus = approvalCacheObj.status;
+                            if (approvalCacheObj.reason) item.rejectReason = approvalCacheObj.reason;
+                            if (approvalCacheObj.approvedAt) item.approvedAt = approvalCacheObj.approvedAt;
+                        } else if (item.productionApprovalStatus === approvalCacheObj.status) {
+                            // Backend is already synced, prune cache entry
+                            if (cleanCode && localCache[cleanCode]) { delete localCache[cleanCode]; cacheChanged = true; }
+                            if (rawCode && localCache[rawCode]) { delete localCache[rawCode]; cacheChanged = true; }
+                        }
                     }
                 });
                 if (cacheChanged) {
@@ -1057,6 +1060,7 @@ function approveProductionItem(idKey) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             status: 'approved',
+            outletCode: item.outletCode || item.outlet_code || '',
             approvedBy: (typeof currentSession !== 'undefined' && currentSession ? (currentSession.saleName || currentSession.phone) : 'Sale Heineken')
         })
     }).catch(err => console.warn('Approve API error:', err));
@@ -1194,6 +1198,8 @@ function confirmRequestEditProduction(idKey, note) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             note: item.rejectReason,
+            comments: item.rejectReason,
+            outletCode: item.outletCode || item.outlet_code || '',
             requestedBy: (typeof currentSession !== 'undefined' && currentSession ? (currentSession.saleName || currentSession.phone) : 'Sale Heineken')
         })
     }).catch(err => console.warn('Edit request API error:', err));
@@ -1315,6 +1321,7 @@ function confirmRejectProduction(idKey, reason) {
         body: JSON.stringify({
             status: 'rejected',
             reason: item.rejectReason,
+            outletCode: item.outletCode || item.outlet_code || '',
             rejectedBy: (typeof currentSession !== 'undefined' && currentSession ? (currentSession.saleName || currentSession.phone) : 'Sale Heineken')
         })
     }).catch(err => console.warn('Reject API error:', err));

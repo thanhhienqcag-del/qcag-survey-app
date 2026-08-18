@@ -3007,6 +3007,418 @@ app.get('/api/ks/settings/:key', async (req, res) => {
     }
 });
 
+// ── Production Approvals & Pending Orders Tables ──────────────────────
+async function ensureProductionApprovalsTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ks_production_approvals (
+                id SERIAL PRIMARY KEY,
+                quote_code VARCHAR(100) NOT NULL UNIQUE,
+                outlet_code VARCHAR(100),
+                status VARCHAR(50) DEFAULT 'pending',
+                approved_by VARCHAR(255),
+                approved_at TIMESTAMPTZ,
+                reject_reason TEXT,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+    } catch (err) {
+        console.warn('[ensureProductionApprovalsTable] error:', err && err.message ? err.message : err);
+    }
+}
+
+async function ensurePendingOrdersTable() {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS ks_pending_orders (
+                id VARCHAR(100) PRIMARY KEY,
+                created_by VARCHAR(255),
+                total_points INT DEFAULT 0,
+                total_amount NUMERIC(15, 2) DEFAULT 0,
+                area_list VARCHAR(255),
+                status VARCHAR(50) DEFAULT 'pending',
+                quotes_json JSONB,
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+    } catch (err) {
+        console.warn('[ensurePendingOrdersTable] error:', err && err.message ? err.message : err);
+    }
+}
+
+// ── GET /api/ks/requests/production-approvals ─────────────────────────
+app.get(['/api/ks/requests/production-approvals', '/production-approvals'], async (req, res) => {
+    try {
+        await ensureProductionApprovalsTable();
+        const [rows] = await pool.query(
+            `SELECT id, quote_code, outlet_code, status, approved_by, approved_at, reject_reason, created_at, updated_at
+             FROM ks_production_approvals
+             ORDER BY updated_at DESC`
+        );
+
+        let reqRows = [];
+        try {
+            const [r] = await pool.query(
+                `SELECT id, backend_id, tk_code, outlet_code, outlet_name, design_images,
+                        production_approval_status, production_approved_by, production_approved_at, production_reject_reason
+                 FROM ks_requests
+                 WHERE (production_approval_status IS NOT NULL AND production_approval_status != '')
+                    OR (design_images IS NOT NULL AND design_images != '[]' AND design_images != '')`
+            );
+            reqRows = r || [];
+        } catch (_) {}
+
+        const map = {};
+        const list = [];
+
+        const extractCleanCode = (s) => {
+            if (!s) return '';
+            const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
+            return m && m[1] ? m[1] : String(s).trim();
+        };
+
+        // 1. Map from ks_requests
+        reqRows.forEach(row => {
+            let designImages = [];
+            if (row.design_images) {
+                try {
+                    designImages = typeof row.design_images === 'string' ? JSON.parse(row.design_images) : row.design_images;
+                } catch (_) {}
+            }
+            const item = {
+                id: row.id,
+                backendId: row.backend_id,
+                tkCode: row.tk_code,
+                outletCode: row.outlet_code,
+                outletName: row.outlet_name,
+                status: row.production_approval_status || 'pending',
+                approvedBy: row.production_approved_by || null,
+                approvedAt: row.production_approved_at ? new Date(row.production_approved_at).toISOString() : null,
+                reason: row.production_reject_reason || null,
+                rejectReason: row.production_reject_reason || null,
+                designImages: Array.isArray(designImages) ? designImages : []
+            };
+
+            const tk = String(row.tk_code || '').trim();
+            const oc = String(row.outlet_code || '').trim();
+            const bid = String(row.backend_id || '').trim();
+
+            if (tk) map[tk] = item;
+            if (oc) map[oc] = item;
+            if (bid) map[bid] = item;
+        });
+
+        // 2. Map from ks_production_approvals (authoritative status)
+        (rows || []).forEach(r => {
+            const rawCode = String(r.quote_code || '').trim();
+            const cleanCode = extractCleanCode(rawCode);
+            const outletCode = String(r.outlet_code || '').trim();
+
+            const existing = map[rawCode] || map[cleanCode] || (outletCode ? map[outletCode] : null) || {};
+
+            const item = {
+                quoteCode: cleanCode || rawCode,
+                rawQuoteCode: rawCode,
+                outletCode: outletCode || existing.outletCode || '',
+                status: r.status || 'pending',
+                approvedBy: r.approved_by || null,
+                approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : null,
+                reason: r.reject_reason || null,
+                rejectReason: r.reject_reason || null,
+                designImages: existing.designImages || []
+            };
+
+            if (cleanCode) map[cleanCode] = item;
+            if (rawCode) map[rawCode] = item;
+            if (outletCode) map[outletCode] = item;
+
+            list.push(item);
+        });
+
+        return res.json({ ok: true, data: map, list });
+    } catch (err) {
+        console.error('GET /api/ks/requests/production-approvals error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'db_error', data: {}, list: [] });
+    }
+});
+
+// ── POST /api/ks/requests/:id/approve-production ───────────────────────
+app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
+    try {
+        await ensureProductionApprovalsTable();
+        const rawId = String(req.params.id || '').trim();
+        if (!rawId) return res.status(400).json({ ok: false, error: 'missing_id' });
+
+        const extractCleanCode = (s) => {
+            if (!s) return '';
+            const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
+            return m && m[1] ? m[1] : String(s).trim();
+        };
+        const cleanCode = extractCleanCode(rawId);
+        const approvedBy = String((req.body && (req.body.approvedBy || req.body.saleName || req.body.phone)) || 'Sale Heineken').trim();
+        const outletCode = String((req.body && (req.body.outletCode || req.body.outlet_code)) || '').trim();
+
+        const codesToUpdate = Array.from(new Set([cleanCode, rawId].filter(Boolean)));
+        for (const code of codesToUpdate) {
+            await pool.query(
+                `INSERT INTO ks_production_approvals (quote_code, outlet_code, status, approved_by, approved_at, reject_reason, updated_at)
+                 VALUES (?, ?, 'approved', ?, NOW(), NULL, NOW())
+                 ON CONFLICT (quote_code) DO UPDATE SET
+                     outlet_code = COALESCE(NULLIF(EXCLUDED.outlet_code, ''), ks_production_approvals.outlet_code),
+                     status = 'approved',
+                     approved_by = EXCLUDED.approved_by,
+                     approved_at = NOW(),
+                     reject_reason = NULL,
+                     updated_at = NOW()`,
+                [code, outletCode, approvedBy]
+            );
+        }
+
+        try {
+            await pool.query(
+                `UPDATE ks_requests 
+                 SET production_approval_status = 'approved',
+                     production_approved_by = ?,
+                     production_approved_at = NOW(),
+                     production_reject_reason = NULL,
+                     updated_at = NOW()
+                 WHERE backend_id = ? OR tk_code = ? OR outlet_code = ?`,
+                [approvedBy, rawId, rawId, (outletCode || rawId)]
+            );
+        } catch (_) {}
+
+        wsInvalidate('ks_production_approvals');
+        wsInvalidate('pending_orders');
+        wsInvalidate('ks_requests');
+        sseBroadcast({ type: 'production_approval', action: 'approve', quoteCode: cleanCode || rawId, approvedBy });
+
+        return res.json({ ok: true, status: 'approved', quoteCode: cleanCode || rawId, approvedBy });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/approve-production error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'approve_failed' });
+    }
+});
+
+// ── POST /api/ks/requests/:id/reject-production ────────────────────────
+app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
+    try {
+        await ensureProductionApprovalsTable();
+        const rawId = String(req.params.id || '').trim();
+        if (!rawId) return res.status(400).json({ ok: false, error: 'missing_id' });
+
+        const extractCleanCode = (s) => {
+            if (!s) return '';
+            const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
+            return m && m[1] ? m[1] : String(s).trim();
+        };
+        const cleanCode = extractCleanCode(rawId);
+        const reason = String((req.body && (req.body.reason || req.body.rejectReason || req.body.comments)) || 'Từ chối').trim();
+        const rejectedBy = String((req.body && (req.body.rejectedBy || req.body.approvedBy || req.body.saleName || req.body.phone)) || 'Sale Heineken').trim();
+        const outletCode = String((req.body && (req.body.outletCode || req.body.outlet_code)) || '').trim();
+
+        const codesToUpdate = Array.from(new Set([cleanCode, rawId].filter(Boolean)));
+        for (const code of codesToUpdate) {
+            await pool.query(
+                `INSERT INTO ks_production_approvals (quote_code, outlet_code, status, approved_by, approved_at, reject_reason, updated_at)
+                 VALUES (?, ?, 'rejected', ?, NOW(), ?, NOW())
+                 ON CONFLICT (quote_code) DO UPDATE SET
+                     outlet_code = COALESCE(NULLIF(EXCLUDED.outlet_code, ''), ks_production_approvals.outlet_code),
+                     status = 'rejected',
+                     approved_by = EXCLUDED.approved_by,
+                     approved_at = NOW(),
+                     reject_reason = EXCLUDED.reject_reason,
+                     updated_at = NOW()`,
+                [code, outletCode, rejectedBy, reason]
+            );
+        }
+
+        try {
+            await pool.query(
+                `UPDATE ks_requests 
+                 SET production_approval_status = 'rejected',
+                     production_approved_by = ?,
+                     production_approved_at = NOW(),
+                     production_reject_reason = ?,
+                     updated_at = NOW()
+                 WHERE backend_id = ? OR tk_code = ? OR outlet_code = ?`,
+                [rejectedBy, reason, rawId, rawId, (outletCode || rawId)]
+            );
+        } catch (_) {}
+
+        wsInvalidate('ks_production_approvals');
+        wsInvalidate('pending_orders');
+        wsInvalidate('ks_requests');
+        sseBroadcast({ type: 'production_approval', action: 'reject', quoteCode: cleanCode || rawId, reason });
+
+        return res.json({ ok: true, status: 'rejected', quoteCode: cleanCode || rawId, reason });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/reject-production error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'reject_failed' });
+    }
+});
+
+// ── POST /api/ks/requests/:id/request-edit-production ──────────────────
+app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
+    try {
+        await ensureProductionApprovalsTable();
+        const rawId = String(req.params.id || '').trim();
+        if (!rawId) return res.status(400).json({ ok: false, error: 'missing_id' });
+
+        const extractCleanCode = (s) => {
+            if (!s) return '';
+            const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
+            return m && m[1] ? m[1] : String(s).trim();
+        };
+        const cleanCode = extractCleanCode(rawId);
+        const reason = String((req.body && (req.body.comments || req.body.reason || req.body.rejectReason)) || 'Yêu cầu chỉnh sửa').trim();
+        const requestedBy = String((req.body && (req.body.requestedBy || req.body.approvedBy || req.body.saleName || req.body.phone)) || 'Sale Heineken').trim();
+        const outletCode = String((req.body && (req.body.outletCode || req.body.outlet_code)) || '').trim();
+
+        const codesToUpdate = Array.from(new Set([cleanCode, rawId].filter(Boolean)));
+        for (const code of codesToUpdate) {
+            await pool.query(
+                `INSERT INTO ks_production_approvals (quote_code, outlet_code, status, approved_by, approved_at, reject_reason, updated_at)
+                 VALUES (?, ?, 'rejected', ?, NOW(), ?, NOW())
+                 ON CONFLICT (quote_code) DO UPDATE SET
+                     outlet_code = COALESCE(NULLIF(EXCLUDED.outlet_code, ''), ks_production_approvals.outlet_code),
+                     status = 'rejected',
+                     approved_by = EXCLUDED.approved_by,
+                     approved_at = NOW(),
+                     reject_reason = EXCLUDED.reject_reason,
+                     updated_at = NOW()`,
+                [code, outletCode, requestedBy, reason]
+            );
+        }
+
+        try {
+            await pool.query(
+                `UPDATE ks_requests 
+                 SET editing_requested_at = NOW(),
+                     comments = ?,
+                     production_approval_status = 'rejected',
+                     production_approved_by = ?,
+                     production_approved_at = NOW(),
+                     production_reject_reason = ?,
+                     updated_at = NOW()
+                 WHERE backend_id = ? OR tk_code = ? OR outlet_code = ?`,
+                [reason, requestedBy, reason, rawId, rawId, (outletCode || rawId)]
+            );
+        } catch (_) {}
+
+        wsInvalidate('ks_production_approvals');
+        wsInvalidate('pending_orders');
+        wsInvalidate('ks_requests');
+        sseBroadcast({ type: 'production_approval', action: 'request_edit', quoteCode: cleanCode || rawId, reason });
+
+        return res.json({ ok: true, status: 'rejected', quoteCode: cleanCode || rawId, reason });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/request-edit-production error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'request_edit_failed' });
+    }
+});
+
+// ── GET /pending-orders ───────────────────────────────────────────────
+app.get(['/pending-orders', '/api/pending-orders'], async (req, res) => {
+    try {
+        await ensurePendingOrdersTable();
+        const [rows] = await pool.query(
+            `SELECT id, created_by, total_points, total_amount, area_list, status, quotes_json, created_at, updated_at
+             FROM ks_pending_orders
+             ORDER BY created_at DESC`
+        );
+        const data = (rows || []).map(r => {
+            let quotes = [];
+            if (r.quotes_json) {
+                quotes = typeof r.quotes_json === 'string' ? JSON.parse(r.quotes_json) : r.quotes_json;
+            }
+            return {
+                id: r.id,
+                createdBy: r.created_by || 'Admin',
+                totalPoints: Number(r.total_points || 0),
+                totalAmount: Number(r.total_amount || 0),
+                areaList: r.area_list || '',
+                status: r.status || 'pending',
+                quotes: Array.isArray(quotes) ? quotes : [],
+                createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+                updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString()
+            };
+        });
+        res.json({ ok: true, data });
+    } catch (err) {
+        console.error('GET /pending-orders error:', err && err.message ? err.message : err);
+        res.status(500).json({ ok: false, error: 'db_error', data: [] });
+    }
+});
+
+// ── POST /pending-orders ──────────────────────────────────────────────
+app.post(['/pending-orders', '/api/pending-orders'], async (req, res) => {
+    try {
+        await ensurePendingOrdersTable();
+        await ensureProductionApprovalsTable();
+        const b = req.body || {};
+        const id = b.id ? String(b.id).trim() : ('order_' + Date.now());
+        const createdBy = b.createdBy ? String(b.createdBy).trim() : 'Admin';
+        const totalPoints = Number(b.totalPoints || b.total_points || (Array.isArray(b.quotes) ? b.quotes.length : 0));
+        const totalAmount = Number(b.totalAmount || b.total_amount || 0);
+        const quotes = Array.isArray(b.quotes) ? b.quotes : [];
+        const quotesJson = JSON.stringify(quotes);
+
+        await pool.query(
+            `INSERT INTO ks_pending_orders (id, created_by, total_points, total_amount, quotes_json, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?::jsonb, NOW(), NOW())
+             ON CONFLICT (id) DO UPDATE SET 
+                 created_by = EXCLUDED.created_by,
+                 total_points = EXCLUDED.total_points,
+                 total_amount = EXCLUDED.total_amount,
+                 quotes_json = EXCLUDED.quotes_json,
+                 updated_at = NOW()`,
+            [id, createdBy, totalPoints, totalAmount, quotesJson]
+        );
+
+        for (const q of quotes) {
+            if (!q) continue;
+            const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
+            const oCode = String(q.outlet_code || q.outletCode || '').trim();
+            if (qCode) {
+                try {
+                    await pool.query(
+                        `INSERT INTO ks_production_approvals (quote_code, outlet_code, status, updated_at)
+                         VALUES (?, ?, 'pending', NOW())
+                         ON CONFLICT (quote_code) DO NOTHING`,
+                        [qCode, oCode]
+                    );
+                } catch (_) { }
+            }
+        }
+
+        sseBroadcast({ type: 'pending_orders', action: 'save', id });
+        wsInvalidate('pending_orders');
+        res.json({ ok: true, id, message: 'saved' });
+    } catch (err) {
+        console.error('POST /pending-orders error:', err && err.message ? err.message : err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+// ── DELETE /pending-orders/:id ────────────────────────────────────────
+app.delete(['/pending-orders/:id', '/api/pending-orders/:id'], async (req, res) => {
+    try {
+        await ensurePendingOrdersTable();
+        const id = req.params.id ? String(req.params.id).trim() : null;
+        if (!id) return res.status(400).json({ ok: false, error: 'missing_id' });
+
+        await pool.query(`DELETE FROM ks_pending_orders WHERE id = ?`, [id]);
+        sseBroadcast({ type: 'pending_orders', action: 'delete', id });
+        wsInvalidate('pending_orders');
+        res.json({ ok: true, id, message: 'deleted' });
+    } catch (err) {
+        console.error('DELETE /pending-orders/:id error:', err && err.message ? err.message : err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
 // ======================== END KS MOBILE API ========================
 
 async function start() {
