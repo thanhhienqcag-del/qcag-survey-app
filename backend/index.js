@@ -3053,94 +3053,41 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
     try {
         await ensureProductionApprovalsTable();
         const [rows] = await pool.query(
-            `SELECT id, quote_code, outlet_code, status, approved_by, approved_at, reject_reason, created_at, updated_at
+            `SELECT quote_code, outlet_code, status, approved_by, approved_at, reject_reason, updated_at
              FROM ks_production_approvals
              ORDER BY updated_at DESC`
         );
 
-        let reqRows = [];
-        try {
-            const [r] = await pool.query(
-                `SELECT id, backend_id, tk_code, outlet_code, outlet_name, design_images,
-                        production_approval_status, production_approved_by, production_approved_at, production_reject_reason
-                 FROM ks_requests
-                 WHERE (production_approval_status IS NOT NULL AND production_approval_status != '')
-                    OR (design_images IS NOT NULL AND design_images != '[]' AND design_images != '')`
-            );
-            reqRows = r || [];
-        } catch (_) {}
-
         const map = {};
-        const list = [];
-
         const extractCleanCode = (s) => {
             if (!s) return '';
             const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
             return m && m[1] ? m[1] : String(s).trim();
         };
 
-        // 1. Map from ks_requests
-        reqRows.forEach(row => {
-            let designImages = [];
-            if (row.design_images) {
-                try {
-                    designImages = typeof row.design_images === 'string' ? JSON.parse(row.design_images) : row.design_images;
-                } catch (_) {}
-            }
-            const item = {
-                id: row.id,
-                backendId: row.backend_id,
-                tkCode: row.tk_code,
-                outletCode: row.outlet_code,
-                outletName: row.outlet_name,
-                status: row.production_approval_status || 'pending',
-                approvedBy: row.production_approved_by || null,
-                approvedAt: row.production_approved_at ? new Date(row.production_approved_at).toISOString() : null,
-                reason: row.production_reject_reason || null,
-                rejectReason: row.production_reject_reason || null,
-                designImages: Array.isArray(designImages) ? designImages : []
-            };
-
-            const tk = String(row.tk_code || '').trim();
-            const oc = String(row.outlet_code || '').trim();
-            const bid = String(row.backend_id || '').trim();
-
-            if (tk) map[tk] = item;
-            if (oc) map[oc] = item;
-            if (bid) map[bid] = item;
-        });
-
-        // 2. Map from ks_production_approvals (authoritative status)
         (rows || []).forEach(r => {
             const rawCode = String(r.quote_code || '').trim();
             const cleanCode = extractCleanCode(rawCode);
             const outletCode = String(r.outlet_code || '').trim();
 
-            const existing = map[rawCode] || map[cleanCode] || (outletCode ? map[outletCode] : null) || {};
-
             const item = {
                 quoteCode: cleanCode || rawCode,
-                rawQuoteCode: rawCode,
-                outletCode: outletCode || existing.outletCode || '',
+                outletCode: outletCode || '',
                 status: r.status || 'pending',
                 approvedBy: r.approved_by || null,
                 approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : null,
-                reason: r.reject_reason || null,
-                rejectReason: r.reject_reason || null,
-                designImages: existing.designImages || []
+                reason: r.reject_reason || null
             };
 
             if (cleanCode) map[cleanCode] = item;
-            if (rawCode) map[rawCode] = item;
-            if (outletCode) map[outletCode] = item;
-
-            list.push(item);
+            if (rawCode && rawCode !== cleanCode) map[rawCode] = item;
+            if (outletCode && !map[outletCode]) map[outletCode] = item;
         });
 
-        return res.json({ ok: true, data: map, list });
+        return res.json({ ok: true, data: map });
     } catch (err) {
         console.error('GET /api/ks/requests/production-approvals error:', err && err.message ? err.message : err);
-        return res.status(500).json({ ok: false, error: 'db_error', data: {}, list: [] });
+        return res.status(500).json({ ok: false, error: 'db_error', data: {} });
     }
 });
 
