@@ -40,14 +40,19 @@ function isNameMatch(n1, n2) {
 
 function isSaleMatch(item, session) {
     if (!session) return true;
+    const sessionRole = String(session.role || session.userRole || session.group || '').toLowerCase();
+    if (sessionRole.includes('admin') || sessionRole.includes('manager') || sessionRole.includes('qcag') || sessionRole.includes('ss')) {
+        return true;
+    }
     const sessionCode = String(session.saleCode || session.userCode || '').trim();
     const sessionPhone = String(session.phone || '').replace(/\D/g, '');
     const sessionName = session.saleName || session.name || session.username || '';
 
     const itemCode = String(item.saleCode || item.sale_code || item.createdBy || item.created_by || '').trim();
-    const itemPhone = String(item.salePhone || item.phone || item.outletPhone || item.outlet_phone || '').replace(/\D/g, '');
+    const itemPhone = String(item.salePhone || item.phone || '').replace(/\D/g, '');
     const itemSaleName = item.saleName || item.sale_name || item.createdByName || item.created_by_name || '';
     const itemRequester = item.requester || '';
+    const itemSsName = item.ssName || item.ss_name || '';
 
     // 1. Unique ID match by saleCode
     if (sessionCode && itemCode && sessionCode === itemCode) return true;
@@ -55,10 +60,11 @@ function isSaleMatch(item, session) {
     // 2. Unique ID match by phone number
     if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8 && (sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8)))) return true;
 
-    // 3. Strict exact name match only
+    // 3. Match by name (sale name, requester, or SS name)
     if (sessionName) {
-        if (itemSaleName && isNameMatch(itemSaleName, sessionName)) return true;
-        if (itemRequester && isNameMatch(itemRequester, sessionName)) return true;
+        if (itemSaleName && (isNameMatch(itemSaleName, sessionName) || isNameMatch(sessionName, itemSaleName))) return true;
+        if (itemRequester && (isNameMatch(itemRequester, sessionName) || isNameMatch(sessionName, itemRequester))) return true;
+        if (itemSsName && (isNameMatch(itemSsName, sessionName) || isNameMatch(sessionName, itemSsName))) return true;
     }
 
     return false;
@@ -90,75 +96,168 @@ function getBrandBadgeClass(brand) {
 function isValidImgUrl(val) {
     if (!val || typeof val !== 'string') return false;
     const s = val.trim();
-    if (s === '...' || s === 'null' || s === 'undefined' || s.length < 5) return false;
+    if (s === '...' || s === 'null' || s === 'undefined' || s === '[]' || s === '["..."]' || s.length < 5) return false;
+    if (s.startsWith('["...') || s.startsWith('[\'...') || s.startsWith('["."') || s.startsWith('[".."')) return false;
     return s.startsWith('http://') || s.startsWith('https://') || s.startsWith('data:image/') || s.startsWith('blob:') || s.startsWith('/');
 }
 
 function parseMqDesignImages(item) {
     if (!item) return [];
-    let images = [];
 
-    const sources = [
+    // Primary design image sources (prioritize design images uploaded by Desktop QCAG / Design)
+    const primaryDesignSources = [
         item.designImages,
         item.design_images,
-        item.images,
-        item.image_url,
-        item.quote_image_url,
         item.qcag_image_url,
         item.qcagImageUrl,
         item.design,
-        item.image,
+        item.quote_image_url,
+        item.image_url,
+        item.images,
+        item.image
+    ];
+
+    // Also check matched Survey Request (__ksReq) if attached
+    if (item.__ksReq) {
+        primaryDesignSources.push(
+            item.__ksReq.designImages,
+            item.__ksReq.design_images,
+            item.__ksReq.qcag_image_url,
+            item.__ksReq.qcagImageUrl,
+            item.__ksReq.design,
+            item.__ksReq.images,
+            item.__ksReq.statusImages,
+            item.__ksReq.status_images
+        );
+    }
+
+    if (Array.isArray(item.items)) {
+        item.items.forEach(it => {
+            if (it) {
+                if (it.design_images) primaryDesignSources.push(it.design_images);
+                if (it.designImages) primaryDesignSources.push(it.designImages);
+                if (it.imageUrl) primaryDesignSources.push(it.imageUrl);
+                if (it.images) primaryDesignSources.push(it.images);
+                if (it.image) primaryDesignSources.push(it.image);
+            }
+        });
+    }
+
+    // Secondary fallback sources
+    const fallbackSources = [
         item.survey_image,
         item.survey_images,
         item.surveyImage
     ];
 
-    if (Array.isArray(item.items)) {
-        item.items.forEach(it => {
-            if (it) {
-                if (it.image) sources.push(it.image);
-                if (it.images) sources.push(it.images);
-                if (it.imageUrl) sources.push(it.imageUrl);
-                if (it.design_images) sources.push(it.design_images);
+    function extractUrls(sourceList) {
+        let rawList = [];
+        sourceList.forEach(src => {
+            if (!src) return;
+            if (Array.isArray(src)) {
+                rawList = rawList.concat(src);
+            } else if (typeof src === 'string') {
+                let trimmed = src.trim();
+                if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+                    try {
+                        let parsed = JSON.parse(trimmed);
+                        // Handle double-stringified JSON
+                        if (typeof parsed === 'string' && (parsed.startsWith('[') || parsed.startsWith('{'))) {
+                            try { parsed = JSON.parse(parsed); } catch (_) { }
+                        }
+                        if (Array.isArray(parsed)) rawList = rawList.concat(parsed);
+                        else if (typeof parsed === 'object' && parsed !== null) rawList.push(parsed);
+                        else if (typeof parsed === 'string' && isValidImgUrl(parsed)) rawList.push(parsed);
+                    } catch (_) { }
+                } else if (isValidImgUrl(trimmed)) {
+                    rawList.push(trimmed);
+                }
+            } else if (typeof src === 'object' && src !== null) {
+                rawList.push(src);
             }
         });
+
+        const clean = [];
+        rawList.forEach(img => {
+            if (!img) return;
+            if (typeof img === 'string') {
+                const trimmed = img.trim();
+                if (isValidImgUrl(trimmed)) clean.push(trimmed);
+            } else if (typeof img === 'object') {
+                const url = img.data || img.url || img.src || img.link || img.base64 || img.image || img.img;
+                if (typeof url === 'string') {
+                    const trimmed = url.trim();
+                    if (isValidImgUrl(trimmed)) clean.push(trimmed);
+                }
+            }
+        });
+        return Array.from(new Set(clean));
     }
 
-    sources.forEach(src => {
-        if (!src) return;
-        if (Array.isArray(src)) {
-            images = images.concat(src);
-        } else if (typeof src === 'string') {
-            const trimmed = src.trim();
-            if (trimmed.startsWith('[')) {
-                try {
-                    const parsed = JSON.parse(trimmed);
-                    if (Array.isArray(parsed)) images = images.concat(parsed);
-                    else if (typeof parsed === 'string') images.push(parsed);
-                } catch (_) { }
-            } else if (isValidImgUrl(trimmed)) {
-                images.push(trimmed);
-            }
-        }
-    });
+    let result = extractUrls(primaryDesignSources);
+    if (!result.length) {
+        result = extractUrls(fallbackSources);
+    }
 
-    const cleanImages = [];
-    images.forEach(img => {
-        if (!img) return;
-        if (typeof img === 'string') {
-            const trimmed = img.trim();
-            if (isValidImgUrl(trimmed)) cleanImages.push(trimmed);
-        } else if (typeof img === 'object') {
-            const url = img.data || img.url || img.src || img.link || img.base64;
-            if (typeof url === 'string') {
-                const trimmed = url.trim();
-                if (isValidImgUrl(trimmed)) cleanImages.push(trimmed);
-            }
-        }
-    });
+    // Return at most 1 single design image
+    return result.slice(0, 1);
+}
 
-    const uniqueImages = Array.from(new Set(cleanImages));
-    return uniqueImages;
+/** Robust Helper to Match a Quote with a Survey Request in allRequests */
+function findMatchingKsRequest(q, rawQuoteCode) {
+    if (typeof allRequests === 'undefined' || !Array.isArray(allRequests) || allRequests.length === 0) {
+        return null;
+    }
+    const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
+    const qTkDigits = qTk.replace(/\D/g, '');
+    const qCode = String(rawQuoteCode || q.quote_code || q.quoteCode || q.id || '').trim().toLowerCase();
+    const qCodeDigits = qCode.replace(/\D/g, '');
+    const qOutlet = String(q.outlet_code || q.outletCode || '').trim().toLowerCase();
+    const qOutletDigits = qOutlet.replace(/\D/g, '');
+    const qName = String(q.outlet_name || q.outletName || '').trim().toLowerCase();
+
+    // 1. Match by TK code or Quote Code against r.tkCode / r.quoteCode
+    if (qTk || qCode) {
+        const byTk = allRequests.find(r => {
+            if (!r) return false;
+            const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
+            const rTkDigits = rTk.replace(/\D/g, '');
+            const rQCode = String(r.quoteCode || r.quote_code || '').trim().toLowerCase();
+            const rQDigits = rQCode.replace(/\D/g, '');
+            
+            if (qTk && rTk && (qTk === rTk || (qTkDigits.length >= 4 && qTkDigits === rTkDigits))) return true;
+            if (qCode && rTk && (qCode === rTk || (qCodeDigits.length >= 4 && qCodeDigits === rTkDigits))) return true;
+            if (qCode && rQCode && (qCode === rQCode || (qCodeDigits.length >= 4 && qCodeDigits === rQDigits))) return true;
+            if (qTk && rQCode && (qTk === rQCode || (qTkDigits.length >= 4 && qTkDigits === rQDigits))) return true;
+            return false;
+        });
+        if (byTk) return byTk;
+    }
+
+    // 2. Match by Outlet Code (unique per Heineken outlet)
+    if (qOutlet) {
+        const byOutlet = allRequests.find(r => {
+            if (!r) return false;
+            const rOutlet = String(r.outletCode || r.outlet_code || (r.requester && (r.requester.outletCode || r.requester.outlet_code)) || '').trim().toLowerCase();
+            const rOutletDigits = rOutlet.replace(/\D/g, '');
+            if (qOutlet === rOutlet) return true;
+            if (qOutletDigits && qOutletDigits.length >= 5 && qOutletDigits === rOutletDigits) return true;
+            return false;
+        });
+        if (byOutlet) return byOutlet;
+    }
+
+    // 3. Match by Outlet Name
+    if (qName && qName.length >= 4) {
+        const byName = allRequests.find(r => {
+            if (!r) return false;
+            const rName = String(r.outletName || r.outlet_name || (r.requester && (r.requester.outletName || r.requester.outlet_name)) || '').trim().toLowerCase();
+            return rName && (rName === qName || rName.includes(qName) || qName.includes(rName));
+        });
+        if (byName) return byName;
+    }
+
+    return null;
 }
 
 /** Full-Screen MQ Image Lightbox Viewer with Zooming, Drag & Pan, and Integrated 3 Action Buttons */
@@ -217,7 +316,7 @@ function openMqImagePreview(url, idKey, itemObj) {
 
                 <!-- Middle: Edit Request Button -->
                 <button onclick="closeMqImagePreview(); promptRequestEditProduction('${idKey}')" class="bg-amber-950/60 hover:bg-amber-900/80 active:bg-amber-800 border border-amber-500/70 backdrop-blur-md text-amber-300 font-bold text-xs h-[46px] px-3.5 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20 transition-all flex-shrink-0 whitespace-nowrap">
-                    Sửa
+                    Chỉnh sửa
                 </button>
 
                 <!-- Right: Reject Button -->
@@ -311,65 +410,129 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
 
         quotes.forEach(q => {
             if (!q) return;
-            const quoteCode = q.quote_code || q.quoteCode || q.id || '---';
-            const idKey = 'po_q_' + quoteCode + '_' + (q.outlet_code || q.outletCode || '');
+            const rawQuoteCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
+            const rawTkCode = String(q.tk_code || q.tkCode || '').trim();
+            const validTkCode = (rawTkCode && rawTkCode !== 'TK26.' && rawTkCode !== 'TK.' && !rawTkCode.endsWith('.')) ? rawTkCode : '';
+            const displayCode = rawQuoteCode || validTkCode || '---';
+            const idKey = 'po_q_' + displayCode + '_' + (q.outlet_code || q.outletCode || '');
 
             // Ensure local storage requests are loaded if allRequests is empty in memory
             if ((typeof allRequests === 'undefined' || !Array.isArray(allRequests) || allRequests.length === 0) && typeof loadAllRequestsFromStorage === 'function') {
                 try { loadAllRequestsFromStorage(); } catch (_) { }
             }
 
-            let ksReq = null;
-            if (typeof allRequests !== 'undefined' && Array.isArray(allRequests) && allRequests.length > 0) {
-                ksReq = allRequests.find(r => {
-                    const rQCode = String(r.quoteCode || r.quote_code || '').trim();
-                    if (quoteCode && rQCode && quoteCode === rQCode) return true;
-                    return false;
-                });
-            }
+            // Robust Match with App 2 Survey Requests (ks_requests)
+            const ksReq = findMatchingKsRequest(q, rawQuoteCode);
+
+            const resolvedTkCode = String(validTkCode || (ksReq ? (ksReq.tkCode || ksReq.tk_code || '') : '') || '').trim();
+            const resolvedQuoteCode = String(rawQuoteCode || resolvedTkCode || '---').trim();
+            const resolvedSaleCode = String(q.sale_code || q.saleCode || q.created_by || (order && (order.sale_code || order.saleCode || order.created_by)) || (ksReq ? (ksReq.saleCode || ksReq.sale_code || ksReq.userCode || ksReq.code || '') : '') || '').trim();
+            const resolvedSalePhone = String(q.sale_phone || q.salePhone || (order && (order.sale_phone || order.salePhone)) || (ksReq ? (ksReq.phone || ksReq.salePhone || ksReq.sale_phone || '') : '') || '').replace(/\D/g, '');
+            const resolvedSaleName = String(q.sale_name || q.saleName || q.created_by_name || (order && (order.created_by_name || order.sale_name)) || (ksReq ? (ksReq.saleName || ksReq.sale_name || ksReq.requester || ksReq.requesterName || ksReq.name || '') : '') || '').trim();
+            const resolvedRequester = String(q.requester || q.requesterName || (order && order.requester) || (ksReq ? (ksReq.requester || ksReq.requesterName || resolvedSaleName || '') : '') || '').trim();
+            const resolvedSsName = String(q.ss_name || q.ssName || (ksReq ? ksReq.ssName : '') || '').trim();
 
             // Prioritize direct images on quote payload, fallback to matched survey request
-            const quoteImgs = q.images || q.quote_image_url || q.qcag_image_url || [];
-            const designImgs = q.design_images || q.designImages || (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs : null) || (ksReq ? (ksReq.design || ksReq.designImages) : []) || [];
+            const quoteImgs = q.images || q.quote_image_url || q.qcag_image_url || q.design_images || q.designImages || (ksReq ? (ksReq.design_images || ksReq.designImages || ksReq.images || ksReq.design || ksReq.qcag_image_url || ksReq.status_images || ksReq.statusImages) : []) || [];
+            const designImgs = q.design_images || q.designImages || (ksReq ? (ksReq.design_images || ksReq.designImages || ksReq.design) : null) || (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs : null) || [];
 
             results.push({
                 __backendId: idKey,
                 id: idKey,
-                quoteCode: quoteCode,
+                quoteCode: resolvedQuoteCode,
+                tkCode: resolvedTkCode,
                 outletName: q.outlet_name || q.outletName || (ksReq ? ksReq.outletName : 'Outlet'),
                 outletCode: q.outlet_code || q.outletCode || (ksReq ? ksReq.outletCode : '---'),
-                saleName: q.sale_name || q.saleName || q.created_by_name || (order && (order.created_by_name || order.sale_name)) || '',
-                saleCode: q.sale_code || q.saleCode || q.created_by || (order && (order.sale_code || order.saleCode || order.created_by)) || '',
-                salePhone: q.sale_phone || q.salePhone || q.outlet_phone || q.outletPhone || (order && (order.sale_phone || order.salePhone)) || '',
-                ssName: q.ss_name || q.ssName || '',
-                requester: q.requester || q.requesterName || (order && order.requester) || '',
+                saleName: resolvedSaleName,
+                saleCode: resolvedSaleCode,
+                salePhone: resolvedSalePhone,
+                ssName: resolvedSsName,
+                requester: resolvedRequester,
                 region: q.area || q.region || 'S16',
                 amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
                 items: q.items || [],
                 images: quoteImgs,
                 designImages: designImgs,
-                design: ksReq ? (ksReq.design || ksReq.designImages) : null,
-                qcagImageUrl: q.qcag_image_url || q.qcagImageUrl || null,
+                design: ksReq ? (ksReq.design || ksReq.designImages || ksReq.design_images) : null,
+                qcagImageUrl: q.qcag_image_url || q.qcagImageUrl || (ksReq ? ksReq.qcag_image_url : null) || null,
                 productionApprovalStatus: q.productionApprovalStatus || (order && order.productionApprovalStatus) || 'pending',
                 rejectReason: q.rejectReason || (order && order.rejectReason) || null,
-                createdAt: q.created_at || (order && order.created_at) || new Date().toISOString()
+                createdAt: q.created_at || (order && order.created_at) || new Date().toISOString(),
+                __ksReq: ksReq || null,
+                __ksReqBackendId: ksReq ? (ksReq.__backendId || ksReq.backend_id || ksReq.id) : null
             });
         });
     });
     return results;
 }
 
+/** Automatically Fetch Missing MQ Design Images Asynchronously from App 2 Database / Backend */
+async function autoFetchMissingProductionImages() {
+    if (!_productionApprovalItems || !_productionApprovalItems.length) return;
+
+    const missingItems = _productionApprovalItems.filter(it => {
+        const imgs = parseMqDesignImages(it);
+        return imgs.length === 0;
+    });
+
+    if (missingItems.length === 0) return;
+
+    let updatedAny = false;
+    for (const it of missingItems) {
+        try {
+            let fullReq = null;
+            // 1. If we have a known backend ID of the matched survey request, get it directly
+            if (it.__ksReqBackendId && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
+                const res = await window.dataSdk.getOne(it.__ksReqBackendId);
+                if (res && res.isOk && res.data) fullReq = res.data;
+            }
+
+            // 2. Fallback search by outlet code or quote code in App 2 backend
+            if (!fullReq && window.dataSdk && typeof window.dataSdk.search === 'function') {
+                const searchTerm = it.outletCode && it.outletCode !== '---' ? it.outletCode : (it.quoteCode || it.tkCode);
+                if (searchTerm && searchTerm !== '---') {
+                    const sRes = await window.dataSdk.search(searchTerm, 5);
+                    if (sRes && sRes.isOk && Array.isArray(sRes.data) && sRes.data.length > 0) {
+                        fullReq = sRes.data[0];
+                    }
+                }
+            }
+
+            if (fullReq) {
+                const dImgs = fullReq.designImages || fullReq.design_images || fullReq.images || fullReq.statusImages;
+                if (dImgs && dImgs !== '[]' && dImgs !== '["..."]') {
+                    it.designImages = dImgs;
+                    it.design_images = dImgs;
+                    it.__ksReq = fullReq;
+                    updatedAny = true;
+                }
+            }
+        } catch (err) {
+            console.warn('[autoFetchMissingProductionImages] Fetch error for item:', it.quoteCode, err);
+        }
+    }
+
+    if (updatedAny) {
+        const modal = document.getElementById('productionApprovalModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            renderProductionApprovalList();
+        }
+    }
+}
+
 async function fetchProductionApprovals() {
     let allExtracted = [];
 
-    // 1. Fetch App 1 Backend pending orders (summary mode + sale filtered to save bandwidth)
+    // 1. Fetch App 1 Backend pending orders (full orders with quote images)
     const app1Base = 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     try {
         const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
         const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
-        let url1 = app1Base + '/pending-orders?summary=1';
-        if (sessionCode) url1 += '&sale_code=' + encodeURIComponent(sessionCode);
-        if (sessionPhone) url1 += '&sale_phone=' + encodeURIComponent(sessionPhone);
+        let url1 = app1Base + '/pending-orders';
+        const params = [];
+        if (sessionCode) params.push('sale_code=' + encodeURIComponent(sessionCode));
+        if (sessionPhone) params.push('sale_phone=' + encodeURIComponent(sessionPhone));
+        if (params.length) url1 += '?' + params.join('&');
 
         const res = await fetch(url1);
         if (res.ok) {
@@ -410,8 +573,8 @@ async function fetchProductionApprovals() {
                 allExtracted.forEach(item => {
                     const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
                     const cleanCode = extractQuoteCodeFromIdKey(rawCode);
-                    const outletCode = String(item.outletCode || item.outlet_code || '').trim();
                     const tkCode = String(item.tkCode || item.tk_code || '').trim();
+                    const outletCode = String(item.outletCode || item.outlet_code || '').trim();
 
                     const approvalObj = (cleanCode && map[cleanCode]) ||
                         (rawCode && map[rawCode]) ||
@@ -441,21 +604,29 @@ async function fetchProductionApprovals() {
             const localCacheStr = localStorage.getItem('ks_production_approvals_cache');
             if (localCacheStr) {
                 const localCache = JSON.parse(localCacheStr);
+                let cacheChanged = false;
                 allExtracted.forEach(item => {
                     const rawCode = String(item.quoteCode || item.__backendId || item.id || '').trim();
                     const cleanCode = extractQuoteCodeFromIdKey(rawCode);
                     const approvalCacheObj = (cleanCode && localCache[cleanCode]) || (rawCode && localCache[rawCode]);
-                    if (approvalCacheObj) {
+                    
+                    if (item.productionApprovalStatus === 'pending') {
+                        if (cleanCode && localCache[cleanCode]) { delete localCache[cleanCode]; cacheChanged = true; }
+                        if (rawCode && localCache[rawCode]) { delete localCache[rawCode]; cacheChanged = true; }
+                    } else if (approvalCacheObj) {
                         item.productionApprovalStatus = approvalCacheObj.status || item.productionApprovalStatus;
                         if (approvalCacheObj.reason) item.rejectReason = approvalCacheObj.reason;
                         if (approvalCacheObj.approvedAt) item.approvedAt = approvalCacheObj.approvedAt;
                     }
                 });
+                if (cacheChanged) {
+                    localStorage.setItem('ks_production_approvals_cache', JSON.stringify(localCache));
+                }
             }
         }
     } catch (_) { }
 
-    // Deduplicate by quoteCode / id - preserving rich fields (saleCode, salePhone) if available
+    // Deduplicate by quoteCode / id - preserving rich fields (saleCode, salePhone, designImages) if available
     const dedupMap = new Map();
     allExtracted.forEach(item => {
         const key = item.quoteCode || item.__backendId || item.id;
@@ -465,6 +636,9 @@ async function fetchProductionApprovals() {
             const existing = dedupMap.get(key);
             if (!existing.saleCode && item.saleCode) existing.saleCode = item.saleCode;
             if (!existing.salePhone && item.salePhone) existing.salePhone = item.salePhone;
+            if (!existing.designImages && item.designImages) existing.designImages = item.designImages;
+            if (!existing.images && item.images) existing.images = item.images;
+            if (!existing.__ksReq && item.__ksReq) existing.__ksReq = item.__ksReq;
         }
     });
 
@@ -478,13 +652,33 @@ async function fetchProductionApprovals() {
     _productionApprovalItems = finalItems;
     updateProductionApprovalBadge();
 
-    const pendingCount = finalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
-    const approvedCount = finalItems.filter(i => i.productionApprovalStatus === 'approved').length;
-
     const modal = document.getElementById('productionApprovalModal');
     if (modal && !modal.classList.contains('hidden')) {
         renderProductionApprovalList();
     }
+
+    // Auto-fetch missing MQ images in background
+    autoFetchMissingProductionImages();
+
+    const pendingCount = finalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
+    const approvedCount = finalItems.filter(i => i.productionApprovalStatus === 'approved').length;
+
+
+    try {
+        if (window && window.localStorage) {
+            window.localStorage.setItem('ks_production_approval_debug', JSON.stringify({
+                count: _productionApprovalItems.length,
+                sample: _productionApprovalItems.slice(0, 3).map(item => ({
+                    quoteCode: item.quoteCode,
+                    tkCode: item.tkCode,
+                    saleCode: item.saleCode,
+                    saleName: item.saleName,
+                    salePhone: item.salePhone,
+                    status: item.productionApprovalStatus
+                }))
+            }));
+        }
+    } catch (_) { }
 }
 
 function updateProductionApprovalBadge() {
@@ -689,9 +883,9 @@ function renderProductionApprovalList() {
                             </div>
                         </div>
 
-                        <!-- Middle: Edit Request Button (No Icon) -->
+                        <!-- Middle: Edit Request Button -->
                         <button onclick="promptRequestEditProduction('${idKey}')" class="bg-amber-950/40 hover:bg-amber-900/60 active:bg-amber-800/80 border border-amber-500/70 backdrop-blur-md text-amber-300 font-bold text-xs h-[46px] px-3.5 rounded-2xl flex items-center justify-center shadow-md shadow-amber-500/10 transition-all flex-shrink-0 whitespace-nowrap">
-                            Sửa
+                            Chỉnh sửa
                         </button>
 
                         <!-- Right: Reject Button (No Icon) -->
@@ -916,16 +1110,48 @@ function approveProductionItem(idKey) {
     }, 1200);
 }
 
-/** Edit Request Handler (Gửi Yêu Cầu Sửa Về Desktop QCAG) */
+/** Edit Request Handler (Gửi Yêu Cầu Sửa Về Desktop QCAG dùng chung openEditRequestSheet) */
 function promptRequestEditProduction(idKey) {
     const item = _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey);
     if (!item) return;
 
     window.__pendingEditIdKey = idKey;
-    const modal = document.getElementById('requestEditNoteModal');
-    if (modal) {
-        document.getElementById('requestEditNoteInput').value = '';
-        modal.classList.remove('hidden');
+
+    // Find target request object in allRequests for the unified openEditRequestSheet UI
+    let reqObj = item.__ksReq || null;
+    if (!reqObj && typeof findMatchingKsRequest === 'function') {
+        reqObj = findMatchingKsRequest(item, item.quoteCode);
+    }
+    if (!reqObj && typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+        reqObj = allRequests.find(r => {
+            if (!r) return false;
+            if (r.__backendId && r.__backendId == idKey) return true;
+            const rQCode = String(r.quoteCode || r.quote_code || r.backend_id || r.backendId || r.tkCode || r.tk_code || '').trim().toLowerCase();
+            const iQCode = String(item.quoteCode || item.tkCode || '').trim().toLowerCase();
+            if (rQCode && iQCode && rQCode === iQCode) return true;
+            return false;
+        });
+    }
+
+    if (reqObj) {
+        window.currentDetailRequest = { ...reqObj, isProductionApproval: true };
+    } else {
+        // Fallback placeholder object for Production Approval Flow
+        window.currentDetailRequest = {
+            __backendId: idKey,
+            isProductionApproval: true,
+            outletName: item.outletName || 'Outlet',
+            outletCode: item.outletCode || '---',
+            comments: '[]'
+        };
+    }
+
+    // Ensure reject sheet is closed before opening edit sheet
+    closeProductionRejectSheet();
+
+    // Open unified Edit Request Sheet UI
+    if (typeof openEditRequestSheet === 'function') {
+        openEditRequestSheet();
     } else {
         const note = prompt('Vui lòng nhập nội dung cần chỉnh sửa (sẽ gửi về Desktop QCAG):');
         if (note !== null) {
@@ -983,21 +1209,67 @@ function confirmRequestEditProduction(idKey, note) {
     updateProductionApprovalBadge();
 }
 
-/** Rejection Handler with Automatic Deduction from Pending List */
+/** Rejection Handler with Bottom Sheet UI (LÝ DO TỪ CHỐI SẢN XUẤT) */
 function promptRejectProduction(idKey) {
-    const item = _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey);
-    if (!item) return;
+    const cleanKey = extractQuoteCodeFromIdKey(idKey);
+    const item = _productionApprovalItems.find(i => {
+        if (!i) return false;
+        if ((i.__backendId || i.id) == idKey) return true;
+        const iQCode = String(i.quoteCode || i.quote_code || i.id || '').trim().toLowerCase();
+        if (cleanKey && iQCode && cleanKey.toLowerCase() === iQCode) return true;
+        return false;
+    }) || { quoteCode: cleanKey || idKey, outletName: 'Outlet' };
 
-    const modal = document.getElementById('rejectReasonModal');
-    if (modal) {
-        window.__pendingRejectIdKey = idKey;
-        document.getElementById('rejectReasonInput').value = '';
-        modal.classList.remove('hidden');
+    // Ensure edit sheet is closed before opening reject sheet
+    if (typeof closeEditRequestSheet === 'function') closeEditRequestSheet();
+
+    window.__pendingRejectIdKey = idKey;
+
+    const labelEl = document.getElementById('productionRejectOutletLabel');
+    if (labelEl) {
+        labelEl.textContent = `Báo giá: ${item.quoteCode || '---'} | Outlet: ${item.outletName || '---'}`;
+    }
+    const inputEl = document.getElementById('productionRejectInput');
+    if (inputEl) inputEl.value = '';
+
+    const sheet = document.getElementById('productionRejectSheet');
+    if (sheet) {
+        sheet.classList.remove('hidden');
+        requestAnimationFrame(() => sheet.classList.add('sheet-open'));
+        setTimeout(() => { if (inputEl) inputEl.focus(); }, 150);
     } else {
         const reason = prompt('Vui lòng nhập lý do từ chối sản xuất:');
         if (reason !== null) {
             confirmRejectProduction(idKey, reason);
         }
+    }
+}
+
+function closeProductionRejectSheet() {
+    const sheet = document.getElementById('productionRejectSheet');
+    if (!sheet) return;
+    sheet.classList.remove('sheet-open');
+    setTimeout(() => { sheet.classList.add('hidden'); }, 260);
+}
+
+function closeProductionRejectSheetOnBackdrop(e) {
+    if (e.target === document.getElementById('productionRejectSheet')) {
+        closeProductionRejectSheet();
+    }
+}
+
+function submitProductionReject() {
+    const idKey = window.__pendingRejectIdKey;
+    const inputEl = document.getElementById('productionRejectInput');
+    const reason = inputEl ? inputEl.value.trim() : '';
+    if (!reason) {
+        if (typeof showToast === 'function') showToast('Vui lòng nhập lý do từ chối sản xuất');
+        else alert('Vui lòng nhập lý do từ chối sản xuất');
+        return;
+    }
+    closeProductionRejectSheet();
+    if (idKey) {
+        confirmRejectProduction(idKey, reason);
     }
 }
 

@@ -2364,7 +2364,17 @@ body.dark .qcag-survey-badge,
 }
 
 /* dark mode adjustments */
-.theme-dark .edit-request-sheet { background: var(--surface-1); }
+.theme-dark .edit-request-sheet { background: var(--surface-1, #182232); color: var(--text-main, #ffffff); }
+.theme-dark .edit-request-sheet textarea#editRequestInput,
+.theme-dark .edit-request-sheet textarea#productionRejectInput {
+  background-color: var(--surface-2, #111827) !important;
+  color: var(--text-main, #ffffff) !important;
+  border-color: var(--border-1, #374151) !important;
+}
+.theme-dark .edit-request-sheet textarea#editRequestInput::placeholder,
+.theme-dark .edit-request-sheet textarea#productionRejectInput::placeholder {
+  color: #6b7280 !important;
+}
 .theme-dark .edit-cat-option { background: var(--surface-2); border-color: var(--border-1); color: var(--text-main); }
 .theme-dark .edit-cat-check { background: var(--surface-1); border-color: var(--border-1); }
 .theme-dark .comment-item.comment-edit-request { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.3); }

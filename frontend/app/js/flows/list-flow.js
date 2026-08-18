@@ -618,7 +618,7 @@ function closeMobileWhatsNewModal(versionStr) {
   const modal = document.getElementById('mobileWhatsNewModal');
   if (modal) modal.remove();
   try {
-    localStorage.setItem('ks_whats_new_version', versionStr || 'v2.8.0');
+    localStorage.setItem('ks_whats_new_version', versionStr || 'v2.8.1');
   } catch (_) {}
 }
 

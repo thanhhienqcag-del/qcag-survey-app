@@ -1411,7 +1411,7 @@ function openFullMobileQuoteModal(backendId, directQuoteData) {
   const totalStr = totalNum > 0 ? (totalNum.toLocaleString('vi-VN') + ' đ') : 'Chưa có tổng tiền';
   const outletName = q.outlet_name || q.outletName || (req ? req.outletName : 'Outlet');
   const outletCode = q.outlet_code || q.outletCode || (req ? req.outletCode : '---');
-  const address = q.address || q.outlet_address || (req ? req.address : '');
+  const address = q.address || (req ? req.address : '');
   const quoteCode = q.quote_code || q.quoteCode || (req ? req.quoteCode : '---');
   const tkCode = q.tk_code || q.tkCode || (req ? req.tkCode : '---');
 
@@ -3096,6 +3096,18 @@ async function submitEditRequest() {
   const ta = document.getElementById('editRequestInput');
   const text = ta ? ta.value.trim() : '';
   if (!text) { showToast('Vui lòng nhập nội dung yêu cầu chỉnh sửa'); return; }
+
+  // Check if triggered from Production Approval Flow (App 2 Production confirmation)
+  if (window.__pendingEditIdKey || (currentDetailRequest && (currentDetailRequest.isProductionApproval || String(currentDetailRequest.__backendId || '').startsWith('po_q_')))) {
+    const idKey = window.__pendingEditIdKey || (currentDetailRequest && currentDetailRequest.__backendId);
+    closeEditRequestSheet();
+    if (typeof confirmRequestEditProduction === 'function' && idKey) {
+      confirmRequestEditProduction(idKey, text);
+    }
+    window.__pendingEditIdKey = null;
+    return;
+  }
+
   if (!currentDetailRequest) { showToast('Không tìm thấy yêu cầu'); return; }
 
   const backendId = currentDetailRequest.__backendId;
@@ -3183,6 +3195,32 @@ async function submitEditRequest() {
       // Merge changes into existing record (don't replace — updated is partial)
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) Object.assign(allRequests[idx], updated);
+      // Sync with Production Approvals flow if matching production item exists
+      try {
+        const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+            ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
+            : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+        fetch(base + '/api/ks/requests/' + encodeURIComponent(backendId) + '/request-edit-production', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                note: text,
+                requestedBy: authorName
+            })
+        }).catch(err => console.warn('Sync production-edit error:', err));
+
+        if (typeof _productionApprovalItems !== 'undefined' && Array.isArray(_productionApprovalItems)) {
+            const prodItem = _productionApprovalItems.find(i => (i.__backendId || i.id) == backendId);
+            if (prodItem) {
+                prodItem.productionApprovalStatus = 'pending-edit';
+                prodItem.status = 'pending-edit';
+                prodItem.rejectReason = text;
+                if (typeof renderProductionApprovalList === 'function') renderProductionApprovalList();
+                if (typeof updateProductionApprovalBadge === 'function') updateProductionApprovalBadge();
+            }
+        }
+      } catch (_) {}
+
       if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
         try {
           if (typeof window !== 'undefined') {

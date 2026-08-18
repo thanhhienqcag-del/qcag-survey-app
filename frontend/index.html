@@ -55,15 +55,15 @@
       }
     })();
   </script>
-  <script src="app/_sdk/data_sdk.js?v=2.8.0"></script>
-  <script type="module" src="app/js/push.js?v=2.8.0"></script>
+  <script src="app/_sdk/data_sdk.js?v=2.8.1"></script>
+  <script type="module" src="app/js/push.js?v=2.8.1"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="app/css/base.css?v=2.8.0">
-  <link rel="stylesheet" href="app/css/mobile.css?v=2.8.0">
-  <link rel="stylesheet" href="app/css/mobile-qcag.css?v=2.8.0">
-  <link rel="stylesheet" href="app/css/desktop.css?v=2.8.0">
+  <link rel="stylesheet" href="app/css/base.css?v=2.8.1">
+  <link rel="stylesheet" href="app/css/mobile.css?v=2.8.1">
+  <link rel="stylesheet" href="app/css/mobile-qcag.css?v=2.8.1">
+  <link rel="stylesheet" href="app/css/desktop.css?v=2.8.1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     /* Outlet locate button: fixed width on desktop, full-width on small screens, ellipsis */
@@ -759,7 +759,7 @@
       <button id="productionApprovalBtn" onclick="openProductionApprovalModal()" class="w-full py-3 font-medium rounded-xl flex items-center justify-center gap-3 home-action-btn relative">
        <svg class="w-5 h-5 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
        <span>Xác Nhận Sản Xuất</span>
-       <span id="productionApprovalBadge" class="hidden absolute right-4 top-1/2 -translate-y-1/2 bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+       <span id="productionApprovalBadge" class="hidden absolute right-4 top-1/2 -translate-y-1/2 bg-red-500/20 border border-red-500/80 text-red-400 text-xs font-bold px-2.5 py-0.5 rounded-full backdrop-blur shadow-[0_0_10px_rgba(239,68,68,0.5)]">0</span>
       </button>
       <button onclick="startWarrantyCheck()" class="w-full py-3 font-medium rounded-xl flex items-center justify-center gap-3 home-action-btn">
        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
@@ -778,7 +778,7 @@
         <span>Thêm vào màn hình chính</span>
       </button>
      </div>
-      <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.8.0 · 2026-07-24</p>
+      <p class="text-gray-300 text-[10px] mt-auto pt-4 select-none" title="Phiên bản ứng dụng">v2.8.1 · 2026-07-30</p>
     </div>
     <!-- 'Xem Danh Sách Yêu Cầu' removed from home as requested -->
 
@@ -1254,10 +1254,22 @@
         </label>
         <div class="mb-4"></div>
         <button onclick="submitEditRequest()" class="w-full py-3.5 bg-gray-900 text-white font-semibold rounded-xl active:bg-gray-800">Gửi yêu cầu</button>
-        <button onclick="closeEditRequestSheet()" class="w-full py-3 text-gray-500 font-medium mt-2">Hủy</button>
       </div>
     </div>
   </div>
+
+  <!-- Production Reject Bottom Sheet -->
+  <div id="productionRejectSheet" class="edit-request-sheet-overlay hidden" onclick="closeProductionRejectSheetOnBackdrop(event)">
+    <div class="edit-request-sheet">
+      <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-4"></div>
+      <h3 class="font-bold text-base text-red-500 uppercase tracking-wide mb-1">LÝ DO TỪ CHỐI SẢN XUẤT</h3>
+      <p id="productionRejectOutletLabel" class="text-xs font-medium text-gray-500 mb-3"></p>
+      <textarea id="productionRejectInput" rows="4" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-sm resize-none mb-4 focus:outline-none focus:border-red-500" placeholder="Vui lòng nhập chi tiết lý do từ chối sản xuất..."></textarea>
+      <button onclick="submitProductionReject()" class="w-full py-3.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-red-600/30 transition-all">Từ chối sản xuất</button>
+      <button onclick="closeProductionRejectSheet()" class="w-full py-3 text-gray-500 font-medium text-sm mt-1">Hủy</button>
+    </div>
+  </div>
+
   <div id="logoutModal" class="fixed inset-0 hidden z-60 items-end sm:items-center justify-center" onclick="if(event.target===this)closeLogoutModal()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(2px)">
    <div class="center-card w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-6 fade-in shadow-2xl" onclick="event.stopPropagation()">
      <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5 sm:hidden"></div>
@@ -1362,43 +1374,7 @@
     </div>
   </div>
 
-  <!-- Modal: Nhập Lý Do Từ Chối -->
-  <div id="rejectReasonModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-4">
-    <div class="bg-[#1b2433] border border-gray-700 rounded-2xl p-5 w-full max-w-sm text-white shadow-2xl space-y-4">
-      <div class="flex justify-between items-center border-b border-gray-700 pb-3">
-        <h3 class="text-base font-bold text-red-400 flex items-center gap-1.5">
-          <span>❌</span> Lý do từ chối sản xuất
-        </h3>
-        <button onclick="closeRejectReasonModal()" class="text-gray-400 hover:text-white text-lg">✕</button>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-300 font-medium mb-1.5">Vui lòng nhập lý do từ chối đơn sản xuất này:</label>
-        <textarea id="rejectReasonInput" rows="3" placeholder="Nhập chi tiết lý do từ chối..." class="w-full p-3 bg-[#111827] border border-gray-700 rounded-xl text-sm text-white focus:outline-none focus:border-red-500"></textarea>
-      </div>
-      <div class="flex gap-2 justify-end pt-2">
-        <button onclick="closeRejectReasonModal()" class="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 font-semibold text-xs rounded-xl">Hủy</button>
-        <button onclick="submitRejectReason()" class="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow">Xác nhận từ chối</button>
-      </div>
-    </div>
-  <!-- Modal: Nhập Yêu Cầu Chỉnh Sửa Nội Dung -->
-  <div id="requestEditNoteModal" class="fixed inset-0 z-50 bg-black/80 hidden flex items-center justify-center p-4">
-    <div class="bg-[#1b2433] border border-amber-600/60 rounded-2xl p-5 w-full max-w-sm text-white shadow-2xl space-y-4">
-      <div class="flex justify-between items-center border-b border-gray-700 pb-3">
-        <h3 class="text-base font-bold text-amber-400 flex items-center gap-1.5">
-          <span>✏️</span> Yêu cầu chỉnh sửa nội dung/thiết kế
-        </h3>
-        <button onclick="closeRequestEditNoteModal()" class="text-gray-400 hover:text-white text-lg">✕</button>
-      </div>
-      <div>
-        <label class="block text-xs text-gray-300 font-medium mb-1.5">Nhập nội dung cần chỉnh sửa (sẽ gửi về Desktop QCAG):</label>
-        <textarea id="requestEditNoteInput" rows="3" placeholder="Ví dụ: Sửa kích thước bảng 1.5x2m, đổi logo sang Heineken Silver..." class="w-full p-3 bg-[#111827] border border-gray-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-500"></textarea>
-      </div>
-      <div class="flex gap-2 justify-end pt-2">
-        <button onclick="closeRequestEditNoteModal()" class="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 text-gray-200 font-semibold text-xs rounded-xl">Hủy</button>
-        <button onclick="submitRequestEditNote()" class="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow">Gửi yêu cầu sửa</button>
-      </div>
-    </div>
-  </div>
+
   <script src="app/js/app.js?v=20260506c"></script>
   <!-- v2.5.0 | 2026-07-11 -->
   <script>

@@ -15,7 +15,6 @@ const mysql = require('./lib/mysql-compat');
 const crypto = require('crypto');
 const { Storage } = require('@google-cloud/storage');
 const { uploadBuffer } = require('./storage');
-const { scheduleSyncRequest } = require('./lib/dual-write');
 const { resolveKsRequestsOptions } = require('./lib/ks-request-query');
 
 const gcs = new Storage();
@@ -2507,52 +2506,7 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
-        // Specific outlet query path: return all requests for a given outlet code with full details
-        if (outletCodeRaw && outletCodeRaw.toLowerCase() !== 'new outlet') {
-            const [rows] = await pool.query(
-                `SELECT id, backend_id, tk_code, type, outlet_code, outlet_name, address,
-                        outlet_lat, outlet_lng, phone, items, content,
-                        old_content, old_content_extra, status, requester, comments,
-                        status_images, design_images, acceptance_images, old_content_images,
-                        editing_requested_at, mq_folder, created_at, updated_at,
-                        design_created_by, design_created_at, design_last_edited_by, design_last_edited_at,
-                        design_filename
-                 FROM ks_requests_view
-                 WHERE LOWER(TRIM(outlet_code)) = LOWER(?)
-                 ORDER BY created_at ASC`,
-                [outletCodeRaw]
-            );
-            const mapped = rows.map(r => ksRowToApp(r, false));
-            return res.json({
-                ok: true,
-                data: mapped,
-                paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false }
-            });
-        }
-
-        // Direct-read path: when the client asks for paging or incremental updates,
-        // bypass the stale in-memory cache and query Neon fresh.
-        if (updatedSinceRaw) {
-            const [[countRow]] = await pool.query(
-                'SELECT COUNT(*) AS total FROM ks_requests_view WHERE updated_at >= ? OR created_at >= ?',
-                [updatedSince, updatedSince]
-            );
-            const total = Number(countRow && countRow.total ? countRow.total : 0);
-            const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} WHERE updated_at >= ? OR created_at >= ? ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`, [updatedSince, updatedSince]);
-            const mapped = rows.map(r => ksRowToApp(r, true));
-            return res.json({
-                ok: true,
-                data: mapped,
-                paging: {
-                    total,
-                    limit,
-                    offset,
-                    hasMore: offset + mapped.length < total
-                }
-            });
-        }
-
-        if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
+                if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
             const [[countRow]] = await pool.query('SELECT COUNT(*) AS total FROM ks_requests_view');
             const total = Number(countRow && countRow.total ? countRow.total : 0);
             const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`);
@@ -2569,7 +2523,6 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
-        // Serve from cache if available for simple no-params bootstrap requests.
         if (_ksRequestsCache) {
             const clientEtag = req.headers['if-none-match'];
             res.setHeader('ETag', _ksRequestsCache.etag);
@@ -2580,7 +2533,6 @@ app.get('/api/ks/requests', async (req, res) => {
             return res.json({ ok: true, data: _ksRequestsCache.rows, paging: { total: _ksRequestsCache.rows.length, limit: _ksRequestsCache.rows.length, offset: 0, hasMore: false } });
         }
 
-        // Cache miss: query Neon once, cache result.
         const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC`);
         const mapped = rows.map(r => ksRowToApp(r, true));
         const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
@@ -2594,429 +2546,15 @@ app.get('/api/ks/requests', async (req, res) => {
     }
 });
 
-function extractQuoteCode(idStr) {
-    if (!idStr) return '';
-    const str = String(idStr).trim();
-    const m = str.match(/po_q_([A-Za-z0-9]+)_/);
-    if (m && m[1]) return m[1];
-    return str;
-}
-
-async function ensureProductionApprovalsTable() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS ks_production_approvals (
-                id SERIAL PRIMARY KEY,
-                quote_code VARCHAR(100) NOT NULL UNIQUE,
-                outlet_code VARCHAR(100),
-                status VARCHAR(50) DEFAULT 'pending',
-                approved_by VARCHAR(255),
-                approved_at TIMESTAMPTZ,
-                reject_reason TEXT,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-    } catch (e) {
-        console.warn('ensureProductionApprovalsTable warning:', e && e.message ? e.message : e);
-    }
-}
-
-async function ensurePendingOrdersTable() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS ks_pending_orders (
-                id VARCHAR(100) PRIMARY KEY,
-                created_by VARCHAR(255),
-                total_points INT DEFAULT 0,
-                total_amount NUMERIC(15, 2) DEFAULT 0,
-                area_list VARCHAR(255),
-                status VARCHAR(50) DEFAULT 'pending',
-                quotes_json JSONB,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-    } catch (_) { }
-}
-
-// GET /pending-orders
-app.get('/pending-orders', async (req, res) => {
-    try {
-        const [rows] = await pool.query(
-            `SELECT id, created_by, total_points, total_amount, area_list, status, quotes_json, created_at, updated_at
-             FROM ks_pending_orders
-             ORDER BY created_at DESC`
-        );
-        const data = (rows || []).map(r => {
-            let quotes = [];
-            if (r.quotes_json) {
-                quotes = typeof r.quotes_json === 'string' ? JSON.parse(r.quotes_json) : r.quotes_json;
-            }
-            return {
-                id: r.id,
-                createdBy: r.created_by || 'Admin',
-                totalPoints: Number(r.total_points || 0),
-                totalAmount: Number(r.total_amount || 0),
-                areaList: r.area_list || '',
-                status: r.status || 'pending',
-                quotes: Array.isArray(quotes) ? quotes : [],
-                createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
-                updatedAt: r.updated_at ? new Date(r.updated_at).toISOString() : new Date().toISOString()
-            };
-        });
-        res.json({ ok: true, data });
-    } catch (err) {
-        console.error('GET /pending-orders error:', err && err.message ? err.message : err);
-        res.status(500).json({ ok: false, error: 'db_error', data: [] });
-    }
-});
-
-// GET /api/ks/requests/production-approvals-count
-app.get('/api/ks/requests/production-approvals-count', async (req, res) => {
-    try {
-        const approvalsMap = {};
-
-        try {
-            const [rows] = await pool.query(
-                `SELECT quote_code, status, approved_by, approved_at, reject_reason, updated_at FROM ks_production_approvals`
-            );
-            (rows || []).forEach(r => {
-                if (r && r.quote_code) {
-                    approvalsMap[r.quote_code] = {
-                        quoteCode: r.quote_code,
-                        status: r.status || 'pending'
-                    };
-                }
-            });
-        } catch (e) {
-            console.warn('SELECT ks_production_approvals query error:', e);
-        }
-
-        try {
-            const [rows2] = await pool.query(
-                `SELECT id, backend_id, tk_code, outlet_code, production_approval_status
-                 FROM ks_requests_view`
-            );
-            (rows2 || []).forEach(r => {
-                const keys = [r.tk_code, r.backend_id, r.outlet_code, String(r.id)].filter(Boolean);
-                keys.forEach(k => {
-                    const key = String(k).trim();
-                    if (!approvalsMap[key]) {
-                        approvalsMap[key] = {
-                            quoteCode: key,
-                            status: r.production_approval_status || 'pending'
-                        };
-                    } else {
-                        if (r.production_approval_status && approvalsMap[key].status === 'pending') {
-                            approvalsMap[key].status = r.production_approval_status;
-                        }
-                    }
-                });
-            });
-        } catch (_) { }
-
-        const counts = { pending: 0, approved: 0, rejected: 0, total: 0 };
-        Object.values(approvalsMap).forEach(item => {
-            const status = String(item.status || 'pending').toLowerCase();
-            if (status === 'approved') counts.approved += 1;
-            else if (status === 'rejected') counts.rejected += 1;
-            else counts.pending += 1;
-            counts.total += 1;
-        });
-
-        const etag = '"' + crypto.createHash('md5').update(JSON.stringify(counts)).digest('hex') + '"';
-        const clientEtag = req.headers['if-none-match'];
-        res.setHeader('ETag', etag);
-        res.setHeader('Cache-Control', 'no-cache');
-        if (clientEtag && clientEtag === etag) {
-            return res.status(304).end();
-        }
-
-        return res.json({ ok: true, data: counts });
-    } catch (err) {
-        console.error('GET /api/ks/requests/production-approvals-count error:', err);
-        return res.status(500).json({ ok: false, error: 'db_error', data: { pending: 0, approved: 0, rejected: 0, total: 0 } });
-    }
-});
-
-// GET /api/ks/requests/production-approvals
-app.get('/api/ks/requests/production-approvals', async (req, res) => {
-    try {
-        const approvalsMap = {};
-
-        try {
-            const [rows] = await pool.query(
-                `SELECT quote_code, status, approved_by, approved_at, reject_reason, updated_at FROM ks_production_approvals`
-            );
-            (rows || []).forEach(r => {
-                if (r && r.quote_code) {
-                    approvalsMap[r.quote_code] = {
-                        quoteCode: r.quote_code,
-                        status: r.status,
-                        approvedBy: r.approved_by,
-                        approvedAt: r.approved_at,
-                        reason: r.reject_reason,
-                        updatedAt: r.updated_at
-                    };
-                }
-            });
-        } catch (e) {
-            console.warn('SELECT ks_production_approvals query error:', e);
-        }
-
-        try {
-            const [rows2] = await pool.query(
-                `SELECT id, backend_id, tk_code, outlet_code, outlet_name,
-                        production_approval_status, production_reject_reason, production_approved_at, production_approved_by
-                 FROM ks_requests_view`
-            );
-            (rows2 || []).forEach(r => {
-                const keys = [r.tk_code, r.backend_id, r.outlet_code, String(r.id)].filter(Boolean);
-                keys.forEach(k => {
-                    const key = String(k).trim();
-                    if (!approvalsMap[key]) {
-                        approvalsMap[key] = {
-                            quoteCode: key,
-                            status: r.production_approval_status || 'pending',
-                            approvedBy: r.production_approved_by || null,
-                            approvedAt: r.production_approved_at || null,
-                            reason: r.production_reject_reason || null
-                        };
-                    } else {
-                        if (r.production_approval_status && approvalsMap[key].status === 'pending') {
-                            approvalsMap[key].status = r.production_approval_status;
-                        }
-                    }
-                });
-            });
-        } catch (_) { }
-
-        res.json({ ok: true, data: approvalsMap });
-    } catch (err) {
-        console.error('GET /api/ks/requests/production-approvals error:', err);
-        res.status(500).json({ ok: false, error: 'db_error', data: {} });
-    }
-});
-
-// POST /api/ks/requests/:id/approve-production
-app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
-    try {
-        const rawId = req.params.id;
-        const quoteCode = extractQuoteCode(rawId);
-        const b = req.body || {};
-        const approvedBy = b.approvedBy ? String(b.approvedBy).trim() : 'Sale Heineken';
-
-        if (quoteCode) {
-            await pool.query(
-                `INSERT INTO ks_production_approvals (quote_code, status, approved_by, approved_at, reject_reason, updated_at)
-                 VALUES (?, 'approved', ?, NOW(), NULL, NOW())
-                 ON CONFLICT (quote_code) DO UPDATE SET 
-                     status = 'approved',
-                     approved_by = EXCLUDED.approved_by,
-                     approved_at = NOW(),
-                     reject_reason = NULL,
-                     updated_at = NOW()`,
-                [quoteCode, approvedBy]
-            );
-        }
-
-        try {
-            await pool.query(
-                `UPDATE ks_requests 
-                 SET production_approval_status = 'approved',
-                     production_approved_by = ?,
-                     production_approved_at = NOW(),
-                     updated_at = NOW()
-                 WHERE backend_id = ? OR id = ? OR tk_code = ?`,
-                [approvedBy, rawId, parseInt(rawId, 10) || 0, quoteCode]
-            );
-        } catch (_) { }
-
-        sseBroadcast({ type: 'production_approvals', action: 'approved', quoteCode });
-        wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'approved' });
-        res.json({ ok: true, message: 'approved', quoteCode });
-    } catch (err) {
-        console.error('POST /api/ks/requests/:id/approve-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
-    }
-});
-
-// POST /api/ks/requests/:id/reject-production
-app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
-    try {
-        const rawId = req.params.id;
-        const quoteCode = extractQuoteCode(rawId);
-        const b = req.body || {};
-        const reason = b.reason ? String(b.reason).trim() : 'Từ chối sản xuất';
-        const rejectedBy = b.rejectedBy ? String(b.rejectedBy).trim() : 'Sale Heineken';
-
-        if (quoteCode) {
-            await pool.query(
-                `INSERT INTO ks_production_approvals (quote_code, status, approved_by, reject_reason, approved_at, updated_at)
-                 VALUES (?, 'rejected', ?, ?, NOW(), NOW())
-                 ON CONFLICT (quote_code) DO UPDATE SET 
-                     status = 'rejected',
-                     approved_by = EXCLUDED.approved_by,
-                     reject_reason = EXCLUDED.reject_reason,
-                     approved_at = NOW(),
-                     updated_at = NOW()`,
-                [quoteCode, rejectedBy, reason]
-            );
-        }
-
-        try {
-            await pool.query(
-                `UPDATE ks_requests 
-                 SET production_approval_status = 'rejected',
-                     production_reject_reason = ?,
-                     production_approved_by = ?,
-                     production_approved_at = NOW(),
-                     updated_at = NOW()
-                 WHERE backend_id = ? OR id = ? OR tk_code = ?`,
-                [reason, rejectedBy, rawId, parseInt(rawId, 10) || 0, quoteCode]
-            );
-        } catch (_) { }
-
-        sseBroadcast({ type: 'production_approvals', action: 'rejected', quoteCode });
-        wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'rejected' });
-        res.json({ ok: true, message: 'rejected', quoteCode });
-    } catch (err) {
-        console.error('POST /api/ks/requests/:id/reject-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
-    }
-});
-
-// POST /api/ks/requests/:id/request-edit-production
-app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
-    try {
-        const rawId = req.params.id;
-        const quoteCode = extractQuoteCode(rawId);
-        const b = req.body || {};
-        const editNote = b.note ? String(b.note).trim() : 'Yêu cầu chỉnh sửa nội dung/thiết kế trước khi duyệt';
-        const requestedBy = b.requestedBy ? String(b.requestedBy).trim() : 'Sale Heineken';
-
-        if (quoteCode) {
-            await pool.query(
-                `INSERT INTO ks_production_approvals (quote_code, status, approved_by, reject_reason, approved_at, updated_at)
-                 VALUES (?, 'pending-edit', ?, ?, NOW(), NOW())
-                 ON CONFLICT (quote_code) DO UPDATE SET 
-                     status = 'pending-edit',
-                     approved_by = EXCLUDED.approved_by,
-                     reject_reason = EXCLUDED.reject_reason,
-                     approved_at = NOW(),
-                     updated_at = NOW()`,
-                [quoteCode, requestedBy, editNote]
-            );
-        }
-
-        try {
-            await pool.query(
-                `UPDATE ks_requests 
-                 SET status = 'pending-edit',
-                     production_approval_status = 'pending-edit',
-                     editing_requested_at = NOW(),
-                     production_reject_reason = ?,
-                     updated_at = NOW()
-                 WHERE backend_id = ? OR id = ? OR tk_code = ?`,
-                [editNote, rawId, parseInt(rawId, 10) || 0, quoteCode]
-            );
-        } catch (_) { }
-
-        sseBroadcast({ type: 'production_approvals', action: 'pending-edit', quoteCode });
-        wsInvalidate('ks_requests', { action: 'update', id: rawId, status: 'pending-edit' });
-        res.json({ ok: true, message: 'edit_requested', quoteCode });
-    } catch (err) {
-        console.error('POST /api/ks/requests/:id/request-edit-production error:', err);
-        res.status(500).json({ ok: false, error: 'db_error', details: err && err.message ? err.message : String(err) });
-    }
-});
-
-// GET /api/ks/requests/:id  (by numeric id OR backend_id string)
-app.get('/api/ks/requests/:id', async (req, res) => {
-    try {
-        const id = String(req.params.id || '').trim();
-        let rows;
-        if (/^\d+$/.test(id)) {
-            [rows] = await pool.query('SELECT * FROM ks_requests_view WHERE id = ? LIMIT 1', [Number(id)]);
-        } else {
-            [rows] = await pool.query('SELECT * FROM ks_requests_view WHERE backend_id = ? LIMIT 1', [id]);
-        }
-        if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'not_found' });
-        return res.json({ ok: true, data: ksRowToApp(rows[0]) });
-    } catch (err) {
-        console.error('GET /api/ks/requests/:id error:', err && err.message ? err.message : err);
-        return res.status(500).json({ ok: false, error: 'fetch_failed' });
-    }
-});
-
-// --- Vietnamese Text Normalization Helpers ---
 function normalizeVietnameseAccents(str) {
-    if (typeof str !== 'string') return str;
-    let text = str.normalize('NFC');
-
-    // 1. Chuẩn hóa tổ hợp "oa" và "oe"
-    // Quy tắc chuẩn tiếng Việt:
-    // - Nếu có phụ âm kết thúc âm tiết (theo sau bởi ký tự chữ cái [a-zA-Z]),
-    //   thì dấu phải đặt ở nguyên âm sau: oá, oà, oả, oã, oạ / oé, oè, oẻ, oẽ, oẹ.
-    // - Nếu không có phụ âm kết thúc (đứng cuối từ/âm tiết), dấu đặt ở nguyên âm trước: óa, òa, ỏa, õa, ọa / óe, òe, ỏe, õe, ọe.
-
-    // 1.1. Trường hợp theo sau bởi chữ cái -> Chuyển dấu từ O/E sang A/E (toàn, loài, hoét, khoẻ...)
-    const oaToA = [
-        [/óa(?=[a-zA-Z])/g, 'oá'], [/òa(?=[a-zA-Z])/g, 'oà'], [/ỏa(?=[a-zA-Z])/g, 'oả'], [/õa(?=[a-zA-Z])/g, 'oã'], [/ọa(?=[a-zA-Z])/g, 'oạ'],
-        [/ÓA(?=[a-zA-Z])/g, 'OÁ'], [/ÒA(?=[a-zA-Z])/g, 'OÀ'], [/ỎA(?=[a-zA-Z])/g, 'OẢ'], [/ÕA(?=[a-zA-Z])/g, 'OÃ'], [/ỌA(?=[a-zA-Z])/g, 'OẠ']
-    ];
-    for (const [pattern, replacement] of oaToA) {
-        text = text.replace(pattern, replacement);
-    }
-
-    const oeToE = [
-        [/óe(?=[a-zA-Z])/g, 'oé'], [/òe(?=[a-zA-Z])/g, 'oè'], [/ỏe(?=[a-zA-Z])/g, 'oẻ'], [/õe(?=[a-zA-Z])/g, 'oẽ'], [/ọe(?=[a-zA-Z])/g, 'oẹ'],
-        [/ÓE(?=[a-zA-Z])/g, 'OÉ'], [/ÒE(?=[a-zA-Z])/g, 'OÈ'], [/ỎE(?=[a-zA-Z])/g, 'OẺ'], [/ÕE(?=[a-zA-Z])/g, 'OẼ'], [/ỌE(?=[a-zA-Z])/g, 'OẸ']
-    ];
-    for (const [pattern, replacement] of oeToE) {
-        text = text.replace(pattern, replacement);
-    }
-
-    // 1.2. Trường hợp KHÔNG theo sau bởi chữ cái -> Chuyển dấu từ A/E sang O/E (hòa, hóa, khỏe...)
-    const oaToO = [
-        [/oá(?![a-zA-Z])/g, 'óa'], [/oà(?![a-zA-Z])/g, 'òa'], [/oả(?![a-zA-Z])/g, 'ỏa'], [/oã(?![a-zA-Z])/g, 'õa'], [/oạ(?![a-zA-Z])/g, 'ọa'],
-        [/OÁ(?![a-zA-Z])/g, 'ÓA'], [/OÀ(?![a-zA-Z])/g, 'ÒA'], [/OẢ(?![a-zA-Z])/g, 'ỎA'], [/OÃ(?![a-zA-Z])/g, 'ÕA'], [/OẠ(?![a-zA-Z])/g, 'ỌA']
-    ];
-    for (const [pattern, replacement] of oaToO) {
-        text = text.replace(pattern, replacement);
-    }
-
-    const oeToO = [
-        [/oé(?![a-zA-Z])/g, 'óe'], [/oè(?![a-zA-Z])/g, 'òe'], [/oẻ(?![a-zA-Z])/g, 'ỏe'], [/oẽ(?![a-zA-Z])/g, 'õe'], [/oẹ(?![a-zA-Z])/g, 'ọe'],
-        [/OÉ(?![a-zA-Z])/g, 'ÓE'], [/OÈ(?![a-zA-Z])/g, 'ÒE'], [/OẺ(?![a-zA-Z])/g, 'ỎE'], [/OẼ(?![a-zA-Z])/g, 'ÕE'], [/OẸ(?![a-zA-Z])/g, 'ỌE']
-    ];
-    for (const [pattern, replacement] of oeToO) {
-        text = text.replace(pattern, replacement);
-    }
-
-    // 2. Chuẩn hóa tổ hợp "uy" (uý, uỳ, uỷ, uỹ, uỵ -> úy, ùy, ủy, ũy, cụy)
-    const uyMap = { 'uý': 'úy', 'uỳ': 'ùy', 'uỷ': 'ủy', 'uỹ': 'ũy', 'uỵ': 'ụy' };
-    text = text.replace(/([qQ]?)u([ýỳỷỹỵ])(?![nNcCtT])/g, (match, prefix, accent) => {
-        if (prefix) return match;
-        const key = 'u' + accent;
-        return uyMap[key] || match;
-    });
-
-    const uyMapUpper = { 'UÝ': 'ÚY', 'UỲ': 'ÙY', 'UỶ': 'ỦY', 'UỸ': 'ŨY', 'UỴ': 'ỤY' };
-    text = text.replace(/([qQ]?)U([ÝỲỶỸỴ])(?![nNcCtT])/g, (match, prefix, accent) => {
-        if (prefix) return match;
-        const key = 'U' + accent;
-        return uyMapUpper[key] || match;
-    });
-
-    return text;
+    if (typeof str !== "string") return str;
+    return str.normalize("NFC");
 }
 
 function normalizePayloadStrings(obj) {
-    if (typeof obj === 'string') return normalizeVietnameseAccents(obj);
+    if (typeof obj === "string") return normalizeVietnameseAccents(obj);
     if (Array.isArray(obj)) return obj.map(item => normalizePayloadStrings(item));
-    if (obj !== null && typeof obj === 'object') {
+    if (obj !== null && typeof obj === "object") {
         const newObj = {};
         for (const key in obj) {
             newObj[key] = normalizePayloadStrings(obj[key]);
@@ -3025,19 +2563,18 @@ function normalizePayloadStrings(obj) {
     }
     return obj;
 }
-// ---------------------------------------------
 
 // POST /api/ks/requests
-app.post('/api/ks/requests', async (req, res) => {
+app.post("/api/ks/requests", async (req, res) => {
     try {
         const b = normalizePayloadStrings(req.body || {});
         const now = new Date();
         const backendId = toNullableString(b.__backendId) || toNullableString(b.backendId) ||
-            ('srv_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex'));
+            ("srv_" + Date.now() + "_" + crypto.randomBytes(4).toString("hex"));
 
         // Step 0: Prevent duplicate record creation on retry timeouts
         const [existingRows] = await pool.query(
-            'SELECT * FROM ks_requests WHERE backend_id = ? LIMIT 1',
+            "SELECT * FROM ks_requests WHERE backend_id = ? LIMIT 1",
             [backendId]
         );
         if (existingRows && existingRows.length > 0) {
@@ -3116,8 +2653,6 @@ app.post('/api/ks/requests', async (req, res) => {
             [tkCode, statusImgsJson, oldContentImgsJson, designImgsJson, acceptanceImgsJson, now, insertId]
         );
 
-        // Dual-write sync (non-blocking, debounced)
-        scheduleSyncRequest(pool, insertId);
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
         wsInvalidate('ks_requests');
@@ -3259,6 +2794,9 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     // Only auto-update if caller isn't also sending new design_images
                     fields.push('design_images = ?');
                     vals.push(newDesignImages || current.design_images || '[]');
+                    // Reset production approval status to pending when design images change
+                    fields.push('production_approval_status = ?');
+                    vals.push('pending');
                 }
             } else if (!oldMqFolder) {
                 // First time outlet code is set — generate mq_folder
@@ -3274,11 +2812,13 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             vals.push(toNullableString(b.mqFolder));
         }
 
-        // designImages and acceptanceImages updated with their own fields
         maybeJson('designImages', 'design_images');
         maybeJson('acceptanceImages', 'acceptance_images');
+        if ('designImages' in b) {
+            fields.push('production_approval_status = ?');
+            vals.push('pending');
+        }
 
-        // Design author tracking fields
         maybeStr('designCreatedBy', 'design_created_by');
         if ('designCreatedAt' in b) { fields.push('design_created_at = ?'); vals.push(b.designCreatedAt ? new Date(b.designCreatedAt) : null); }
         maybeStr('designLastEditedBy', 'design_last_edited_by');
@@ -3292,26 +2832,21 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
 
-        // Dual-write sync (non-blocking, debounced)
         scheduleSyncRequest(pool, rowId);
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');
 
-        // ── Fire push notification: khi QCAG hoàn thành MQ hoặc xác nhận chỉnh sửa ──
         try {
             const becomingDone = b.status === 'done' && current.status !== 'done';
             const isEditConfirm = becomingDone && ('designLastEditedBy' in b);
             const isFirstMQ = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
 
             if (isEditConfirm || isFirstMQ) {
-                // Lấy số điện thoại của Sale Heineken (người đang quản lý yêu cầu)
                 let requesterPhone = null;
                 try { requesterPhone = (JSON.parse(updated.requester || '{}') || {}).phone || null; } catch (_) { }
 
-                // Sử dụng mã tk_code đã sinh cố định lưu trong DB để đảm bảo đồng nhất
                 const tkCode = updated.tk_code || updated.backend_id || ('db_' + updated.id);
-
                 const outletLabel = updated.outlet_name || updated.outlet_code || 'Outlet';
 
                 if (isFirstMQ) {
@@ -3333,7 +2868,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         } catch (pushErr) {
             console.warn('[push] notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
         }
-        // ────────────────────────────────────────────────────────────────
+
+        if (current && current.id) {
+            syncKsRequestSubTables(current.id, b).catch(err => console.error(err));
+        }
 
         return res.json({ ok: true, data: ksRowToApp(updated) });
     } catch (err) {
@@ -3447,8 +2985,6 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
             [newOutletCode, newMqFolder, newDesignImages, rowId]
         );
 
-        // Dual-write sync (non-blocking, debounced)
-        scheduleSyncRequest(pool, rowId);
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');

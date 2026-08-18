@@ -1240,6 +1240,12 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
   _qcagRequestsVersion += 1;
 }
 
+function qcagDesktopIsPendingEditRequest(req) {
+  if (!req) return false;
+  const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
+  return s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit';
+}
+
 function qcagDesktopStatusBadge(req) {
   // Warranty type has its own independent badge logic
   const _reqType = String(req && req.type || '').toLowerCase();
@@ -2723,25 +2729,51 @@ function qcagDesktopRenderCommentPreview() {
 var _qcagDesktopOutletOldDesignCache = {};
 var _qcagDesktopOutletOldDesignFetching = {};
 
+function resolveApp2BackendUrl() {
+  const defaultBackend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
+  if (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) {
+    return String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '');
+  }
+  return defaultBackend;
+}
+
 function extractDesignImagesFromReq(r) {
   if (!r) return [];
   const src = (typeof _qcagDesktopFullRequestCache !== 'undefined' && r.__backendId && _qcagDesktopFullRequestCache[r.__backendId]) || r;
-  const raw = src.designImages || src.design_images || src.mqImages || src.mq_images;
+  const raw = src.designImages || src.design_images || src.mqImages || src.mq_images || src.images || src.design || src.quote_image_url || src.qcag_image_url || src.survey_images;
   const parsed = qcagDesktopParseJson(raw, []);
-  if (Array.isArray(parsed)) return parsed;
+  if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  if (typeof raw === 'string' && raw.trim()) {
+    const s = raw.trim();
+    if (s.startsWith('http') || s.startsWith('data:image/') || s.startsWith('/')) return [s];
+  }
   return [];
 }
 
-function isCandidatePastDesign(r, currentId, targetOutletCode) {
+function isCandidatePastDesign(r, currentId, targetOutletCode, targetOutletName) {
   if (!r) return false;
   const reqId = r.__backendId || r.id;
-  if (reqId === currentId) return false;
+  if (reqId && currentId && String(reqId) === String(currentId)) return false;
   
-  const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
-  if (!rOutlet || rOutlet === 'new outlet' || rOutlet !== targetOutletCode) return false;
+  const rCode = String(r.outletCode || r.outlet_code || (r.requester && (r.requester.outletCode || r.requester.outlet_code)) || '').trim().toLowerCase();
+  const tCode = String(targetOutletCode || '').trim().toLowerCase();
 
-  const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase();
-  const isDoneStatus = (st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || st === 'approved' || r.isDone || r.is_done);
+  const rName = String(r.outletName || r.outlet_name || (r.requester && (r.requester.outletName || r.requester.outlet_name)) || '').trim().toLowerCase();
+  const tName = String(targetOutletName || '').trim().toLowerCase();
+
+  const codeMatch = tCode && tCode !== 'new outlet' && rCode && rCode !== 'new outlet' && (rCode === tCode || rCode.includes(tCode) || tCode.includes(rCode));
+  const nameMatch = tName && rName && tName.length >= 3 && (rName === tName || rName.includes(tName) || tName.includes(rName));
+
+  if (!codeMatch && !nameMatch) return false;
+
+  const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase().trim();
+  const normSt = st.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+
+  const isDoneStatus = (
+    st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || st === 'approved' ||
+    normSt.includes('hoan thanh') || normSt.includes('hoan tat') || normSt.includes('da xu ly') || normSt.includes('processed') || normSt.includes('done') ||
+    r.isDone || r.is_done || String(r.qcag_order_status || '').toLowerCase().includes('done')
+  );
   
   const imgs = extractDesignImagesFromReq(r);
   const hasImages = imgs.length > 0;
@@ -2751,40 +2783,50 @@ function isCandidatePastDesign(r, currentId, targetOutletCode) {
 
 function ksGetOldDesignsForOutlet(currentReq) {
   if (!currentReq) return [];
-  const outletCode = String(currentReq.outletCode || currentReq.outlet_code || '').trim().toLowerCase();
-  if (!outletCode || outletCode === 'new outlet') return [];
+  const outletCode = String(currentReq.outletCode || currentReq.outlet_code || (currentReq.requester && (currentReq.requester.outletCode || currentReq.requester.outlet_code)) || '').trim().toLowerCase();
+  const outletName = String(currentReq.outletName || currentReq.outlet_name || (currentReq.requester && (currentReq.requester.outletName || currentReq.requester.outlet_name)) || '').trim().toLowerCase();
+
+  if ((!outletCode || outletCode === 'new outlet') && !outletName) return [];
   const currentId = currentReq.__backendId || currentReq.id;
 
   const candidateMap = {};
 
   // Add items from allRequests
   (allRequests || []).forEach(r => {
-    if (isCandidatePastDesign(r, currentId, outletCode)) {
+    if (isCandidatePastDesign(r, currentId, outletCode, outletName)) {
       candidateMap[r.__backendId || r.id] = r;
     }
   });
 
   // Add items from outlet API cache
-  if (_qcagDesktopOutletOldDesignCache[outletCode]) {
-    _qcagDesktopOutletOldDesignCache[outletCode].forEach(r => {
-      if (isCandidatePastDesign(r, currentId, outletCode)) {
+  const cacheKey = outletCode || outletName;
+  if (_qcagDesktopOutletOldDesignCache[cacheKey]) {
+    _qcagDesktopOutletOldDesignCache[cacheKey].forEach(r => {
+      if (isCandidatePastDesign(r, currentId, outletCode, outletName)) {
         const id = r.__backendId || r.id;
         if (!candidateMap[id]) candidateMap[id] = r;
       }
     });
   }
 
-  // Trigger background fetch for this outletCode if not fetched yet
-  if (!_qcagDesktopOutletOldDesignFetching[outletCode]) {
-    _qcagDesktopOutletOldDesignFetching[outletCode] = true;
+  // Trigger background fetch for this outletCode or outletName if not fetched yet
+  if (!_qcagDesktopOutletOldDesignFetching[cacheKey]) {
+    _qcagDesktopOutletOldDesignFetching[cacheKey] = true;
     try {
-      var base = (typeof window !== 'undefined' && window.API_BASE_URL) ? String(window.API_BASE_URL).replace(/\/+$/, '') : '';
-      fetch(base + '/api/ks/requests?outlet_code=' + encodeURIComponent(outletCode))
+      const base = resolveApp2BackendUrl();
+      let queryUrl = base + '/api/ks/requests?';
+      if (outletCode && outletCode !== 'new outlet') {
+        queryUrl += 'outlet_code=' + encodeURIComponent(outletCode);
+      } else if (outletName) {
+        queryUrl += 'outlet_name=' + encodeURIComponent(outletName);
+      }
+
+      fetch(queryUrl)
         .then(res => res.json())
         .then(json => {
           if (json && json.ok && Array.isArray(json.data)) {
-            const validRows = json.data.filter(r => isCandidatePastDesign(r, currentId, outletCode));
-            _qcagDesktopOutletOldDesignCache[outletCode] = validRows;
+            const validRows = json.data.filter(r => isCandidatePastDesign(r, currentId, outletCode, outletName));
+            _qcagDesktopOutletOldDesignCache[cacheKey] = validRows;
             validRows.forEach(dr => {
               const id = dr.__backendId || dr.id;
               if (id) {
@@ -2826,9 +2868,11 @@ function ksGetOldDesignsForOutlet(currentReq) {
 
   return candidates
     .filter(r => {
+      const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase().trim();
+      const normSt = st.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+      const isDone = (st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || normSt.includes('hoan thanh') || normSt.includes('hoan tat') || r.isDone || r.is_done);
       const imgs = extractDesignImagesFromReq(r);
-      if (imgs.length === 1 && imgs[0] === '...') return true;
-      return imgs.length > 0;
+      return isDone || imgs.length > 0;
     })
     .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
 }
