@@ -2832,8 +2832,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
 
-        scheduleSyncRequest(pool, rowId);
-
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
         wsInvalidate('ks_requests');
 
@@ -2867,10 +2865,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             }
         } catch (pushErr) {
             console.warn('[push] notify error (non-fatal):', pushErr && pushErr.message ? pushErr.message : pushErr);
-        }
-
-        if (current && current.id) {
-            syncKsRequestSubTables(current.id, b).catch(err => console.error(err));
         }
 
         return res.json({ ok: true, data: ksRowToApp(updated) });
