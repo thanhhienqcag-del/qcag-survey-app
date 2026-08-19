@@ -401,7 +401,7 @@ function assignStandardTags(req) {
 
   // Processing / Yêu cầu (new)
   if (String(req.type || '').toLowerCase() === 'new') {
-    if (req.editingRequestedAt) {
+    if (qcagDesktopIsPendingEditRequest(req)) {
       tags.push('Chờ chỉnh sửa');
     }
     // any item marked as survey *without* a confirmed surveySize -> Chờ khảo sát
@@ -410,8 +410,8 @@ function assignStandardTags(req) {
         tags.push('Chờ khảo sát');
       }
     } catch (e) {}
-    // No MQ at all -> Chờ thiết kế
-    if (!Array.isArray(designImgs) || designImgs.length === 0) {
+    // No MQ at all and NOT an edit request -> Chờ thiết kế
+    if (!qcagDesktopIsPendingEditRequest(req) && (!Array.isArray(designImgs) || designImgs.length === 0)) {
       tags.push('Chờ thiết kế');
     }
     // Has MQ but not marked done -> Chờ xác nhận
@@ -453,10 +453,7 @@ function qcagDesktopHasHeinekenEditRequest(req) {
   const latestEditReqIdx = (() => {
     for (let i = comments.length - 1; i >= 0; i -= 1) {
       const c = comments[i] || {};
-      if (
-        String(c.commentType || '').toLowerCase() === 'edit-request' &&
-        String(c.authorRole || '').toLowerCase() === 'heineken'
-      ) return i;
+      if (String(c.commentType || '').toLowerCase() === 'edit-request') return i;
     }
     return -1;
   })();
@@ -476,7 +473,11 @@ function qcagDesktopHasLaterEditResolvedComment(comments, index) {
 }
 
 function qcagDesktopIsPendingEditRequest(req) {
-  return !!(req && (req.editingRequestedAt || qcagDesktopHasHeinekenEditRequest(req)));
+  if (!req) return false;
+  const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
+  if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') return true;
+  if (req.editingRequestedAt) return true;
+  return qcagDesktopHasHeinekenEditRequest(req);
 }
 
 function qcagDesktopCanEditItems(req) {
@@ -1240,11 +1241,7 @@ async function qcagDesktopAutoSyncEditRequestedFromComments() {
   _qcagRequestsVersion += 1;
 }
 
-function qcagDesktopIsPendingEditRequest(req) {
-  if (!req) return false;
-  const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
-  return s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit';
-}
+
 
 function qcagDesktopStatusBadge(req) {
   // Warranty type has its own independent badge logic
