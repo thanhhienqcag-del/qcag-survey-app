@@ -104,41 +104,38 @@ function isValidImgUrl(val) {
 function parseMqDesignImages(item) {
     if (!item) return [];
 
-    // Primary design image sources (prioritize design images uploaded by Desktop QCAG / Design)
+    // Primary design image sources: Prioritize quote's own direct images from App 1 database
     const primaryDesignSources = [
-        item.designImages,
-        item.design_images,
+        item.images,
+        item.quote_image_url,
         item.qcag_image_url,
         item.qcagImageUrl,
+        item.designImages,
+        item.design_images,
         item.design,
-        item.quote_image_url,
         item.image_url,
-        item.images,
         item.image
     ];
 
-    // Also check matched Survey Request (__ksReq) if attached
+    // Also check matched Survey Request (__ksReq) only if outlet matches
     if (item.__ksReq) {
         primaryDesignSources.push(
             item.__ksReq.designImages,
             item.__ksReq.design_images,
             item.__ksReq.qcag_image_url,
             item.__ksReq.qcagImageUrl,
-            item.__ksReq.design,
-            item.__ksReq.images,
-            item.__ksReq.statusImages,
-            item.__ksReq.status_images
+            item.__ksReq.design
         );
     }
 
     if (Array.isArray(item.items)) {
         item.items.forEach(it => {
             if (it) {
-                if (it.design_images) primaryDesignSources.push(it.design_images);
-                if (it.designImages) primaryDesignSources.push(it.designImages);
                 if (it.imageUrl) primaryDesignSources.push(it.imageUrl);
                 if (it.images) primaryDesignSources.push(it.images);
                 if (it.image) primaryDesignSources.push(it.image);
+                if (it.design_images) primaryDesignSources.push(it.design_images);
+                if (it.designImages) primaryDesignSources.push(it.designImages);
             }
         });
     }
@@ -149,6 +146,13 @@ function parseMqDesignImages(item) {
         item.survey_images,
         item.surveyImage
     ];
+    if (item.__ksReq) {
+        fallbackSources.push(
+            item.__ksReq.images,
+            item.__ksReq.statusImages,
+            item.__ksReq.status_images
+        );
+    }
 
     function extractUrls(sourceList) {
         let rawList = [];
@@ -210,49 +214,52 @@ function findMatchingKsRequest(q, rawQuoteCode) {
     }
     const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
     const qTkDigits = qTk.replace(/\D/g, '');
-    const qCode = String(rawQuoteCode || q.quote_code || q.quoteCode || q.id || '').trim().toLowerCase();
-    const qCodeDigits = qCode.replace(/\D/g, '');
     const qOutlet = String(q.outlet_code || q.outletCode || '').trim().toLowerCase();
     const qOutletDigits = qOutlet.replace(/\D/g, '');
     const qName = String(q.outlet_name || q.outletName || '').trim().toLowerCase();
 
-    // 1. Match by TK code or Quote Code against r.tkCode / r.quoteCode
-    if (qTk || qCode) {
-        const byTk = allRequests.find(r => {
-            if (!r) return false;
-            const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
-            const rTkDigits = rTk.replace(/\D/g, '');
-            const rQCode = String(r.quoteCode || r.quote_code || '').trim().toLowerCase();
-            const rQDigits = rQCode.replace(/\D/g, '');
-            
-            if (qTk && rTk && (qTk === rTk || (qTkDigits.length >= 4 && qTkDigits === rTkDigits))) return true;
-            if (qCode && rTk && (qCode === rTk || (qCodeDigits.length >= 4 && qCodeDigits === rTkDigits))) return true;
-            if (qCode && rQCode && (qCode === rQCode || (qCodeDigits.length >= 4 && qCodeDigits === rQDigits))) return true;
-            if (qTk && rQCode && (qTk === rQCode || (qTkDigits.length >= 4 && qTkDigits === rQDigits))) return true;
-            return false;
-        });
-        if (byTk) return byTk;
-    }
-
-    // 2. Match by Outlet Code (unique per Heineken outlet)
-    if (qOutlet) {
+    // 1. Primary & safest match: Match by Outlet Code (Outlet Code is unique per Heineken outlet)
+    if (qOutlet && qOutlet !== 'new outlet' && qOutlet !== '---') {
         const byOutlet = allRequests.find(r => {
             if (!r) return false;
             const rOutlet = String(r.outletCode || r.outlet_code || (r.requester && (r.requester.outletCode || r.requester.outlet_code)) || '').trim().toLowerCase();
             const rOutletDigits = rOutlet.replace(/\D/g, '');
             if (qOutlet === rOutlet) return true;
-            if (qOutletDigits && qOutletDigits.length >= 5 && qOutletDigits === rOutletDigits) return true;
+            if (qOutletDigits && qOutletDigits.length >= 6 && qOutletDigits === rOutletDigits) return true;
             return false;
         });
         if (byOutlet) return byOutlet;
     }
 
-    // 3. Match by Outlet Name
-    if (qName && qName.length >= 4) {
+    // 2. Match by exact valid TK Code (e.g. 'TK26.00472') - must not be empty or truncated
+    if (qTk && qTk.startsWith('tk') && qTkDigits.length >= 4) {
+        const byTk = allRequests.find(r => {
+            if (!r) return false;
+            const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
+            const rTkDigits = rTk.replace(/\D/g, '');
+            if (qTk === rTk || (qTkDigits.length >= 4 && qTkDigits === rTkDigits)) {
+                // If outlet codes are present on both, verify they don't conflict
+                const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
+                if (qOutlet && rOutlet && qOutlet !== '---' && rOutlet !== '---' && qOutlet !== rOutlet) {
+                    return false; // different outlet, do not match!
+                }
+                return true;
+            }
+            return false;
+        });
+        if (byTk) return byTk;
+    }
+
+    // 3. Match by exact Outlet Name (if sufficiently unique and no conflicting outlet code)
+    if (qName && qName.length >= 6) {
         const byName = allRequests.find(r => {
             if (!r) return false;
             const rName = String(r.outletName || r.outlet_name || (r.requester && (r.requester.outletName || r.requester.outlet_name)) || '').trim().toLowerCase();
-            return rName && (rName === qName || rName.includes(qName) || qName.includes(rName));
+            const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
+            if (qOutlet && rOutlet && qOutlet !== '---' && rOutlet !== '---' && qOutlet !== rOutlet) {
+                return false;
+            }
+            return rName && (rName === qName || (rName.length >= 8 && (rName.includes(qName) || qName.includes(rName))));
         });
         if (byName) return byName;
     }
@@ -433,8 +440,10 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
             const resolvedSsName = String(q.ss_name || q.ssName || (ksReq ? ksReq.ssName : '') || '').trim();
 
             // Prioritize direct images on quote payload, fallback to matched survey request
-            const quoteImgs = q.images || q.quote_image_url || q.qcag_image_url || q.design_images || q.designImages || (ksReq ? (ksReq.design_images || ksReq.designImages || ksReq.images || ksReq.design || ksReq.qcag_image_url || ksReq.status_images || ksReq.statusImages) : []) || [];
-            const designImgs = q.design_images || q.designImages || (ksReq ? (ksReq.design_images || ksReq.designImages || ksReq.design) : null) || (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs : null) || [];
+            const quoteImgs = q.images || q.quote_image_url || q.qcag_image_url || null;
+            const designImgs = (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs : null) ||
+                q.design_images || q.designImages ||
+                (ksReq ? (ksReq.design_images || ksReq.designImages || ksReq.design) : null) || [];
 
             results.push({
                 __backendId: idKey,
@@ -451,9 +460,9 @@ function extractQuotesFromPendingOrdersPayload(ordersList) {
                 region: q.area || q.region || 'S16',
                 amount: Number(q.total_amount || q.totalAmount || q.amount) || 0,
                 items: q.items || [],
-                images: quoteImgs,
+                images: quoteImgs || [],
                 designImages: designImgs,
-                design: ksReq ? (ksReq.design || ksReq.designImages || ksReq.design_images) : null,
+                design: (Array.isArray(quoteImgs) && quoteImgs.length > 0 ? quoteImgs[0] : null) || (ksReq ? (ksReq.design || ksReq.designImages || ksReq.design_images) : null),
                 qcagImageUrl: q.qcag_image_url || q.qcagImageUrl || (ksReq ? ksReq.qcag_image_url : null) || null,
                 productionApprovalStatus: q.productionApprovalStatus || (order && order.productionApprovalStatus) || 'pending',
                 rejectReason: q.rejectReason || (order && order.rejectReason) || null,
@@ -487,19 +496,28 @@ async function autoFetchMissingProductionImages() {
                 if (res && res.isOk && res.data) fullReq = res.data;
             }
 
-            // 2. Fallback search by outlet code or quote code in App 2 backend
+            // 2. Fallback search by outlet code ONLY in App 2 backend
             if (!fullReq && window.dataSdk && typeof window.dataSdk.search === 'function') {
-                const searchTerm = it.outletCode && it.outletCode !== '---' ? it.outletCode : (it.quoteCode || it.tkCode);
+                const searchTerm = it.outletCode && it.outletCode !== '---' ? it.outletCode : (it.tkCode && it.tkCode.startsWith('TK') ? it.tkCode : '');
                 if (searchTerm && searchTerm !== '---') {
                     const sRes = await window.dataSdk.search(searchTerm, 5);
                     if (sRes && sRes.isOk && Array.isArray(sRes.data) && sRes.data.length > 0) {
-                        fullReq = sRes.data[0];
+                        const match = sRes.data.find(r => {
+                            if (it.outletCode && r.outletCode && it.outletCode !== '---') {
+                                return it.outletCode === r.outletCode;
+                            }
+                            if (it.tkCode && r.tkCode && it.tkCode.startsWith('TK')) {
+                                return it.tkCode === r.tkCode;
+                            }
+                            return false;
+                        });
+                        if (match) fullReq = match;
                     }
                 }
             }
 
             if (fullReq) {
-                const dImgs = fullReq.designImages || fullReq.design_images || fullReq.images || fullReq.statusImages;
+                const dImgs = fullReq.designImages || fullReq.design_images || fullReq.images;
                 if (dImgs && dImgs !== '[]' && dImgs !== '["..."]') {
                     it.designImages = dImgs;
                     it.design_images = dImgs;
