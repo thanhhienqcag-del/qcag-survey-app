@@ -2758,10 +2758,17 @@ function isCandidatePastDesign(r, currentId, targetOutletCode, targetOutletName)
   const rName = String(r.outletName || r.outlet_name || (r.requester && (r.requester.outletName || r.requester.outlet_name)) || '').trim().toLowerCase();
   const tName = String(targetOutletName || '').trim().toLowerCase();
 
-  const codeMatch = tCode && tCode !== 'new outlet' && rCode && rCode !== 'new outlet' && (rCode === tCode || rCode.includes(tCode) || tCode.includes(rCode));
-  const nameMatch = tName && rName && tName.length >= 3 && (rName === tName || rName.includes(tName) || tName.includes(rName));
+  const validTargetCode = tCode && tCode !== 'new outlet' && tCode !== 'null' && tCode !== 'undefined';
+  const validReqCode = rCode && rCode !== 'new outlet' && rCode !== 'null' && rCode !== 'undefined';
 
-  if (!codeMatch && !nameMatch) return false;
+  let isMatch = false;
+  if (validTargetCode && validReqCode) {
+    isMatch = (rCode === tCode);
+  } else if (tName && rName && tName.length >= 3) {
+    isMatch = (rName === tName || rName.includes(tName) || tName.includes(rName));
+  }
+
+  if (!isMatch) return false;
 
   const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase().trim();
   const normSt = st.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
@@ -2769,7 +2776,7 @@ function isCandidatePastDesign(r, currentId, targetOutletCode, targetOutletName)
   const isDoneStatus = (
     st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || st === 'approved' ||
     normSt.includes('hoan thanh') || normSt.includes('hoan tat') || normSt.includes('da xu ly') || normSt.includes('processed') || normSt.includes('done') ||
-    r.isDone || r.is_done || String(r.qcag_order_status || '').toLowerCase().includes('done')
+    Boolean(r.isDone || r.is_done) || String(r.qcag_order_status || '').toLowerCase().includes('done')
   );
   
   const imgs = extractDesignImagesFromReq(r);
@@ -2788,16 +2795,16 @@ function ksGetOldDesignsForOutlet(currentReq) {
 
   const candidateMap = {};
 
-  // Add items from allRequests
+  // 1. Add items from allRequests
   (allRequests || []).forEach(r => {
     if (isCandidatePastDesign(r, currentId, outletCode, outletName)) {
       candidateMap[r.__backendId || r.id] = r;
     }
   });
 
-  // Add items from outlet API cache
-  const cacheKey = outletCode || outletName;
-  if (_qcagDesktopOutletOldDesignCache[cacheKey]) {
+  // 2. Add items from outlet API cache
+  const cacheKey = (outletCode && outletCode !== 'new outlet') ? outletCode : outletName;
+  if (cacheKey && _qcagDesktopOutletOldDesignCache[cacheKey]) {
     _qcagDesktopOutletOldDesignCache[cacheKey].forEach(r => {
       if (isCandidatePastDesign(r, currentId, outletCode, outletName)) {
         const id = r.__backendId || r.id;
@@ -2806,8 +2813,8 @@ function ksGetOldDesignsForOutlet(currentReq) {
     });
   }
 
-  // Trigger background fetch for this outletCode or outletName if not fetched yet
-  if (!_qcagDesktopOutletOldDesignFetching[cacheKey]) {
+  // 3. Trigger background fetch for this outletCode or outletName if not fetched yet
+  if (cacheKey && !_qcagDesktopOutletOldDesignFetching[cacheKey]) {
     _qcagDesktopOutletOldDesignFetching[cacheKey] = true;
     try {
       const base = resolveApp2BackendUrl();
@@ -2849,7 +2856,7 @@ function ksGetOldDesignsForOutlet(currentReq) {
 
   const candidates = Object.values(candidateMap);
 
-  // Pre-fetch any unfetched candidate requests in background so past design images appear automatically
+  // 4. Pre-fetch any unfetched candidate requests in background so full design images appear automatically
   candidates.forEach(r => {
     const id = r.__backendId || r.id;
     if (id && typeof _qcagDesktopFullRequestCache !== 'undefined' && !_qcagDesktopFullRequestCache[id]) {
@@ -2863,14 +2870,9 @@ function ksGetOldDesignsForOutlet(currentReq) {
     }
   });
 
+  // 5. Return sorted candidates (already validated by isCandidatePastDesign)
   return candidates
-    .filter(r => {
-      const st = String(r.status || r.qcagStatus || r.qcag_status || '').toLowerCase().trim();
-      const normSt = st.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-      const isDone = (st === 'done' || st === 'processed' || st === 'completed' || st === 'hoan_thanh' || normSt.includes('hoan thanh') || normSt.includes('hoan tat') || r.isDone || r.is_done);
-      const imgs = extractDesignImagesFromReq(r);
-      return isDone || imgs.length > 0;
-    })
+    .filter(r => isCandidatePastDesign(r, currentId, outletCode, outletName))
     .sort((a, b) => new Date(b.createdAt || b.created_at || 0).getTime() - new Date(a.createdAt || a.created_at || 0).getTime());
 }
 
@@ -2884,8 +2886,8 @@ function qcagDesktopRefreshOldDesignSection(currentId) {
       section.innerHTML = '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
       return;
     }
-    const codeMap = qcagDesktopComputeRequestCodes();
-    section.innerHTML = qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
+    _qcagOldDesignIdx = Math.max(0, Math.min(oldList.length - 1, _qcagOldDesignIdx || 0));
+    section.innerHTML = qcagRenderOldDesignViewer(oldList[_qcagOldDesignIdx], _qcagOldDesignIdx, oldList.length);
   } catch (e) {
     console.error('qcagOldDesignSection refresh error', e);
   }
@@ -2893,17 +2895,16 @@ function qcagDesktopRefreshOldDesignSection(currentId) {
 
 /**
  * Builds the inner HTML for one old-design carousel entry.
- * @param {object} entry   - old request object
- * @param {number} idx     - 0-based current index
- * @param {number} total   - total number of old requests
- * @param {object} codeMap - { [backendId]: 'TKxx.xxxxx' }
+ * @param {object} entry - old request object
+ * @param {number} idx   - 0-based current index
+ * @param {number} total - total number of old requests
  */
-function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
+function qcagRenderOldDesignViewer(entry, idx, total) {
   if (!entry) return '<div class="qcag-detail-muted">Không có thiết kế cũ</div>';
   const fullEntry = (_qcagDesktopFullRequestCache && (entry.__backendId || entry.id) && _qcagDesktopFullRequestCache[entry.__backendId || entry.id]) || entry;
   const designImgs = qcagDesktopPrepareRenderImageList(extractDesignImagesFromReq(fullEntry));
   const requester  = typeof fullEntry.requester === 'object' && fullEntry.requester ? fullEntry.requester : qcagDesktopParseJson(fullEntry.requester, {});
-  const reqCode    = (codeMap && codeMap[entry.__backendId || entry.id]) || entry.tkCode || entry.tk_code || '-';
+  const reqCode    = fullEntry.tkCode || fullEntry.tk_code || entry.tkCode || entry.tk_code || '-';
   const uploadedBy = fullEntry.designUploadedBy || fullEntry.design_uploaded_by || fullEntry.designCreatedBy || fullEntry.design_created_by || '-';
   const saleName   = (requester.saleName || requester.sale_name || fullEntry.saleName || fullEntry.sale_name || requester.phone || '-').toUpperCase();
   const requestTime = (fullEntry.createdAt || fullEntry.created_at) ? new Date(fullEntry.createdAt || fullEntry.created_at).toLocaleString('vi-VN') : '-';
@@ -2917,15 +2918,17 @@ function qcagRenderOldDesignViewer(entry, idx, total, codeMap) {
     imgsHtml = `<div class="qcag-gallery-rep qcag-old-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${designImgs[0]}" alt="MQ thiết kế cũ"><div class="qcag-img-more">+${designImgs.length - 1}</div></div>`;
   }
 
+  const safeIdx = Math.max(0, Math.min(total - 1, idx));
+
   return `
     <div class="qcag-old-carousel">
       <div class="qcag-old-viewer">
         <div class="qcag-old-req-code">${escapeHtml(reqCode)}</div>
         <div class="qcag-old-img-area">${imgsHtml}</div>
         <div class="qcag-old-nav-row">
-          <button class="qcag-old-nav-btn qcag-old-nav-prev" onclick="qcagOldDesignGo(-1)" ${idx === 0 ? 'disabled' : ''}></button>
-          <span class="qcag-old-nav-count">${idx + 1}&nbsp;/&nbsp;${total}</span>
-          <button class="qcag-old-nav-btn qcag-old-nav-next" onclick="qcagOldDesignGo(1)" ${idx >= total - 1 ? 'disabled' : ''}></button>
+          <button class="qcag-old-nav-btn qcag-old-nav-prev" onclick="qcagOldDesignGo(-1)" ${safeIdx === 0 ? 'disabled' : ''}></button>
+          <span class="qcag-old-nav-count">${safeIdx + 1}&nbsp;/&nbsp;${total}</span>
+          <button class="qcag-old-nav-btn qcag-old-nav-next" onclick="qcagOldDesignGo(1)" ${safeIdx >= total - 1 ? 'disabled' : ''}></button>
         </div>
       </div>
       <div class="qcag-old-info">
@@ -2943,11 +2946,10 @@ function qcagOldDesignGo(dir) {
   if (!currentDetailRequest) return;
   const oldList = ksGetOldDesignsForOutlet(currentDetailRequest);
   if (oldList.length === 0) return;
-  _qcagOldDesignIdx = Math.max(0, Math.min(oldList.length - 1, _qcagOldDesignIdx + dir));
-  const codeMap = qcagDesktopComputeRequestCodes();
+  _qcagOldDesignIdx = Math.max(0, Math.min(oldList.length - 1, (_qcagOldDesignIdx || 0) + dir));
   const section = document.getElementById('qcagOldDesignSection');
   if (section) {
-    section.innerHTML = qcagRenderOldDesignViewer(oldList[_qcagOldDesignIdx], _qcagOldDesignIdx, oldList.length, codeMap);
+    section.innerHTML = qcagRenderOldDesignViewer(oldList[_qcagOldDesignIdx], _qcagOldDesignIdx, oldList.length);
   }
 }
 
@@ -3232,8 +3234,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
                     _qcagOldDesignIdx = 0;
                     const oldList = ksGetOldDesignsForOutlet(request);
                     if (oldList.length === 0) return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
-                    const codeMap = qcagDesktopComputeRequestCodes();
-                    return qcagRenderOldDesignViewer(oldList[0], 0, oldList.length, codeMap);
+                    return qcagRenderOldDesignViewer(oldList[0], 0, oldList.length);
                   } catch(e) {
                     console.error('qcagOldDesignSection render error', e);
                     return '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
@@ -3342,9 +3343,8 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
       if (freshList.length === 0) {
         section.innerHTML = '<div class="qcag-detail-muted">Outlet này chưa có thiết kế nào hoàn thành</div>';
       } else {
-        const codeMap = qcagDesktopComputeRequestCodes();
         _qcagOldDesignIdx = Math.min(_qcagOldDesignIdx, freshList.length - 1);
-        section.innerHTML = qcagRenderOldDesignViewer(freshList[_qcagOldDesignIdx], _qcagOldDesignIdx, freshList.length, codeMap);
+        section.innerHTML = qcagRenderOldDesignViewer(freshList[_qcagOldDesignIdx], _qcagOldDesignIdx, freshList.length);
       }
     }
   })().catch(() => {});
