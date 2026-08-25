@@ -2263,31 +2263,48 @@ function safeIsoDate(raw) {
 function ksRowToApp(row, lightweight = false) {
     if (!row) return null;
     let commentsStr = row.comments || '[]';
-    if (lightweight && commentsStr && commentsStr !== '[]') {
-        try {
-            const parsed = JSON.parse(commentsStr);
-            if (Array.isArray(parsed)) {
-                let modified = false;
-                for (let i = 0; i < parsed.length; i++) {
-                    const c = parsed[i];
-                    if (c && Array.isArray(c.images) && c.images.length > 0) {
-                        c.images = c.images.map(img => {
-                            if (typeof img === 'string' && (img.startsWith('data:') || img.length > 500)) {
-                                modified = true;
-                                return '...';
-                            }
-                            return img;
-                        });
-                    }
-                }
-                if (modified) {
-                    commentsStr = JSON.stringify(parsed);
-                }
-            }
-        } catch (e) {
-            // ignore
+    let parsedComments = [];
+    try {
+        const parsed = JSON.parse(commentsStr);
+        if (Array.isArray(parsed)) {
+            parsedComments = parsed;
+        } else if (typeof parsed === 'string' && parsed.trim()) {
+            parsedComments = [{
+                authorRole: 'heineken',
+                authorName: row.production_approved_by || 'Sale Heineken',
+                text: parsed.trim(),
+                commentType: 'edit-request',
+                editCategories: [],
+                createdAt: safeIsoDate(row.editing_requested_at) || safeIsoDate(row.updated_at) || new Date().toISOString()
+            }];
+        }
+    } catch (_) {
+        if (typeof commentsStr === 'string' && commentsStr.trim() && commentsStr !== '[]') {
+            parsedComments = [{
+                authorRole: 'heineken',
+                authorName: row.production_approved_by || 'Sale Heineken',
+                text: commentsStr.trim(),
+                commentType: 'edit-request',
+                editCategories: [],
+                createdAt: safeIsoDate(row.editing_requested_at) || safeIsoDate(row.updated_at) || new Date().toISOString()
+            }];
         }
     }
+
+    if (lightweight && parsedComments.length > 0) {
+        for (let i = 0; i < parsedComments.length; i++) {
+            const c = parsedComments[i];
+            if (c && Array.isArray(c.images) && c.images.length > 0) {
+                c.images = c.images.map(img => {
+                    if (typeof img === 'string' && (img.startsWith('data:') || img.length > 500)) {
+                        return '...';
+                    }
+                    return img;
+                });
+            }
+        }
+    }
+    commentsStr = JSON.stringify(parsedComments);
     return {
         __backendId: row.backend_id || ('db_' + row.id),
         id: row.id,
@@ -3216,6 +3233,7 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         const reason = String((req.body && (req.body.comments || req.body.reason || req.body.rejectReason)) || 'Yêu cầu chỉnh sửa').trim();
         const requestedBy = String((req.body && (req.body.requestedBy || req.body.approvedBy || req.body.saleName || req.body.phone)) || 'Sale Heineken').trim();
         const outletCode = String((req.body && (req.body.outletCode || req.body.outlet_code)) || '').trim();
+        const tkCode = String((req.body && req.body.tkCode) || '').trim();
 
         const codesToUpdate = Array.from(new Set([cleanCode, rawId].filter(Boolean)));
         for (const code of codesToUpdate) {
@@ -3234,6 +3252,65 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         }
 
         try {
+            const whereClauses = ['backend_id = ?'];
+            const whereParams = [rawId];
+            if (tkCode && tkCode.startsWith('TK')) {
+                whereClauses.push('tk_code = ?');
+                whereParams.push(tkCode);
+            }
+            if (outletCode) {
+                whereClauses.push('outlet_code = ?');
+                whereParams.push(outletCode);
+            }
+            const whereClause = whereClauses.join(' OR ');
+
+            const [existingRows] = await pool.query(
+                `SELECT id, comments FROM ks_requests WHERE ${whereClause} LIMIT 1`,
+                whereParams
+            );
+            let commentList = [];
+            if (existingRows && existingRows.length > 0 && existingRows[0].comments) {
+                try {
+                    const parsed = JSON.parse(existingRows[0].comments);
+                    if (Array.isArray(parsed)) {
+                        commentList = parsed;
+                    } else if (typeof parsed === 'string' && parsed.trim()) {
+                        commentList = [{
+                            authorRole: 'heineken',
+                            authorName: requestedBy,
+                            text: parsed.trim(),
+                            commentType: 'edit-request',
+                            editCategories: [],
+                            createdAt: new Date().toISOString()
+                        }];
+                    }
+                } catch (_) {
+                    if (typeof existingRows[0].comments === 'string' && existingRows[0].comments.trim()) {
+                        commentList = [{
+                            authorRole: 'heineken',
+                            authorName: requestedBy,
+                            text: existingRows[0].comments.trim(),
+                            commentType: 'edit-request',
+                            editCategories: [],
+                            createdAt: new Date().toISOString()
+                        }];
+                    }
+                }
+            }
+            // Avoid duplicate if the last comment is already the same edit-request text
+            const lastC = commentList[commentList.length - 1];
+            if (!lastC || lastC.text !== reason || String(lastC.commentType || '').toLowerCase() !== 'edit-request') {
+                commentList.push({
+                    authorRole: 'heineken',
+                    authorName: requestedBy,
+                    text: reason,
+                    commentType: 'edit-request',
+                    editCategories: [],
+                    createdAt: new Date().toISOString()
+                });
+            }
+            const commentsJson = JSON.stringify(commentList);
+
             await pool.query(
                 `UPDATE ks_requests 
                  SET editing_requested_at = NOW(),
@@ -3243,10 +3320,12 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
                      production_approved_at = NOW(),
                      production_reject_reason = ?,
                      updated_at = NOW()
-                 WHERE backend_id = ? OR tk_code = ? OR outlet_code = ?`,
-                [reason, requestedBy, reason, rawId, rawId, (outletCode || rawId)]
+                 WHERE ${whereClause}`,
+                [commentsJson, requestedBy, reason, ...whereParams]
             );
-        } catch (_) {}
+        } catch (dbErr) {
+            console.warn('Sync ks_requests edit error:', dbErr && dbErr.message ? dbErr.message : dbErr);
+        }
 
         wsInvalidate('ks_production_approvals');
         wsInvalidate('pending_orders');

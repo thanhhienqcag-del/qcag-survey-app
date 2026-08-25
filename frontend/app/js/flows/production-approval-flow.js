@@ -1207,18 +1207,92 @@ function confirmRequestEditProduction(idKey, note) {
     item.status = 'pending-edit';
     item.rejectReason = String(note || 'Yêu cầu chỉnh sửa').trim();
 
-    // Send edit request to Desktop QCAG
+    const authorRole = (typeof currentSession !== 'undefined' && currentSession && currentSession.role) ? currentSession.role : 'heineken';
+    const authorName = (typeof currentSession !== 'undefined' && currentSession ? (currentSession.saleName || currentSession.phone) : 'Sale Heineken');
+
+    // FIX: Ưu tiên dùng item.__ksReq (đã map chính xác từ App 2 survey request).
+    // Tránh tìm theo idKey (po_q_...) vì allRequests dùng Firestore UUID → không bao giờ match.
+    let reqObj = item.__ksReq || null;
+    if (!reqObj && typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+        const iQCode = String(item.quoteCode || item.tkCode || '').trim().toLowerCase();
+        const iOutlet = String(item.outletCode || '').trim().toLowerCase();
+        reqObj = allRequests.find(r => {
+            if (!r) return false;
+            // Match theo backendId của ksReq nếu có
+            if (item.__ksReqBackendId && (r.__backendId === item.__ksReqBackendId || r.id === item.__ksReqBackendId)) return true;
+            // Match theo outlet code (ưu tiên)
+            const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
+            if (iOutlet && iOutlet !== '---' && rOutlet && iOutlet === rOutlet) return true;
+            // Match theo quoteCode / tkCode
+            const rQCode = String(r.quoteCode || r.quote_code || r.tkCode || r.tk_code || '').trim().toLowerCase();
+            if (iQCode && rQCode && rQCode === iQCode) return true;
+            return false;
+        }) || null;
+    }
+
+    if (reqObj && window.dataSdk) {
+        let commentsList = [];
+        try {
+            commentsList = (typeof safeParseComments === 'function')
+                ? safeParseComments(reqObj.comments, [])
+                : (Array.isArray(reqObj.comments) ? reqObj.comments : JSON.parse(reqObj.comments || '[]'));
+        } catch (_) { commentsList = []; }
+        const newComment = {
+            authorRole,
+            authorName,
+            text: item.rejectReason,
+            commentType: 'edit-request',
+            editCategories: [],
+            createdAt: new Date().toISOString()
+        };
+        commentsList.push(newComment);
+        const commentsJson = JSON.stringify(commentsList);
+        const ksBackendId = reqObj.__backendId || reqObj.id || item.__ksReqBackendId;
+        window.dataSdk.update({
+            __backendId: ksBackendId,
+            comments: commentsJson,
+            editingRequestedAt: new Date().toISOString(),
+            status: 'processing',
+            updatedAt: new Date().toISOString()
+        }).then(result => {
+            if (result && result.isOk) {
+                // Cập nhật local allRequests để UI nhất quán
+                if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+                    const idx = allRequests.findIndex(r => r.__backendId === ksBackendId || r.id === ksBackendId);
+                    if (idx !== -1) {
+                        allRequests[idx] = Object.assign({}, allRequests[idx], {
+                            comments: commentsJson,
+                            editingRequestedAt: new Date().toISOString(),
+                            status: 'processing'
+                        });
+                    }
+                }
+                // Cập nhật item.__ksReq local
+                if (item.__ksReq) {
+                    item.__ksReq.comments = commentsJson;
+                    item.__ksReq.status = 'processing';
+                }
+            } else {
+                console.warn('[confirmRequestEditProduction] dataSdk update failed:', result);
+            }
+        }).catch(err => console.warn('dataSdk update error:', err));
+    }
+
+    // Thông báo backend App 2 về yêu cầu chỉnh sửa
+    // Gửi đúng backendId của ks_request (nếu có) để backend tìm đúng record
+    const ksBackendIdForApi = (reqObj && (reqObj.__backendId || reqObj.id)) || item.__ksReqBackendId || null;
     const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
         ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
         : 'https://ks-backend-493469512136.asia-southeast1.run.app';
-    fetch(base + '/api/ks/requests/' + encodeURIComponent(idKey) + '/request-edit-production', {
+    fetch(base + '/api/ks/requests/' + encodeURIComponent(ksBackendIdForApi || idKey) + '/request-edit-production', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             note: item.rejectReason,
             comments: item.rejectReason,
             outletCode: item.outletCode || item.outlet_code || '',
-            requestedBy: (typeof currentSession !== 'undefined' && currentSession ? (currentSession.saleName || currentSession.phone) : 'Sale Heineken')
+            tkCode: item.tkCode || '',
+            requestedBy: authorName
         })
     }).catch(err => console.warn('Edit request API error:', err));
 
