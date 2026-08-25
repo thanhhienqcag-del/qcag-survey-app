@@ -2265,10 +2265,16 @@ function ksRowToApp(row, lightweight = false) {
     let commentsStr = row.comments || '[]';
     let parsedComments = [];
     try {
-        const parsed = JSON.parse(commentsStr);
+        let parsed = JSON.parse(commentsStr);
+        if (typeof parsed === 'string') {
+            try {
+                const inner = JSON.parse(parsed);
+                if (Array.isArray(inner)) parsed = inner;
+            } catch (_) {}
+        }
         if (Array.isArray(parsed)) {
             parsedComments = parsed;
-        } else if (typeof parsed === 'string' && parsed.trim()) {
+        } else if (typeof parsed === 'string' && parsed.trim() && parsed.trim() !== '[]') {
             parsedComments = [{
                 authorRole: 'heineken',
                 authorName: row.production_approved_by || 'Sale Heineken',
@@ -2559,6 +2565,38 @@ app.get('/api/ks/requests', async (req, res) => {
         return res.json({ ok: true, data: mapped, paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false } });
     } catch (err) {
         console.error('GET /api/ks/requests error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'fetch_failed' });
+    }
+});
+
+// GET /api/ks/requests/:id — get full request details including comments & images
+app.get('/api/ks/requests/:id', async (req, res, next) => {
+    try {
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ ok: false, error: 'missing_id' });
+        if (id === 'production-approvals' || id === 'health' || id === 'proxy-image') {
+            return next();
+        }
+
+        let rows;
+        if (/^\d+$/.test(id)) {
+            [rows] = await pool.query('SELECT * FROM ks_requests_view WHERE id = ? LIMIT 1', [Number(id)]);
+        } else {
+            [rows] = await pool.query('SELECT * FROM ks_requests_view WHERE backend_id = ? OR tk_code = ? LIMIT 1', [id, id]);
+        }
+        if (!rows || rows.length === 0) {
+            if (/^\d+$/.test(id)) {
+                [rows] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [Number(id)]);
+            } else {
+                [rows] = await pool.query('SELECT * FROM ks_requests WHERE backend_id = ? OR tk_code = ? LIMIT 1', [id, id]);
+            }
+        }
+        if (!rows || rows.length === 0) {
+            return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        return res.json({ ok: true, data: ksRowToApp(rows[0], false) });
+    } catch (err) {
+        console.error('GET /api/ks/requests/:id error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'fetch_failed' });
     }
 });
@@ -3233,7 +3271,6 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         const reason = String((req.body && (req.body.comments || req.body.reason || req.body.rejectReason)) || 'Yêu cầu chỉnh sửa').trim();
         const requestedBy = String((req.body && (req.body.requestedBy || req.body.approvedBy || req.body.saleName || req.body.phone)) || 'Sale Heineken').trim();
         const outletCode = String((req.body && (req.body.outletCode || req.body.outlet_code)) || '').trim();
-        const tkCode = String((req.body && req.body.tkCode) || '').trim();
 
         const codesToUpdate = Array.from(new Set([cleanCode, rawId].filter(Boolean)));
         for (const code of codesToUpdate) {
@@ -3252,21 +3289,9 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         }
 
         try {
-            const whereClauses = ['backend_id = ?'];
-            const whereParams = [rawId];
-            if (tkCode && tkCode.startsWith('TK')) {
-                whereClauses.push('tk_code = ?');
-                whereParams.push(tkCode);
-            }
-            if (outletCode) {
-                whereClauses.push('outlet_code = ?');
-                whereParams.push(outletCode);
-            }
-            const whereClause = whereClauses.join(' OR ');
-
             const [existingRows] = await pool.query(
-                `SELECT id, comments FROM ks_requests WHERE ${whereClause} LIMIT 1`,
-                whereParams
+                `SELECT id, comments FROM ks_requests WHERE backend_id = ? OR tk_code = ? OR outlet_code = ? LIMIT 1`,
+                [rawId, rawId, (outletCode || rawId)]
             );
             let commentList = [];
             if (existingRows && existingRows.length > 0 && existingRows[0].comments) {
@@ -3320,8 +3345,8 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
                      production_approved_at = NOW(),
                      production_reject_reason = ?,
                      updated_at = NOW()
-                 WHERE ${whereClause}`,
-                [commentsJson, requestedBy, reason, ...whereParams]
+                 WHERE backend_id = ? OR tk_code = ? OR outlet_code = ?`,
+                [commentsJson, requestedBy, reason, rawId, rawId, (outletCode || rawId)]
             );
         } catch (dbErr) {
             console.warn('Sync ks_requests edit error:', dbErr && dbErr.message ? dbErr.message : dbErr);

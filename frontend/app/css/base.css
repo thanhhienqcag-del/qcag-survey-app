@@ -2226,57 +2226,6 @@ body.dark .qcag-survey-badge,
   z-index: 11000 !important;
 }
 
-/* Category option rows */
-.edit-cat-option {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px 14px;
-  background: #f9fafb;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 12px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #111827;
-  -webkit-user-select: none;
-  user-select: none;
-  transition: border-color 0.15s, background 0.15s;
-}
-.edit-cat-option:active { background: #f3f4f6; }
-
-/* Checkbox circle */
-.edit-cat-check {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 2px solid #d1d5db;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
-  transition: background 0.15s, border-color 0.15s;
-}
-.edit-cat-check.checked {
-  background: #e6f2ff;
-  border-color: #60a5fa;
-}
-.edit-cat-check.checked::after {
-  content: '';
-  width: 6px;
-  height: 10px;
-  border-right: 2px solid #60a5fa;
-  border-bottom: 2px solid #60a5fa;
-  transform: rotate(40deg) translateY(-1px);
-  display: block;
-}
-/* highlight option row when checked */
-.edit-cat-option:has(.edit-cat-check.checked) {
-  border-color: #60a5fa;
-  background: #eff6ff;
-}
-
 /* ============================================================
    EDIT REQUEST — Comment card
    ============================================================ */
@@ -2375,8 +2324,6 @@ body.dark .qcag-survey-badge,
 .theme-dark .edit-request-sheet textarea#productionRejectInput::placeholder {
   color: #6b7280 !important;
 }
-.theme-dark .edit-cat-option { background: var(--surface-2); border-color: var(--border-1); color: var(--text-main); }
-.theme-dark .edit-cat-check { background: var(--surface-1); border-color: var(--border-1); }
 .theme-dark .comment-item.comment-edit-request { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.3); }
 .theme-dark .cer-header, .theme-dark .cer-body { color: var(--text-main); }
 
@@ -2437,19 +2384,7 @@ body.dark .qcag-survey-badge,
   padding: 0;
 }
 
-/* Dark-mode checked visuals: soft blue accent */
-.theme-dark .edit-cat-check.checked {
-  background: rgba(96,165,250,0.12);
-  border-color: #60a5fa;
-}
-.theme-dark .edit-cat-check.checked::after {
-  border-right: 2px solid #60a5fa;
-  border-bottom: 2px solid #60a5fa;
-}
-.theme-dark .edit-cat-option:has(.edit-cat-check.checked) {
-  border-color: rgba(96,165,250,0.5);
-  background: rgba(59,130,246,0.06);
-}
+
 
 
 .theme-dark .main-nav-btn.active {

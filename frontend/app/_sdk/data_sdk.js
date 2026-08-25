@@ -632,14 +632,15 @@
       oldContentExtra: true,
       statusImages: true,
       designImages: true,
-      acceptanceImages: true
+      acceptanceImages: true,
+      comments: true
     };
     if (!protectedFields[key]) return false;
     if (incoming == null) return String(existing || '').trim().length > 0;
     if ((key === 'content' || key === 'oldContentExtra') && String(incoming).trim() === '' && String(existing || '').trim().length > 0) {
       return true;
     }
-    if ((key === 'statusImages' || key === 'designImages' || key === 'acceptanceImages') && typeof incoming === 'string') {
+    if ((key === 'statusImages' || key === 'designImages' || key === 'acceptanceImages' || key === 'comments') && typeof incoming === 'string') {
       var trimmed = String(incoming).trim();
       if (trimmed === '[]' || trimmed === '["..."]') {
         var existingArr = _safeParseJsonArray(existing);

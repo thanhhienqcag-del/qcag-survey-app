@@ -3,7 +3,7 @@ const { Storage } = require('@google-cloud/storage');
 const storage = new Storage();
 
 async function uploadBuffer(buffer, filename, mimetype) {
-    const bucketName = process.env.GCS_BUCKET;
+    const bucketName = process.env.GCS_BUCKET || 'qcag-483014-qcag-images';
     if (!bucketName) {
         const err = new Error('GCS_BUCKET is not set');
         err.code = 'GCS_BUCKET_MISSING';

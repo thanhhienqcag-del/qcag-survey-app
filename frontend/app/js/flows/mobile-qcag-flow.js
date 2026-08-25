@@ -92,13 +92,15 @@
     var status = String(req && req.status || 'pending').toLowerCase();
     if (type === 'warranty') {
       return (status === 'done' || status === 'processed')
-        ? { label: 'Da bao hanh', cls: 'done' }
-        : { label: 'Cho kiem tra', cls: 'processing' };
+        ? { label: 'Đã Bảo hành', cls: 'done' }
+        : { label: 'Chờ kiểm tra', cls: 'processing' };
     }
-    if (status === 'done' || status === 'processed') return { label: 'Hoan thanh', cls: 'done' };
+    var hasEdit = (typeof qcagDesktopIsPendingEditRequest === 'function') ? qcagDesktopIsPendingEditRequest(req) : false;
+    if (hasEdit) return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
+    if (status === 'done' || status === 'processed') return { label: 'Hoàn thành', cls: 'done' };
     var designImgs = _parseJson(req && req.designImages, []);
-    if (!designImgs || !designImgs.length) return { label: 'Cho thiet ke', cls: 'pending-design' };
-    return { label: 'Dang xu ly', cls: 'processing' };
+    if (!designImgs || !designImgs.length) return { label: 'Chờ thiết kế', cls: 'pending-design' };
+    return { label: 'Đang xử lý', cls: 'processing' };
   }
 
   function _isDone(req) {
@@ -263,16 +265,24 @@
 
     var notifications = [];
     (Array.isArray(allRequests) ? allRequests : []).forEach(function (req) {
-      var comments = _parseJson(req.comments, []);
+      var comments = (typeof safeParseComments === 'function') ? safeParseComments(req.comments, []) : _parseJson(req.comments, []);
       comments.forEach(function (comment) {
-        if (!comment || !comment.text) return;
+        if (!comment || (!comment.text && (!Array.isArray(comment.images) || comment.images.length === 0))) return;
         var role = String(comment.authorRole || '').toLowerCase();
         if (role === 'qcag' || role === 'system') return;
+        var isEdit = String(comment.commentType || '').toLowerCase() === 'edit-request';
+        var author = comment.authorName || 'Sale Heineken';
+        var hasImgs = Array.isArray(comment.images) && comment.images.length > 0;
+        var textContent = String(comment.text || '').trim();
+        if (!textContent && hasImgs) textContent = '[Ảnh đính kèm]';
         notifications.push({
           requestId: req.__backendId,
           outletName: req.outletName || '-',
           outletCode: req.outletCode || '-',
-          text: String(comment.text || '').trim(),
+          text: textContent,
+          isEdit: isEdit,
+          author: author,
+          hasImgs: hasImgs,
           createdAt: comment.createdAt || req.updatedAt || req.createdAt
         });
       });
@@ -291,11 +301,13 @@
     empty.classList.add('hidden');
     list.innerHTML = notifications.map(function (item) {
       var date = item.createdAt ? new Date(item.createdAt).toLocaleString('vi-VN') : '-';
+      var editTag = item.isEdit ? '<span style="display:inline-block;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:600;margin-right:6px;">⚠️ Yêu cầu sửa</span>' : '';
+      var imgTag = item.hasImgs ? '<span style="font-size:11px;color:#3b82f6;margin-left:4px;">📎 có ảnh</span>' : '';
       return [
         '<div class="bg-gray-50 rounded-xl p-3 border border-gray-200 active:bg-gray-100 cursor-pointer" onclick="showRequestDetail(\'' + String(item.requestId || '').replace(/'/g, '&#39;') + '\')">',
-        '  <div class="text-sm font-semibold text-gray-900 truncate">' + escapeHtml(item.outletName) + ' (' + escapeHtml(item.outletCode) + ')</div>',
-        '  <div class="text-sm text-gray-600 mt-1 line-clamp-2">' + escapeHtml(item.text) + '</div>',
-        '  <div class="text-xs text-gray-400 mt-2">Sale Heineken · ' + escapeHtml(date) + '</div>',
+        '  <div class="text-sm font-semibold text-gray-900 truncate">' + editTag + escapeHtml(item.outletName) + ' (' + escapeHtml(item.outletCode) + ')</div>',
+        '  <div class="text-sm text-gray-600 mt-1 line-clamp-2">' + escapeHtml(item.text) + imgTag + '</div>',
+        '  <div class="text-xs text-gray-400 mt-2">' + escapeHtml(item.author) + ' · ' + escapeHtml(date) + '</div>',
         '</div>'
       ].join('');
     }).join('');

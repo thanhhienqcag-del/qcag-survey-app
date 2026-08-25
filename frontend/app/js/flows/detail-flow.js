@@ -5,6 +5,45 @@
 'use strict';
 
 // Ownership guard: only allow viewing requests that belong to currentSession.
+// Ownership guard: only allow viewing requests that belong to currentSession.
+function safeParseComments(raw, fallback = []) {
+  if (!raw) return fallback;
+  if (Array.isArray(raw)) return raw;
+  try {
+    let p = JSON.parse(raw);
+    if (typeof p === 'string') {
+      try {
+        const p2 = JSON.parse(p);
+        if (Array.isArray(p2)) p = p2;
+      } catch (_) {}
+    }
+    if (Array.isArray(p)) return p;
+    if (typeof p === 'string' && p.trim() && p.trim() !== '[]') {
+      return [{
+        authorRole: 'heineken',
+        authorName: 'Sale Heineken',
+        text: p.trim(),
+        commentType: 'edit-request',
+        editCategories: [],
+        createdAt: new Date().toISOString()
+      }];
+    }
+    return fallback;
+  } catch (e) {
+    if (typeof raw === 'string' && raw.trim() && raw.trim() !== '[]' && !raw.trim().startsWith('{') && !raw.trim().startsWith('[')) {
+      return [{
+        authorRole: 'heineken',
+        authorName: 'Sale Heineken',
+        text: raw.trim(),
+        commentType: 'edit-request',
+        editCategories: [],
+        createdAt: new Date().toISOString()
+      }];
+    }
+    return fallback;
+  }
+}
+
 function isRequestOwnedByCurrentSession(request) {
   try {
     if (!request) return false;
@@ -83,11 +122,19 @@ async function addDesignComment(backendId) {
   _renderDetailCommentPreview();
 
   const request = allRequests[reqIdx];
-  let comments = [];
-  try { comments = JSON.parse(request.comments || '[]'); } catch (e) { comments = []; }
+  let comments = safeParseComments(
+    (currentDetailRequest && currentDetailRequest.__backendId === backendId && currentDetailRequest.comments)
+      ? currentDetailRequest.comments
+      : request.comments,
+    []
+  );
 
-  const authorRole = (currentSession && currentSession.role) || 'unknown';
-  const authorName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Người dùng';
+  const authorRole = (currentSession && currentSession.role) || 'heineken';
+  let authorName = (currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || '';
+  if (!authorName) {
+    const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+    authorName = reqObj.saleName || reqObj.name || reqObj.phone || request.createdByName || (authorRole === 'qcag' ? 'QCAG' : 'Sale');
+  }
 
   // Upload images if any
   let uploadedImgs = [];
@@ -124,6 +171,9 @@ async function addDesignComment(backendId) {
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) { Object.assign(allRequests[idx], { comments: commentsJson, updatedAt: patchPayload.updatedAt }); }
+      if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+        Object.assign(currentDetailRequest, { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+      }
       // Push notification for comment
       try {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
@@ -142,6 +192,9 @@ async function addDesignComment(backendId) {
     }
   } else {
     Object.assign(allRequests[reqIdx], { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+    if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+      Object.assign(currentDetailRequest, { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+    }
     saveAllRequestsToStorage();
     hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
@@ -169,11 +222,19 @@ async function addDetailComment(backendId) {
   _renderDetailCommentPreview();
 
   const request = allRequests[reqIdx];
-  let comments = [];
-  try { comments = JSON.parse(request.comments || '[]'); } catch (e) { comments = []; }
+  let comments = safeParseComments(
+    (currentDetailRequest && currentDetailRequest.__backendId === backendId && currentDetailRequest.comments)
+      ? currentDetailRequest.comments
+      : request.comments,
+    []
+  );
 
-  const authorRole = (currentSession && currentSession.role) || 'unknown';
-  const authorName = (currentSession && (currentSession.saleName || currentSession.phone)) || 'Người dùng';
+  const authorRole = (currentSession && currentSession.role) || 'heineken';
+  let authorName = (currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || '';
+  if (!authorName) {
+    const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+    authorName = reqObj.saleName || reqObj.name || reqObj.phone || request.createdByName || (authorRole === 'qcag' ? 'QCAG' : 'Sale');
+  }
 
   // Upload images if any
   let uploadedImgs = [];
@@ -210,6 +271,9 @@ async function addDetailComment(backendId) {
       showToast('Đã gửi bình luận');
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) { Object.assign(allRequests[idx], { comments: commentsJson, updatedAt: patchPayload.updatedAt }); }
+      if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+        Object.assign(currentDetailRequest, { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+      }
       // Push notification for comment
       try {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
@@ -227,6 +291,9 @@ async function addDetailComment(backendId) {
     }
   } else {
     Object.assign(allRequests[reqIdx], { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+    if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+      Object.assign(currentDetailRequest, { comments: commentsJson, updatedAt: patchPayload.updatedAt });
+    }
     saveAllRequestsToStorage();
     hideLoadingOverlay();
     showToast('Đã gửi bình luận (lưu local)');
@@ -439,8 +506,7 @@ async function showRequestDetail(id) {
       </div>`;
   }
 
-  let comments = [];
-  try { comments = JSON.parse(request.comments || '[]'); } catch (e) { comments = []; }
+  let comments = safeParseComments(request2.comments, []);
   const mobileTabsHtml = isMobile ? `
     <div id="mobileTabsBar" class="mobile-tabs-sticky">
       <button id="mobileTabDetailBtn" class="mobile-tab-btn active" onclick="switchDetailMobileTab('detail')">Chi Tiết</button>
@@ -634,9 +700,15 @@ async function showRequestDetail(id) {
     : comments.map(c => {
       const isEditRequest = (c.commentType === 'edit-request');
       const isSystem = (String(c.authorRole || '').toLowerCase() === 'system' || String(c.authorRole || '').toLowerCase() === 'hệ thống');
-      const isMe = c.authorRole === _myRole && c.authorName === _myName;
+      let authorName = (c.authorName || '').trim();
+      const roleLower = String(c.authorRole || '').toLowerCase();
+      if ((!authorName || authorName === 'Sale Heineken' || authorName === 'Người dùng' || authorName === 'heineken' || authorName === 'unknown') && roleLower !== 'qcag' && roleLower !== 'system') {
+        const reqObj = (() => { try { return JSON.parse(request2.requester || '{}'); } catch (_) { return {}; } })();
+        authorName = reqObj.saleName || reqObj.name || request2.createdByName || reqObj.phone || (roleLower === 'heineken' ? 'Sale' : 'Người dùng');
+      }
+      const isMe = c.authorRole === _myRole && (c.authorName === _myName || authorName === _myName);
       const sideClass = isMe ? 'comment-me' : 'comment-other';
-      const authorStr = escapeHtml(c.authorName || c.authorRole || 'Người dùng');
+      const authorStr = escapeHtml(authorName || (roleLower === 'qcag' ? 'QCAG' : 'Sale'));
       const roleStr = escapeHtml(c.authorRole || '');
       const timeStr = new Date(c.createdAt).toLocaleString('vi-VN');
       const rawText = (c.text || '').toString().trim();
@@ -660,8 +732,9 @@ async function showRequestDetail(id) {
           displayText = '';
         }
         const displayTextStr = escapeHtml(displayText);
-        const catsHtml = catsArr.length > 0
-          ? '<div class="cer-cats-inline">' + catsArr.map(ct => escapeHtml(ct)).join(', ') + '</div>'
+        const cImgs = Array.isArray(c.images) ? c.images : [];
+        const imgsHtml = cImgs.length > 0
+          ? '<div class="comment-imgs">' + cImgs.map(img => `<img src="${escapeHtml(img)}" class="comment-img-thumb" onclick="showImageFull(this.src,false)">`).join('') + '</div>'
           : '';
         return '<div class="comment-item ' + sideClass + '">' +
           '<div class="comment-meta"><strong>' + authorStr + '</strong>' +
@@ -671,8 +744,8 @@ async function showRequestDetail(id) {
               '<svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>' +
               '<span class="cer-tag-main">Yêu cầu chỉnh sửa</span>' +
             '</div>' +
-            catsHtml +
             (displayTextStr ? '<div class="comment-body">' + displayTextStr + '</div>' : '') +
+            imgsHtml +
             '<div class="comment-time-inbubble">' + timeStr + '</div>' +
           '</div>' +
         '</div>';
@@ -1060,24 +1133,44 @@ async function submitQuoteEditRequest(backendId) {
       editCategories: ['Báo giá / Thiết kế']
     };
 
-    let commentsList = [];
-    try { commentsList = JSON.parse(req.comments || '[]'); } catch (_) {}
+    let commentsList = safeParseComments(req.comments, []);
     commentsList.push(newComment);
 
     const updated = {
-      ...req,
-      status: 'edit_requested',
+      __backendId: req.__backendId,
+      status: 'processing',
+      editingRequestedAt: new Date().toISOString(),
       comments: JSON.stringify(commentsList),
       updatedAt: new Date().toISOString()
     };
 
     if (window.dataSdk) {
       await window.dataSdk.update(updated);
+      const idx = allRequests.findIndex(r => r.__backendId === backendId);
+      if (idx !== -1) Object.assign(allRequests[idx], updated);
+      if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+        Object.assign(currentDetailRequest, updated);
+      }
     } else {
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
-      if (idx !== -1) allRequests[idx] = updated;
+      if (idx !== -1) Object.assign(allRequests[idx], updated);
+      if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+        Object.assign(currentDetailRequest, updated);
+      }
       saveAllRequestsToStorage();
     }
+
+    try {
+      const outletLabel = req.outletName || req.outletCode || 'Outlet';
+      if (typeof sendPushNotification === 'function') {
+        sendPushNotification({
+          title: '⚠️ Yêu cầu chỉnh sửa báo giá',
+          body: `${myName} vừa yêu cầu chỉnh sửa báo giá cho ${outletLabel}: ${text.slice(0, 100)}`,
+          role: 'qcag',
+          data: { backendId: backendId }
+        });
+      }
+    } catch (e) { /* non-fatal */ }
 
     try {
       if (typeof sendPushNotification === 'function') {
@@ -2258,18 +2351,28 @@ async function uploadAcceptance(input) {
 
 function qcagRefreshDesignModalComments(request) {
   try {
-    const comments = JSON.parse(request.comments || '[]');
+    const comments = safeParseComments(request ? request.comments : null, []);
     const commentsEl = document.getElementById('designComments');
     if (commentsEl) {
       if (!comments || comments.length === 0) {
         commentsEl.innerHTML = '<div class="text-sm text-gray-400">Chưa có bình luận</div>';
       } else {
-        commentsEl.innerHTML = comments.map(c => `
+        commentsEl.innerHTML = comments.map(c => {
+          const isEditReq = String(c.commentType || '').toLowerCase() === 'edit-request';
+          const isResolved = String(c.commentType || '').toLowerCase() === 'edit-resolved';
+          const cImgs = Array.isArray(c.images) ? c.images : [];
+          const catsArr = Array.isArray(c.editCategories) ? c.editCategories : [];
+          return `
           <div class="comment-item">
             <div class="comment-meta"><strong>${escapeHtml(c.authorName || c.authorRole || 'Người dùng')}</strong> <span class="comment-role">${escapeHtml(c.authorRole || '')}</span> <span class="comment-time">${new Date(c.createdAt).toLocaleString('vi-VN')}</span></div>
-            <div class="comment-body">${escapeHtml(c.text)}</div>
+            ${isEditReq ? `<div class="cer-tag-inline" style="margin-bottom:4px;"><span class="cer-tag-main">Yêu cầu chỉnh sửa</span></div>` : ''}
+            ${isResolved ? `<div class="cer-tag-inline" style="margin-bottom:4px;"><span class="cer-tag-main" style="background:#10b981;color:#fff;">Đã chỉnh sửa</span></div>` : ''}
+            ${catsArr.length > 0 ? `<div class="cer-cats-inline" style="margin-bottom:4px;">${catsArr.map(ct => escapeHtml(ct)).join(', ')}</div>` : ''}
+            <div class="comment-body">${escapeHtml(c.text || '')}</div>
+            ${cImgs.length > 0 ? `<div class="comment-imgs" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${cImgs.map(img => `<img src="${escapeHtml(img)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;" onclick="showImageFull(this.src,false)">`).join('')}</div>` : ''}
           </div>
-        `).join('');
+        `;
+        }).join('');
       }
       // auto-scroll to bottom of comments
       setTimeout(() => { if (commentsEl) commentsEl.scrollTop = commentsEl.scrollHeight; }, 30);
@@ -3025,30 +3128,13 @@ function attachEditRequestPaste() {
 }
 
 function openEditRequestSheet() {
-  _editRequestCategories = [];
   _editRequestPendingImages = [];
   _renderEditRequestImgPreview();
-  // reset checkboxes
-  ['editCat_noiDung', 'editCat_hangMuc', 'editCat_brand'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.classList.remove('checked'); }
-  });
-  // reset textarea
   const ta = document.getElementById('editRequestInput');
   if (ta) ta.value = '';
-  // show step 2 directly, hide step 1 (bypassed)
-  const s1 = document.getElementById('editSheetStep1');
-  const s2 = document.getElementById('editSheetStep2');
-  if (s1) s1.classList.add('hidden');
-  if (s2) s2.classList.remove('hidden');
-  const label = document.getElementById('editSheetCategLabel');
-  if (label) label.textContent = 'Nhập nội dung chỉnh sửa:';
-  // open overlay
   const overlay = document.getElementById('editRequestSheet');
   if (overlay) { overlay.classList.remove('hidden'); requestAnimationFrame(() => overlay.classList.add('sheet-open')); }
-  // attach clipboard paste listener
   attachEditRequestPaste();
-  // auto-focus textarea
   setTimeout(() => { if (ta) ta.focus(); }, 150);
 }
 
@@ -3061,35 +3147,6 @@ function closeEditRequestSheet() {
 
 function closeEditRequestSheetOnBackdrop(e) {
   if (e.target === document.getElementById('editRequestSheet')) closeEditRequestSheet();
-}
-
-function toggleEditCategory(label) {
-  const idMap = { 'Sửa nội dung': 'editCat_noiDung', 'Thay đổi hạng mục': 'editCat_hangMuc', 'Đổi brand': 'editCat_brand' };
-  const idx = _editRequestCategories.indexOf(label);
-  if (idx === -1) {
-    _editRequestCategories.push(label);
-  } else {
-    _editRequestCategories.splice(idx, 1);
-  }
-  const checkEl = document.getElementById(idMap[label]);
-  if (checkEl) checkEl.classList.toggle('checked', _editRequestCategories.includes(label));
-}
-
-function backToEditCategories() {
-  document.getElementById('editSheetStep1').classList.remove('hidden');
-  document.getElementById('editSheetStep2').classList.add('hidden');
-}
-
-function proceedEditRequest() {
-  if (_editRequestCategories.length === 0) {
-    showToast('Vui lòng chọn ít nhất một nội dung cần chỉnh sửa');
-    return;
-  }
-  const label = document.getElementById('editSheetCategLabel');
-  if (label) label.textContent = 'Loại: ' + _editRequestCategories.join(', ');
-  document.getElementById('editSheetStep1').classList.add('hidden');
-  document.getElementById('editSheetStep2').classList.remove('hidden');
-  setTimeout(() => { const ta = document.getElementById('editRequestInput'); if (ta) ta.focus(); }, 100);
 }
 
 async function submitEditRequest() {
@@ -3112,14 +3169,20 @@ async function submitEditRequest() {
 
   const backendId = currentDetailRequest.__backendId;
   const reqIdx = allRequests.findIndex(r => r.__backendId === backendId);
-  if (reqIdx === -1) { showToast('Không tìm thấy yêu cầu'); return; }
+  if (reqIdx === -1 && !currentDetailRequest) { showToast('Không tìm thấy yêu cầu'); return; }
 
-  const request = allRequests[reqIdx];
-  let comments = [];
-  try { comments = JSON.parse(request.comments || '[]'); } catch (e) { comments = []; }
+  const request = reqIdx !== -1 ? allRequests[reqIdx] : currentDetailRequest;
+  let comments = safeParseComments(
+    (currentDetailRequest && currentDetailRequest.comments) ? currentDetailRequest.comments : request.comments,
+    []
+  );
 
-  const authorRole = (currentSession && currentSession.role) || 'unknown';
-  const authorName = (currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Người dùng';
+  const authorRole = (currentSession && currentSession.role) || 'heineken';
+  let authorName = (currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || '';
+  if (!authorName) {
+    const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+    authorName = reqObj.saleName || reqObj.name || reqObj.phone || request.createdByName || (authorRole === 'qcag' ? 'QCAG' : 'Sale');
+  }
 
   let finalText = text;
   if (String(authorRole).toLowerCase() === 'qcag') {
@@ -3157,7 +3220,6 @@ async function submitEditRequest() {
     authorName,
     text: finalText,
     commentType: 'edit-request',
-    editCategories: [..._editRequestCategories],
     ...(uploadedImgs.length > 0 ? { images: uploadedImgs } : {}),
     createdAt: new Date().toISOString()
   };
@@ -3195,20 +3257,38 @@ async function submitEditRequest() {
       // Merge changes into existing record (don't replace — updated is partial)
       const idx = allRequests.findIndex(r => r.__backendId === backendId);
       if (idx !== -1) Object.assign(allRequests[idx], updated);
+      if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+        Object.assign(currentDetailRequest, updated);
+      }
+      if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[backendId]) {
+        Object.assign(_qcagDesktopFullRequestCache[backendId], updated);
+      }
+      // Push notification for Edit Request
+      try {
+        const outletLabel = request.outletName || request.outletCode || 'Outlet';
+        if (typeof sendPushNotification === 'function') {
+          if (String(authorRole).toLowerCase() === 'heineken') {
+            sendPushNotification({
+              title: '⚠️ Yêu cầu chỉnh sửa mới',
+              body: `${authorName} vừa gửi yêu cầu chỉnh sửa cho ${outletLabel}: ${text.slice(0, 100)}`,
+              role: 'qcag',
+              data: { backendId: backendId }
+            });
+          } else {
+            const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+            sendPushNotification({
+              title: '⚠️ Yêu cầu chỉnh sửa từ QCAG',
+              body: `${authorName} vừa gửi yêu cầu chỉnh sửa cho ${outletLabel}: ${text.slice(0, 100)}`,
+              phone: reqObj.phone,
+              saleCode: reqObj.saleCode,
+              data: { backendId: backendId }
+            });
+          }
+        }
+      } catch (e) { /* non-fatal */ }
+
       // Sync with Production Approvals flow if matching production item exists
       try {
-        const base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
-            ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
-            : 'https://ks-backend-493469512136.asia-southeast1.run.app';
-        fetch(base + '/api/ks/requests/' + encodeURIComponent(backendId) + '/request-edit-production', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                note: text,
-                requestedBy: authorName
-            })
-        }).catch(err => console.warn('Sync production-edit error:', err));
-
         if (typeof _productionApprovalItems !== 'undefined' && Array.isArray(_productionApprovalItems)) {
             const prodItem = _productionApprovalItems.find(i => (i.__backendId || i.id) == backendId);
             if (prodItem) {
@@ -3227,9 +3307,6 @@ async function submitEditRequest() {
             window._qcagDesktopStatusFilter = 'processing';
             window._qcagRequestsVersion = (window._qcagRequestsVersion || 0) + 1;
             if (window._qcagRequestCodeCache) window._qcagRequestCodeCache.version = 0;
-            if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
-              delete _qcagDesktopFullRequestCache[backendId];
-            }
             if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
             if (typeof openQCAGDesktopRequest === 'function') {
               openQCAGDesktopRequest(backendId, false, true);
@@ -3245,6 +3322,12 @@ async function submitEditRequest() {
     }
   } else {
     Object.assign(allRequests[reqIdx], updated);
+    if (currentDetailRequest && currentDetailRequest.__backendId === backendId) {
+      Object.assign(currentDetailRequest, updated);
+    }
+    if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[backendId]) {
+      Object.assign(_qcagDesktopFullRequestCache[backendId], updated);
+    }
     saveAllRequestsToStorage();
     hideLoadingOverlay();
     showToast('Đã gửi yêu cầu chỉnh sửa (lưu local)');
