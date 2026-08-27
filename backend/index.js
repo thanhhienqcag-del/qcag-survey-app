@@ -2297,18 +2297,41 @@ function ksRowToApp(row, lightweight = false) {
         }
     }
 
-    if (lightweight && parsedComments.length > 0) {
-        for (let i = 0; i < parsedComments.length; i++) {
-            const c = parsedComments[i];
-            if (c && Array.isArray(c.images) && c.images.length > 0) {
-                c.images = c.images.map(img => {
-                    if (typeof img === 'string' && (img.startsWith('data:') || img.length > 500)) {
-                        return '...';
-                    }
-                    return img;
-                });
+    let statusImgs = row.status_images || '[]';
+    let designImgs = row.design_images || '[]';
+    let acceptImgs = row.acceptance_images || '[]';
+    let oldImgs = row.old_content_images || '[]';
+
+    if (lightweight) {
+        if (parsedComments.length > 0) {
+            for (let i = 0; i < parsedComments.length; i++) {
+                const c = parsedComments[i];
+                if (c && Array.isArray(c.images) && c.images.length > 0) {
+                    c.images = c.images.map(img => {
+                        if (typeof img === 'string' && (img.startsWith('data:') || img.length > 500)) {
+                            return '...';
+                        }
+                        return img;
+                    });
+                }
             }
         }
+        const stripHeavyImages = (str) => {
+            if (!str || str === '[]') return '[]';
+            if (str.includes('data:image') || str.length > 2000) {
+                try {
+                    const arr = JSON.parse(str);
+                    if (Array.isArray(arr)) {
+                        return JSON.stringify(arr.map(img => (typeof img === 'string' && (img.startsWith('data:') || img.length > 500)) ? '...' : img));
+                    }
+                } catch (_) {}
+            }
+            return str;
+        };
+        statusImgs = stripHeavyImages(statusImgs);
+        designImgs = stripHeavyImages(designImgs);
+        acceptImgs = stripHeavyImages(acceptImgs);
+        oldImgs = stripHeavyImages(oldImgs);
     }
     commentsStr = JSON.stringify(parsedComments);
     return {
@@ -2328,10 +2351,10 @@ function ksRowToApp(row, lightweight = false) {
         content: row.content || '',
         oldContent: Boolean(row.old_content),
         oldContentExtra: row.old_content_extra || '',
-        oldContentImages: row.old_content_images || '[]',
-        statusImages: row.status_images || '[]',
-        designImages: row.design_images || '[]',
-        acceptanceImages: row.acceptance_images || '[]',
+        oldContentImages: oldImgs,
+        statusImages: statusImgs,
+        designImages: designImgs,
+        acceptanceImages: acceptImgs,
         comments: commentsStr,
         requester: row.requester || '{}',
         status: row.status || 'pending',

@@ -185,7 +185,7 @@ function renderNotifications() {
 			`;
 		}
 		return `
-			<div class="bg-gray-50 rounded-xl p-3 border border-gray-200 active:bg-gray-100 cursor-pointer" onclick="showRequestDetail('${item.requestId}')">
+			<div class="bg-gray-50 rounded-xl p-3 border border-gray-200 active:bg-gray-100 cursor-pointer" onclick="if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof showQCAGDesktopDetail === 'function') { showQCAGDesktopDetail('${item.requestId}'); } else { showRequestDetail('${item.requestId}'); }">
 				<div class="flex items-center justify-between gap-3">
 					<div class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(item.outletName)} (${escapeHtml(item.outletCode)})</div>
 					<span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-900 text-white flex-shrink-0">Admin QCAG</span>

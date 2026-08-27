@@ -3005,6 +3005,62 @@ function qcagOldDesignGo(dir) {
   }
 }
 
+
+function qcagDesktopBuildEditRequestAlertBannerHtml(req) {
+  if (!req || !qcagDesktopIsPendingEditRequest(req)) return '';
+  const comments = qcagDesktopParseJson(req.comments, []);
+  let latestEditComment = null;
+  for (let i = comments.length - 1; i >= 0; i--) {
+    const c = comments[i];
+    if (c && String(c.commentType || '').toLowerCase() === 'edit-request') {
+      latestEditComment = c;
+      break;
+    }
+  }
+
+  const editTime = (latestEditComment && latestEditComment.createdAt) || req.editingRequestedAt || req.updatedAt || '';
+  const dateStr = editTime ? new Date(editTime).toLocaleString('vi-VN') : '';
+  let author = (latestEditComment && latestEditComment.authorName) || '';
+  if (!author || author === 'Sale Heineken' || author === 'Người dùng' || author === 'heineken') {
+    const reqObj = (() => { try { return JSON.parse(req.requester || '{}'); } catch (_) { return {}; } })();
+    author = reqObj.saleName || reqObj.name || req.createdByName || reqObj.phone || 'Sale Heineken';
+  }
+
+  let text = (latestEditComment && latestEditComment.text) ? latestEditComment.text.trim() : (req.editReason || req.productionRejectReason || 'Yêu cầu điều chỉnh lại thiết kế.');
+  if (text.startsWith('Yêu cầu chỉnh sửa: ')) text = text.slice('Yêu cầu chỉnh sửa: '.length).trim();
+
+  const imgs = (latestEditComment && Array.isArray(latestEditComment.images)) ? latestEditComment.images : [];
+  const imgsHtml = imgs.length > 0
+    ? `<div class="alert-imgs">${imgs.map(url => `<img class="alert-img-thumb" src="${escapeHtml(url)}" onclick="showImageFull(this.src,false)" alt="ảnh đính kèm">`).join('')}</div>`
+    : '';
+
+  return `
+    <div class="qcag-edit-request-alert-banner">
+      <div class="alert-top">
+        <div class="alert-title">
+          <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <span>Yêu cầu chỉnh sửa</span>
+        </div>
+        <div class="alert-time">🕒 ${escapeHtml(dateStr)}</div>
+      </div>
+      <div class="alert-body">
+        <div class="alert-author">👤 Người yêu cầu: ${escapeHtml(author)}</div>
+        <div style="margin-top:4px;">${escapeHtml(text)}</div>
+        ${imgsHtml}
+      </div>
+    </div>
+  `;
+}
+
+window.showQCAGDesktopDetail = function(id) {
+  if (!id) return;
+  if (typeof qcagNavClosePanel === 'function') qcagNavClosePanel();
+  if (typeof qcagNavCloseQuickView === 'function') qcagNavCloseQuickView();
+  if (typeof openQCAGDesktopRequest === 'function') {
+    openQCAGDesktopRequest(id, false, true);
+  }
+};
+
 async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
   if (!shouldUseQCAGDesktop()) return;
 
