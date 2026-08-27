@@ -2323,6 +2323,7 @@ function ksRowToApp(row, lightweight = false) {
         outletLng: row.outlet_lng || '',
         locationSource: row.location_source || 'manual',
         phone: row.phone || '',
+        outletPhone: row.outlet_phone || row.phone || '',
         items: row.items || '[]',
         content: row.content || '',
         oldContent: Boolean(row.old_content),

@@ -539,7 +539,7 @@
           </div>
 
           <button class="qcag-nav-pdf-btn" onclick="qcagNavListPrintPDF()" title="In PDF phiếu chi tiết từng điểm">In PDF Chi Tiết</button>
-          <button class="qcag-nav-pdf-btn" onclick="qcagNavListPrintSummaryPDF()" title="In Bảng Danh Sách tổng hợp nhiều điểm trên 1 trang A4">In Bảng Danh Sách</button>
+          <button class="qcag-nav-pdf-btn qcag-nav-pdf-summary-btn" onclick="qcagNavListPrintSummaryPDF()" title="In Bảng Danh Sách tổng hợp nhiều điểm trên 1 trang A4">In Bảng Danh Sách</button>
           <button class="qcag-nav-export-btn" onclick="qcagNavListExportCSV()" title="Xuất dữ liệu Excel">Xuất Excel</button>
           <button class="qcag-nav-selectall-btn" onclick="qcagNavListSelectAllVisible()" title="Chọn tất cả danh sách đang hiển thị">Chọn tất cả</button>
           <button class="qcag-nav-clear-btn" onclick="qcagNavListClearSelection()" title="Bỏ chọn tất cả">Bỏ chọn</button>
@@ -548,14 +548,30 @@
         <!-- Compact Status Filter Pills Bar -->
         <div class="qcag-nav-list-filter-bar" id="qcagNavListFilterBar">
           <span class="qcag-nav-filter-label">Trạng thái:</span>
-          <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">Tất cả</button>
-          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">Chờ khảo sát <span class="qcag-pill-cnt" id="cntStatusSurvey"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">Chờ thiết kế <span class="qcag-pill-cnt" id="cntStatusDesign"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">Chờ chỉnh sửa <span class="qcag-pill-cnt" id="cntStatusEdit"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">Chờ xác nhận <span class="qcag-pill-cnt" id="cntStatusConfirm"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">Đang xử lý <span class="qcag-pill-cnt" id="cntStatusProcessing"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">Chờ xử lý <span class="qcag-pill-cnt" id="cntStatusPending"></span></button>
-          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">Hoàn thành <span class="qcag-pill-cnt" id="cntStatusDone"></span></button>
+          <button class="qcag-nav-filter-pill active" data-status="" onclick="qcagNavListSetStatusFilter(this, '')">
+            <span>Tất cả</span><span class="qcag-pill-badge" id="cntStatusAll"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="survey" onclick="qcagNavListSetStatusFilter(this, 'survey')">
+            <span>Chờ khảo sát</span><span class="qcag-pill-badge" id="cntStatusSurvey"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="pending-design" onclick="qcagNavListSetStatusFilter(this, 'pending-design')">
+            <span>Chờ thiết kế</span><span class="qcag-pill-badge" id="cntStatusDesign"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="pending-edit" onclick="qcagNavListSetStatusFilter(this, 'pending-edit')">
+            <span>Chờ chỉnh sửa</span><span class="qcag-pill-badge" id="cntStatusEdit"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="pending-confirm" onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">
+            <span>Chờ xác nhận</span><span class="qcag-pill-badge" id="cntStatusConfirm"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="processing" onclick="qcagNavListSetStatusFilter(this, 'processing')">
+            <span>Đang xử lý</span><span class="qcag-pill-badge" id="cntStatusProcessing"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="pending" onclick="qcagNavListSetStatusFilter(this, 'pending')">
+            <span>Chờ xử lý</span><span class="qcag-pill-badge" id="cntStatusPending"></span>
+          </button>
+          <button class="qcag-nav-filter-pill" data-status="done" onclick="qcagNavListSetStatusFilter(this, 'done')">
+            <span>Hoàn thành</span><span class="qcag-pill-badge" id="cntStatusDone"></span>
+          </button>
         </div>
         <div class="qcag-nav-panel-body">
           <div class="qcag-nav-table-wrap">

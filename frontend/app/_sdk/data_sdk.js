@@ -615,6 +615,9 @@
     if (!normalized.editingRequestedAt && normalized.editing_requested_at != null) normalized.editingRequestedAt = normalized.editing_requested_at;
     if (!normalized.createdAt && normalized.created_at != null) normalized.createdAt = normalized.created_at;
     if (!normalized.updatedAt && normalized.updated_at != null) normalized.updatedAt = normalized.updated_at;
+    if (!normalized.outletPhone) {
+      normalized.outletPhone = normalized.outlet_phone || normalized.outletPhone || normalized.outletContactPhone || normalized.phone || '';
+    }
     if (!normalized.tkCode) normalized.tkCode = normalized.tk_code || normalized.code || null;
     if (!normalized.tkCode) normalized.tkCode = _deriveTkCodeFromRow(normalized);
 

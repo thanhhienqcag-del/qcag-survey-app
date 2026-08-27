@@ -4236,6 +4236,7 @@
 [data-theme="dark"] .qcag-desktop-edit-btn:hover {
   background: rgba(244, 63, 94, 0.2) !important;
 }
+
 /* Brand Badges style rules */
 .qcag-brand-badge {
   display: inline-block;
@@ -4332,10 +4333,10 @@
 }
 
 /* =====================================================
-   COMPACT REWORKED HAMBURGER LIST VIEW HEADER STYLES
+   COMPACT REWORKED LIST VIEW HEADER & FILTER STYLES
    ===================================================== */
 
-/* 1. Slim Metric KPI Bar (Compact 1-line) */
+/* 1. Slim Metric KPI Bar */
 .qcag-nav-metrics-bar {
   display: grid !important;
   grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
@@ -4426,7 +4427,7 @@
   color: #f8fafc !important;
 }
 .theme-dark .qcag-nav-metric-lbl {
-  color: #94a3b8 !important;
+  color: #cbd5e1 !important;
 }
 
 /* 2. Compact Search & Controls Toolbar */
@@ -4455,14 +4456,15 @@
 }
 
 .qcag-nav-search-wrap .qcag-nav-list-search-input {
-  padding-left: 32px !important;
+  padding-left: 14px !important;
+  padding-right: 10px !important;
   height: 32px !important;
   border-radius: 8px !important;
   border: 1px solid #cbd5e1 !important;
   background: #f8fafc !important;
   color: #0f172a !important;
   font-size: 12px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   width: 100% !important;
 }
 .qcag-nav-search-wrap .qcag-nav-list-search-input:focus {
@@ -4475,101 +4477,138 @@
 .qcag-nav-region-bar {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex: 1;
   overflow-x: auto;
   padding: 0 4px;
 }
 
+.qcag-nav-filter-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+}
+.theme-dark .qcag-nav-filter-label {
+  color: #cbd5e1;
+}
+
 .qcag-nav-region-btn {
-  height: 32px !important;
-  padding: 0 9px !important;
-  border-radius: 8px !important;
-  font-size: 11px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
   font-weight: 600 !important;
   border: 1px solid #cbd5e1 !important;
   background: #f1f5f9 !important;
-  color: #475569 !important;
+  color: #0f172a !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   transition: all 0.15s ease !important;
-  .qcag-region-chip {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  background: #e0e7ff;
-  color: #3730a3;
-  border: 1px solid #c7d2fe;
-  margin-bottom: 4px;
-}
-
-/* Action Buttons */
-.qcag-table-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.qcag-nav-act-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 10px !important;
-  border-radius: 8px !important;
-  font-size: 11.5px !important;
-  font-weight: 700 !important;
-  border: none !important;
-  cursor: pointer !important;
-  white-space: nowrap !important;
-  transition: all 0.15s ease !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-}{
-  background: #7c3aed !important;
-  color: #ffffff !important;
-  border-color: #7c3aed !important;
-  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .qcag-nav-region-btn:hover {
   background: #e2e8f0 !important;
-  color: #0f172a !important;
+  color: #000000 !important;
+  border-color: #94a3b8 !important;
 }
 
 .qcag-nav-region-btn.active {
   background: #7c3aed !important;
   color: #ffffff !important;
-  border-color: #7c3aed !important;
-  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25) !important;
+  border-color: #6d28d9 !important;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3) !important;
+}
+
+/* Dark mode Region Buttons (Dark BG -> White Text) */
+.theme-dark .qcag-nav-region-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #f8fafc !important;
+}
+.theme-dark .qcag-nav-region-btn:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  color: #ffffff !important;
+}
+.theme-dark .qcag-nav-region-btn.active {
+  background: #7c3aed !important;
+  border: 1.5px solid #a78bfa !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.45) !important;
+}
+
+/* Action Buttons Toolbar */
+.qcag-nav-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .qcag-nav-pdf-btn {
-  height: 32px !important;
-  padding: 0 12px !important;
+  height: 30px !important;
+  padding: 0 11px !important;
   border: 1px solid #6366f1 !important;
-  background: rgba(99, 102, 241, 0.12) !important;
-  color: #4f46e5 !important;
-  border-radius: 8px !important;
+  background: #eef2ff !important;
+  color: #312e81 !important;
+  border-radius: 6px !important;
   font-size: 11.5px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   transition: all 0.15s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
 }
 .qcag-nav-pdf-btn:hover {
-  background: rgba(99, 102, 241, 0.22) !important;
+  background: #e0e7ff !important;
+  color: #1e1b4b !important;
   transform: translateY(-1px);
+}
+.theme-dark .qcag-nav-pdf-btn {
+  background: rgba(99, 102, 241, 0.22) !important;
+  border: 1.5px solid #818cf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.25) !important;
+}
+.theme-dark .qcag-nav-pdf-btn:hover {
+  background: rgba(99, 102, 241, 0.45) !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-pdf-summary-btn {
+  border-color: #a855f7 !important;
+  background: #faf5ff !important;
+  color: #581c87 !important;
+}
+.qcag-nav-pdf-summary-btn:hover {
+  background: #f3e8ff !important;
+  color: #3b0764 !important;
+}
+.theme-dark .qcag-nav-pdf-summary-btn {
+  background: rgba(168, 85, 247, 0.22) !important;
+  border: 1.5px solid #c084fc !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.25) !important;
+}
+.theme-dark .qcag-nav-pdf-summary-btn:hover {
+  background: rgba(168, 85, 247, 0.45) !important;
+  color: #ffffff !important;
 }
 
 .qcag-nav-export-btn {
-  height: 32px !important;
-  padding: 0 12px !important;
-  background: rgba(5, 150, 105, 0.12) !important;
+  height: 30px !important;
+  padding: 0 11px !important;
+  background: #10b981 !important;
   border: 1px solid #059669 !important;
-  color: #059669 !important;
-  border-radius: 8px !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
   font-size: 11.5px !important;
   font-weight: 700 !important;
   cursor: pointer !important;
@@ -4577,73 +4616,92 @@
   align-items: center !important;
   gap: 5px !important;
   white-space: nowrap !important;
+  transition: all 0.15s ease !important;
 }
 .qcag-nav-export-btn:hover {
-  background: rgba(5, 150, 105, 0.22) !important;
+  background: #059669 !important;
   transform: translateY(-1px);
 }
+.theme-dark .qcag-nav-export-btn {
+  background: #10b981 !important;
+  border: 1.5px solid #34d399 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.35) !important;
+}
+.theme-dark .qcag-nav-export-btn:hover {
+  background: #059669 !important;
+  color: #ffffff !important;
+}
 
-.qcag-nav-clear-btn {
-  height: 32px !important;
+.qcag-nav-selectall-btn {
+  height: 30px !important;
   padding: 0 10px !important;
-  background: #f1f5f9 !important;
-  color: #475569 !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
   border: 1px solid #cbd5e1 !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   font-size: 11.5px !important;
   font-weight: 600 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  transition: all 0.15s ease !important;
 }
-
-/* Dark mode controls & Region buttons (Bright border + Opacity BG) */
-.theme-dark .qcag-nav-list-toolbar {
-  background: #0f172a;
-  border-color: #1e293b;
+.qcag-nav-selectall-btn:hover {
+  background: #e2e8f0 !important;
+  color: #000000 !important;
 }
-.theme-dark .qcag-nav-search-wrap .qcag-nav-list-search-input {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+.theme-dark .qcag-nav-selectall-btn {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
   color: #f8fafc !important;
 }
-.theme-dark .qcag-nav-region-btn {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #cbd5e1 !important;
-}
-.theme-dark .qcag-nav-region-btn:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  color: #ffffff !important;
-}
-.theme-dark .qcag-nav-region-btn.active {
-  background: rgba(139, 92, 246, 0.2) !important;
-  border: 1.5px solid #a78bfa !important;
-  color: #e9d5ff !important;
-  font-weight: 700 !important;
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.25) !important;
-}
-.theme-dark .qcag-nav-export-btn {
-  background: rgba(16, 185, 129, 0.2) !important;
-  border: 1.5px solid #10b981 !important;
-  color: #6ee7b7 !important;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2) !important;
-}
-.theme-dark .qcag-nav-export-btn:hover {
-  background: rgba(16, 185, 129, 0.35) !important;
-  color: #ffffff !important;
-}
-.theme-dark .qcag-nav-clear-btn {
-  background: rgba(255, 255, 255, 0.06) !important;
-  border: 1px solid rgba(255, 255, 255, 0.18) !important;
-  color: #cbd5e1 !important;
-}
-.theme-dark .qcag-nav-clear-btn:hover {
-  background: rgba(255, 255, 255, 0.12) !important;
+.theme-dark .qcag-nav-selectall-btn:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
   color: #ffffff !important;
 }
 
-/* 3. Slim Status Filter Pills Bar in Dark Mode */
+.qcag-nav-clear-btn {
+  height: 30px !important;
+  padding: 0 10px !important;
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border: 1px solid #fca5a5 !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.15s ease !important;
+}
+.qcag-nav-clear-btn:hover {
+  background: #fee2e2 !important;
+  color: #7f1d1d !important;
+}
+.theme-dark .qcag-nav-clear-btn {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border: 1px solid #f87171 !important;
+  color: #fca5a5 !important;
+}
+.theme-dark .qcag-nav-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.35) !important;
+  color: #ffffff !important;
+}
+
+/* Dark mode toolbar container */
+.theme-dark .qcag-nav-list-toolbar {
+  background: #0f172a !important;
+  border-color: #1e293b !important;
+}
+.theme-dark .qcag-nav-search-wrap .qcag-nav-list-search-input {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+}
+.theme-dark .qcag-nav-search-wrap .qcag-nav-list-search-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* 3. Status Filter Pills Bar & High-Contrast Badges */
 .qcag-nav-list-filter-bar {
   display: flex;
   align-items: center;
@@ -4655,69 +4713,269 @@
 }
 
 .qcag-nav-filter-pill {
+  display: inline-flex !important;
+  align-items: center !important;
   padding: 4px 10px !important;
   border-radius: 999px !important;
   font-size: 11.5px !important;
   font-weight: 600 !important;
   border: 1px solid #cbd5e1 !important;
   background: #f1f5f9 !important;
-  color: #475569 !important;
+  color: #0f172a !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  transition: all 0.15s ease !important;
 }
 
+.qcag-nav-filter-pill:hover {
+  background: #e2e8f0 !important;
+  color: #000000 !important;
+}
+
+/* Badge inside status filter pill */
+.qcag-pill-badge,
+.qcag-pill-cnt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  margin-left: 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  background: #e2e8f0;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+}
+
+/* Light Mode - Active Status Pills & Badges */
 .qcag-nav-filter-pill.active {
   background: #2563eb !important;
   color: #ffffff !important;
-  border-color: #2563eb !important;
+  border-color: #1d4ed8 !important;
+}
+.qcag-nav-filter-pill.active .qcag-pill-badge,
+.qcag-nav-filter-pill.active .qcag-pill-cnt {
+  background: #ffffff !important;
+  color: #1e40af !important;
+  border-color: transparent !important;
 }
 
+.qcag-nav-filter-pill.active[data-status="survey"] {
+  background: #fef08a !important;
+  color: #713f12 !important;
+  border-color: #eab308 !important;
+}
+.qcag-nav-filter-pill.active[data-status="survey"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="survey"] .qcag-pill-cnt {
+  background: #eab308 !important;
+  color: #000000 !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="pending-design"] {
+  background: #dbeafe !important;
+  color: #1e3a8a !important;
+  border-color: #3b82f6 !important;
+}
+.qcag-nav-filter-pill.active[data-status="pending-design"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="pending-design"] .qcag-pill-cnt {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="pending-edit"] {
+  background: #ffedd5 !important;
+  color: #7c2d12 !important;
+  border-color: #f97316 !important;
+}
+.qcag-nav-filter-pill.active[data-status="pending-edit"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="pending-edit"] .qcag-pill-cnt {
+  background: #f97316 !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="pending-confirm"] {
+  background: #ccfbf1 !important;
+  color: #115e59 !important;
+  border-color: #14b8a6 !important;
+}
+.qcag-nav-filter-pill.active[data-status="pending-confirm"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="pending-confirm"] .qcag-pill-cnt {
+  background: #0d9488 !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="processing"] {
+  background: #ede9fe !important;
+  color: #4c1d95 !important;
+  border-color: #8b5cf6 !important;
+}
+.qcag-nav-filter-pill.active[data-status="processing"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="processing"] .qcag-pill-cnt {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="pending"] {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #64748b !important;
+}
+.qcag-nav-filter-pill.active[data-status="pending"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="pending"] .qcag-pill-cnt {
+  background: #475569 !important;
+  color: #ffffff !important;
+}
+
+.qcag-nav-filter-pill.active[data-status="done"] {
+  background: #dcfce7 !important;
+  color: #14532d !important;
+  border-color: #22c55e !important;
+}
+.qcag-nav-filter-pill.active[data-status="done"] .qcag-pill-badge,
+.qcag-nav-filter-pill.active[data-status="done"] .qcag-pill-cnt {
+  background: #16a34a !important;
+  color: #ffffff !important;
+}
+
+/* Dark Mode - Status Pills & Badges (Dark BG -> White Text, Light Badge -> Dark Text) */
 .theme-dark .qcag-nav-list-filter-bar {
-  background: #0f172a;
-  border-color: #1e293b;
+  background: #0f172a !important;
+  border-color: #1e293b !important;
 }
+
 .theme-dark .qcag-nav-filter-pill {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #94a3b8 !important;
-}
-.theme-dark .qcag-nav-filter-pill:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   color: #f8fafc !important;
 }
-.theme-dark .qcag-nav-filter-pill.active {
-  background: rgba(59, 130, 246, 0.22) !important;
-  border: 1.5px solid #3b82f6 !important;
-  color: #bfdbfe !important;
-  font-weight: 700 !important;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.25) !important;
+
+.theme-dark .qcag-nav-filter-pill:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
 }
 
-/* Specific Active Status Pill Colors in Dark Mode */
-.theme-dark .qcag-nav-filter-pill.active[data-status="done"] {
-  border: 1.5px solid #34d399 !important;
-  background: rgba(16, 185, 129, 0.2) !important;
-  color: #a7f3d0 !important;
+.theme-dark .qcag-pill-badge,
+.theme-dark .qcag-pill-cnt {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
 }
-.theme-dark .qcag-nav-filter-pill.active[data-status="pending-design"] {
+
+.theme-dark .qcag-nav-filter-pill.active {
+  background: #2563eb !important;
   border: 1.5px solid #60a5fa !important;
-  background: rgba(59, 130, 246, 0.2) !important;
-  color: #bfdbfe !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.4) !important;
 }
-.theme-dark .qcag-nav-filter-pill.active[data-status="pending-edit"] {
-  border: 1.5px solid #fb923c !important;
-  background: rgba(249, 115, 22, 0.2) !important;
-  color: #ffedd5 !important;
+.theme-dark .qcag-nav-filter-pill.active .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active .qcag-pill-cnt {
+  background: #ffffff !important;
+  color: #1e3a8a !important;
+  border-color: transparent !important;
 }
-.theme-dark .qcag-nav-filter-pill.active[data-status="pending-confirm"] {
-  border: 1.5px solid #34d399 !important;
-  background: rgba(16, 185, 129, 0.2) !important;
-  color: #a7f3d0 !important;
-}
+
 .theme-dark .qcag-nav-filter-pill.active[data-status="survey"] {
   border: 1.5px solid #facc15 !important;
-  background: rgba(250, 204, 21, 0.18) !important;
+  background: rgba(234, 179, 8, 0.28) !important;
   color: #fef08a !important;
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="survey"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="survey"] .qcag-pill-cnt {
+  background: #facc15 !important;
+  color: #000000 !important;
+  font-weight: 900 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-design"] {
+  border: 1.5px solid #60a5fa !important;
+  background: rgba(59, 130, 246, 0.28) !important;
+  color: #dbeafe !important;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-design"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-design"] .qcag-pill-cnt {
+  background: #3b82f6 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-edit"] {
+  border: 1.5px solid #fb923c !important;
+  background: rgba(249, 115, 22, 0.28) !important;
+  color: #ffedd5 !important;
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-edit"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-edit"] .qcag-pill-cnt {
+  background: #f97316 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-confirm"] {
+  border: 1.5px solid #2dd4bf !important;
+  background: rgba(20, 184, 166, 0.28) !important;
+  color: #ccfbf1 !important;
+  box-shadow: 0 0 10px rgba(20, 184, 166, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-confirm"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending-confirm"] .qcag-pill-cnt {
+  background: #14b8a6 !important;
+  color: #000000 !important;
+  font-weight: 900 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="processing"] {
+  border: 1.5px solid #c084fc !important;
+  background: rgba(139, 92, 246, 0.28) !important;
+  color: #f3e8ff !important;
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="processing"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="processing"] .qcag-pill-cnt {
+  background: #a855f7 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending"] {
+  border: 1.5px solid #94a3b8 !important;
+  background: rgba(148, 163, 184, 0.28) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 0 10px rgba(148, 163, 184, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="pending"] .qcag-pill-cnt {
+  background: #cbd5e1 !important;
+  color: #0f172a !important;
+  font-weight: 900 !important;
+  border-color: transparent !important;
+}
+
+.theme-dark .qcag-nav-filter-pill.active[data-status="done"] {
+  border: 1.5px solid #34d399 !important;
+  background: rgba(16, 185, 129, 0.28) !important;
+  color: #d1fae5 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3) !important;
+}
+.theme-dark .qcag-nav-filter-pill.active[data-status="done"] .qcag-pill-badge,
+.theme-dark .qcag-nav-filter-pill.active[data-status="done"] .qcag-pill-cnt {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border-color: transparent !important;
 }
 
 /* 4. Data Table & High-Contrast Cells */
@@ -4799,50 +5057,71 @@
   display: inline-block;
   padding: 2px 8px;
   border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  margin-bottom: 4px;
+}
+
+/* Action Buttons in Table */
+.qcag-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.qcag-nav-act-btn {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
   padding: 5px 10px !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   font-size: 11.5px !important;
   font-weight: 700 !important;
-  border: none !important;
+  border: 1px solid transparent !important;
   cursor: pointer !important;
   white-space: nowrap !important;
   transition: all 0.15s ease !important;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .qcag-nav-act-btn.act-qv {
   border: 1px solid #2563eb !important;
-  background: rgba(37, 99, 235, 0.08) !important;
+  background: #eff6ff !important;
   color: #1d4ed8 !important;
 }
 .qcag-nav-act-btn.act-qv:hover {
-  background: rgba(37, 99, 235, 0.18) !important;
+  background: #dbeafe !important;
+  color: #1e40af !important;
   transform: translateY(-1px);
 }
 
 .qcag-nav-act-btn.act-open {
   border: 1px solid #6366f1 !important;
-  background: rgba(99, 102, 241, 0.12) !important;
-  color: #4f46e5 !important;
+  background: #eef2ff !important;
+  color: #4338ca !important;
 }
 .qcag-nav-act-btn.act-open:hover {
-  background: rgba(99, 102, 241, 0.22) !important;
+  background: #e0e7ff !important;
+  color: #3730a3 !important;
   transform: translateY(-1px);
 }
 
 .qcag-nav-act-btn.act-map {
   border: 1px solid #059669 !important;
-  background: rgba(5, 150, 105, 0.12) !important;
-  color: #059669 !important;
+  background: #ecfdf5 !important;
+  color: #047857 !important;
   text-decoration: none !important;
 }
 .qcag-nav-act-btn.act-map:hover {
-  background: rgba(5, 150, 105, 0.22) !important;
+  background: #d1fae5 !important;
+  color: #065f46 !important;
   transform: translateY(-1px);
 }
 
-/* DARK MODE TABLE & ACTION BUTTONS OVERRIDES (BRIGHT BORDER + OPACITY BG) */
+/* DARK MODE TABLE & ACTION BUTTONS OVERRIDES */
 .theme-dark .qcag-nav-table-wrap {
   background: #0b0f17 !important;
 }
@@ -4852,7 +5131,6 @@
   color: #94a3b8 !important;
   border-color: #1e293b !important;
 }
-
 .theme-dark .qcag-nav-table td {
   border-color: #1e293b !important;
 }

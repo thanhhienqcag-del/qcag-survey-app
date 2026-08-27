@@ -4281,6 +4281,26 @@ function qcagNavListPrintPDF() {
     const status = _qcagNavListBuildStatus(r);
     const isSurvey = (status.cls === 'survey' || (status.label || '').toLowerCase().includes('khảo sát'));
 
+    const outletPhone = (
+      r.outletPhone || 
+      r.outlet_phone || 
+      r.phone || 
+      r.outletContactPhone || 
+      r.contact_phone || 
+      r.contactPhone || 
+      (requester && (requester.outletPhone || requester.outlet_phone || requester.outletContactPhone)) || 
+      ''
+    ).trim();
+
+    const salePhone = (
+      requester.salePhone || 
+      requester.sale_phone || 
+      requester.phone || 
+      r.salePhone || 
+      r.sale_phone || 
+      ''
+    ).trim();
+
     const lat = parseFloat(r.outletLat);
     const lng = parseFloat(r.outletLng);
     const hasGps = !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
@@ -4378,7 +4398,7 @@ function qcagNavListPrintPDF() {
             <table class="info-table">
               <tr><td class="lbl">Tên điểm bán:</td><td class="val highlight">${escapeHtml(r.outletName || '-')}</td></tr>
               <tr><td class="lbl">Mã Outlet:</td><td class="val font-mono">${escapeHtml(r.outletCode || '-')}</td></tr>
-              <tr><td class="lbl">SĐT Outlet:</td><td class="val">${escapeHtml(r.outletPhone || requester.phone || '-')}</td></tr>
+              <tr><td class="lbl">SĐT Outlet:</td><td class="val">${escapeHtml(outletPhone || '-')}</td></tr>
               <tr><td class="lbl">Địa chỉ:</td><td class="val">${escapeHtml(addressStr)}</td></tr>
             </table>
           </div>
@@ -4387,7 +4407,7 @@ function qcagNavListPrintPDF() {
             <h3 class="box-title">THÔNG TIN NHÂN SỰ (SALE / SS)</h3>
             <table class="info-table">
               <tr><td class="lbl">Tên Sale:</td><td class="val highlight">${escapeHtml(requester.saleName || requester.phone || '-')}</td></tr>
-              <tr><td class="lbl">SĐT Sale:</td><td class="val">${escapeHtml(requester.salePhone || requester.phone || '-')}</td></tr>
+              <tr><td class="lbl">SĐT Sale:</td><td class="val">${escapeHtml(salePhone || '-')}</td></tr>
               <tr><td class="lbl">Giám sát SS:</td><td class="val">${escapeHtml(requester.ssName || '-')}</td></tr>
               <tr><td class="lbl">Khu vực:</td><td class="val">${escapeHtml(requester.region || r.region || '-')}</td></tr>
             </table>
@@ -4664,17 +4684,25 @@ function qcagNavListPrintPDF() {
     <body>
       ${sheetsHtml}
       <script>
+        var isPrinted = false;
+        function doPrint() {
+          if (isPrinted) return;
+          isPrinted = true;
+          try { window.focus(); } catch(e) {}
+          window.print();
+        }
         function triggerPrintWhenImagesLoaded() {
+          if (isPrinted) return;
           var imgs = Array.from(document.images);
           if (imgs.length === 0) {
-            setTimeout(function() { window.print(); }, 150);
+            setTimeout(doPrint, 150);
             return;
           }
           var loadedCount = 0;
           function onImgDone() {
             loadedCount++;
             if (loadedCount >= imgs.length) {
-              setTimeout(function() { window.print(); }, 150);
+              setTimeout(doPrint, 150);
             }
           }
           imgs.forEach(function(img) {
@@ -4685,7 +4713,7 @@ function qcagNavListPrintPDF() {
               img.onerror = onImgDone;
             }
           });
-          setTimeout(function() { window.print(); }, 1000);
+          setTimeout(doPrint, 1200);
         }
         if (document.readyState === 'complete') {
           triggerPrintWhenImagesLoaded();
@@ -4746,17 +4774,37 @@ function qcagNavListExportCSV() {
     const status = _qcagNavListBuildStatus(r);
     const dateStr = r.createdAt ? new Date(r.createdAt).toLocaleDateString('vi-VN') : '-';
 
+    const outletPhone = (
+      r.outletPhone || 
+      r.outlet_phone || 
+      r.phone || 
+      r.outletContactPhone || 
+      r.contact_phone || 
+      r.contactPhone || 
+      (requester && (requester.outletPhone || requester.outlet_phone || requester.outletContactPhone)) || 
+      ''
+    ).trim();
+
+    const salePhone = (
+      requester.salePhone || 
+      requester.sale_phone || 
+      requester.phone || 
+      r.salePhone || 
+      r.sale_phone || 
+      ''
+    ).trim();
+
     rows.push([
       idx + 1,
       r.tkCode || '',
       dateStr,
       requester.region || r.region || '',
-      requester.saleName || '',
-      requester.salePhone || requester.phone || '',
+      requester.saleName || requester.phone || '',
+      salePhone,
       requester.ssName || '',
       r.outletCode || '',
       r.outletName || '',
-      r.outletPhone || requester.phone || '',
+      outletPhone,
       r.outletAddress || requester.address || '',
       _qcagNavListGetBrands(r),
       status.label || ''
@@ -4833,8 +4881,17 @@ function qcagNavUpdateMetricsAndCounts(reqs) {
 
   const setCnt = (id, val) => {
     const el = document.getElementById(id);
-    if (el) el.textContent = val > 0 ? `(${val})` : '';
+    if (el) {
+      if (typeof val === 'number' && val > 0) {
+        el.textContent = val;
+        el.style.display = 'inline-flex';
+      } else {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    }
   };
+  setCnt('cntStatusAll', total);
   setCnt('cntStatusSurvey', cntSurvey);
   setCnt('cntStatusDesign', cntDesign);
   setCnt('cntStatusEdit', cntEdit);
@@ -5052,6 +5109,26 @@ function qcagNavListPrintSummaryPDF() {
         '-'
       ).trim() || '-';
 
+      const outletPhone = (
+        r.outletPhone || 
+        r.outlet_phone || 
+        r.phone || 
+        r.outletContactPhone || 
+        r.contact_phone || 
+        r.contactPhone || 
+        (requester && (requester.outletPhone || requester.outlet_phone || requester.outletContactPhone)) || 
+        ''
+      ).trim();
+
+      const salePhone = (
+        requester.salePhone || 
+        requester.sale_phone || 
+        requester.phone || 
+        r.salePhone || 
+        r.sale_phone || 
+        ''
+      ).trim();
+
       const itemsSummaryHtml = itemArr.map((it, iIdx) => {
         const rawName = (it.type || it.itemType || it.item_type || it.category || it.title || it.name || '').trim();
         const name = escapeHtml(rawName || `Hạng mục ${iIdx + 1}`);
@@ -5070,12 +5147,12 @@ function qcagNavListPrintSummaryPDF() {
           <td>
             <div class="outlet-name">${escapeHtml(r.outletName || '-')}</div>
             <div class="outlet-code">Mã: ${escapeHtml(r.outletCode || '-')}</div>
-            <div class="outlet-phone">SĐT: ${escapeHtml(r.outletPhone || requester.phone || '-')}</div>
+            <div class="outlet-phone">SĐT: ${escapeHtml(outletPhone || '-')}</div>
           </td>
           <td style="font-size:9.5px; word-break:break-word;">${escapeHtml(addressStr)}</td>
           <td>
             <div style="font-weight:700; font-size:9.5px;">${escapeHtml(requester.saleName || requester.phone || '-')}</div>
-            <div style="font-size:8.5px; color:#4b5563;">SĐT: ${escapeHtml(requester.salePhone || requester.phone || '-')}</div>
+            <div style="font-size:8.5px; color:#4b5563;">SĐT: ${escapeHtml(salePhone || '-')}</div>
             <div style="font-size:8.5px; color:#4b5563;">KV: ${escapeHtml(requester.region || r.region || '-')}</div>
           </td>
           <td style="font-size:9px; line-height:1.3;">${itemsSummaryHtml}</td>
@@ -5202,35 +5279,40 @@ function qcagNavListPrintSummaryPDF() {
     <body>
       ${sheetsHtml}
       <script>
+        var isPrinted = false;
+        function doPrint() {
+          if (isPrinted) return;
+          isPrinted = true;
+          try { window.focus(); } catch(e) {}
+          window.print();
+        }
         function triggerPrintWhenImagesLoaded() {
-          const imgs = Array.from(document.images);
-          let loaded = 0;
-          const total = imgs.length;
+          if (isPrinted) return;
+          var imgs = Array.from(document.images);
+          var total = imgs.length;
 
           if (total === 0) {
-            window.focus();
-            window.print();
+            setTimeout(doPrint, 150);
             return;
           }
 
+          var loaded = 0;
           function checkAll() {
             loaded++;
             if (loaded >= total) {
-              setTimeout(() => {
-                window.focus();
-                window.print();
-              }, 150);
+              setTimeout(doPrint, 150);
             }
           }
 
-          imgs.forEach(img => {
-            if (img.complete) {
+          imgs.forEach(function(img) {
+            if (img.complete && img.naturalWidth !== 0) {
               checkAll();
             } else {
               img.onload = checkAll;
               img.onerror = checkAll;
             }
           });
+          setTimeout(doPrint, 1200);
         }
 
         if (document.readyState === 'complete') {
@@ -5548,13 +5630,13 @@ function qcagNavListExportCSV() {
     const salePhoneCell = salePhone ? `="${salePhone}"` : '';
 
     // Outlet phone: try multiple locations (row fields, requester fields, nested outlet JSON)
-    let rawOutletPhone = (r && (r.outletPhone || r.outlet_phone || r.phone || r.contact_phone || r.mobile)) || '';
-    if (!rawOutletPhone && requester) rawOutletPhone = requester.outletPhone || requester.outlet_phone || requester.phone || requester.contact_phone || '';
+    let rawOutletPhone = (r && (r.outletPhone || r.outlet_phone || r.phone || r.contact_phone || r.contactPhone || r.outletContactPhone || r.mobile)) || '';
+    if (!rawOutletPhone && requester) rawOutletPhone = requester.outletPhone || requester.outlet_phone || requester.outletContactPhone || requester.contact_phone || '';
     // Try parsing a nested outlet JSON block if present
     try {
       const parsedOutlet = qcagDesktopParseJson(r.outlet || r.outletData || r.outlet_block || '', null);
       if (parsedOutlet && typeof parsedOutlet === 'object') {
-        rawOutletPhone = rawOutletPhone || parsedOutlet.phone || parsedOutlet.outlet_phone || parsedOutlet.contact_phone || parsedOutlet.mobile || parsedOutlet.phoneNumber || '';
+        rawOutletPhone = rawOutletPhone || parsedOutlet.phone || parsedOutlet.outletPhone || parsedOutlet.outlet_phone || parsedOutlet.contact_phone || parsedOutlet.mobile || parsedOutlet.phoneNumber || '';
       }
     } catch (e) {}
     const outletPhone = qcagNormalizePhone(rawOutletPhone);
