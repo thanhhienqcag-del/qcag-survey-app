@@ -5786,15 +5786,19 @@ function qcagNavRenderMap() {
   const map = L.map(container, { center: defaultCenter, zoom: 8, maxZoom: 25 });
   _qcagNavMapInstance = map;
 
-  const _osmDesktop = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
+  const _osmDesktop = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+    attribution: '© Google Maps',
+    subdomains: '0123',
     maxZoom: 25,
-    maxNativeZoom: 19
+    maxNativeZoom: 21,
+    keepBuffer: 6
   });
-  const _satDesktop = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '© Esri — Sources: Esri, DigitalGlobe, GeoEye',
+  const _satDesktop = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    attribution: '© Google Maps Satellite',
+    subdomains: '0123',
     maxZoom: 25,
-    maxNativeZoom: 18
+    maxNativeZoom: 21,
+    keepBuffer: 6
   });
   _osmDesktop.addTo(map);
 

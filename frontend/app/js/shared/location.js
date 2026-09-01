@@ -82,29 +82,26 @@ function initLeafletMap() {
   // if provider doesn't supply native tiles at that zoom).
   lMap = L.map('mapContainer', { zoomControl: true, maxZoom: 25 }).setView(defaultCenter, hasCoords ? 18 : (cachedCenter ? 15 : 17));
 
-  _osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
+  _osmLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+    attribution: '&copy; Google Maps',
+    subdomains: '0123',
     maxZoom: 25,
-    maxNativeZoom: 19
+    maxNativeZoom: 21,
+    keepBuffer: 6
   });
-  _satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '&copy; Esri &mdash; Sources: Esri, DigitalGlobe, GeoEye, Earthstar Geographics',
+  _satLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+    attribution: '&copy; Google Maps Satellite',
+    subdomains: '0123',
     maxZoom: 25,
-    maxNativeZoom: 18
+    maxNativeZoom: 21,
+    keepBuffer: 6
   });
-  // Transparent label/POI overlay (tên trường, bệnh viện, công ty,...) cho chế độ vệ tinh
-  _labelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
-    attribution: '',
-    maxZoom: 25,
-    maxNativeZoom: 19,
-    opacity: 1,
-    pane: 'overlayPane'
-  });
+  // Note: Google Hybrid layer (lyrs=y) already includes sharp Vietnamese street & place labels built-in
+  _labelsLayer = null;
 
   // Add the default layer
   if (_currentMapMode === 'satellite') {
     _satLayer.addTo(lMap);
-    _labelsLayer.addTo(lMap); // labels on top of satellite
   } else {
     _osmLayer.addTo(lMap);
   }
