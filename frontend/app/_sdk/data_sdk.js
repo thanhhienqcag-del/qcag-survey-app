@@ -572,7 +572,19 @@
       clearInterval(_pollTimer);
       _pollTimer = null;
     }
-    // Background polling disabled to reduce traffic; rely on SSE/invalidation events.
+    // Backup heartbeat polling every 30s in case SSE drops or is blocked
+    _pollTimer = setInterval(function () {
+      try {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        if (!_es || _es.readyState === 2 /* CLOSED */) {
+          _openSse();
+        }
+        if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+          window.dataSdk.refresh().catch(function () {});
+        }
+      } catch (_) {}
+    }, 30000);
+    if (_pollTimer && _pollTimer.unref) _pollTimer.unref();
   }
 
   function _cloneStoreRows() {
@@ -748,6 +760,7 @@
           _onDataChanged(_cloneStoreRows());
         }
         await _ensureActiveBase();
+        _openSse();
         if (_store.length) {
           // Force a fresh bootstrap from the backend on cold start so we never
           // trust a stale 304/ETag response or a truncated cache snapshot.

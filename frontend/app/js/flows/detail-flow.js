@@ -547,7 +547,7 @@ async function showRequestDetail(id) {
           <div class="flex items-start justify-between">
             <div class="flex-1">
               <div class="flex items-center justify-between">
-                <div class="text-sm font-medium">${idx + 1}. ${item.type}</div>
+                <div class="text-sm font-medium">${idx + 1}. ${escapeHtml(getItemDisplayName(item))}</div>
                 <div class="text-xs text-gray-500">${item.poles ? (item.poles + ' trụ') : '0 trụ'}</div>
               </div>
               <div class="mt-2 text-sm text-gray-600 grid grid-cols-2 gap-2">
@@ -576,7 +576,7 @@ async function showRequestDetail(id) {
             <div>
                 <div class="grid grid-cols-7 gap-4 text-sm items-center border-b border-gray-100 py-2">
                 <div class="font-medium">${idx + 1}</div>
-                <div class="text-gray-500">${item.type}</div>
+                <div class="text-gray-500">${escapeHtml(getItemDisplayName(item))}</div>
                 <div class="text-gray-500">${item.type !== 'Hạng mục khác' ? (item.brand || '-') : '-'}</div>
                 <div class="text-gray-500">${item.type !== 'Hạng mục khác' ? (item.action || '-') : '-'}</div>
                 <div class="text-gray-500">${item.type !== 'Hạng mục khác' ? (item.poles || 0) + ' trụ' : '-'}</div>

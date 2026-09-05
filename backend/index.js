@@ -2553,7 +2553,20 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
-                if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
+        if (updatedSince) {
+            const [rows] = await pool.query(
+                `${KS_REQUESTS_SELECT_SQL} WHERE (updated_at >= ? OR created_at >= ?) ORDER BY updated_at DESC, id DESC`,
+                [updatedSince, updatedSince]
+            );
+            const mapped = rows.map(r => ksRowToApp(r, true));
+            return res.json({
+                ok: true,
+                data: mapped,
+                paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false }
+            });
+        }
+
+        if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
             const [[countRow]] = await pool.query('SELECT COUNT(*) AS total FROM ks_requests_view');
             const total = Number(countRow && countRow.total ? countRow.total : 0);
             const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`);
@@ -2734,8 +2747,9 @@ app.post("/api/ks/requests", async (req, res) => {
 
 
         const [[row]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [insertId]);
-        wsInvalidate('ks_requests');
-        return res.status(201).json({ ok: true, data: ksRowToApp(row) });
+        const appRow = ksRowToApp(row);
+        wsInvalidate('ks_requests', { action: 'create', id: insertId, data: appRow });
+        return res.status(201).json({ ok: true, data: appRow });
     } catch (err) {
         console.error('POST /api/ks/requests error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'create_failed' });
@@ -2912,7 +2926,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         await pool.query(`UPDATE ks_requests SET ${fields.join(', ')} WHERE id = ?`, vals);
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
-        wsInvalidate('ks_requests');
+        const appUpdated = ksRowToApp(updated);
+        wsInvalidate('ks_requests', { action: 'update', id: rowId, data: appUpdated });
 
         try {
             const becomingDone = b.status === 'done' && current.status !== 'done';
@@ -2973,7 +2988,7 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
         // Log the deletion to console (automatically stored in cloud logs)
         console.log(`[DELETED] Request ID ${rowId} (backendId: ${row.backend_id}) deleted. Reason: ${deleteReason}`);
 
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'delete', id: rowId, backendId: row.backend_id });
         return res.json({ ok: true, deleted: 1 });
     } catch (err) {
         console.error('DELETE /api/ks/requests/:id error:', err && err.message ? err.message : err);
@@ -3060,8 +3075,9 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
 
 
         const [[updated]] = await pool.query('SELECT * FROM ks_requests WHERE id = ? LIMIT 1', [rowId]);
-        wsInvalidate('ks_requests');
-        return res.json({ ok: true, data: ksRowToApp(updated), renamedFiles: Object.keys(remap).length });
+        const appUpdatedMq = ksRowToApp(updated);
+        wsInvalidate('ks_requests', { action: 'update', id: rowId, data: appUpdatedMq });
+        return res.json({ ok: true, data: appUpdatedMq, renamedFiles: Object.keys(remap).length });
     } catch (err) {
         console.error('/api/ks/requests/:id/rename-mq-folder error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'rename_failed' });

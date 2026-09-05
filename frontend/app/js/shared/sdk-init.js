@@ -176,7 +176,12 @@ window.__ksOnInvalidate = function (payload) {
   if (!payload || payload.resource !== 'ks_requests') return;
   var action = payload.action;
   var data = payload.data;
-  if (!data || !data.__backendId) return;
+  if (!data || !data.__backendId) {
+    if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+      window.dataSdk.refresh(true).catch(function () {});
+    }
+    return;
+  }
 
   var bid = data.__backendId;
   var prev = _ksKnownRequestIds[bid];

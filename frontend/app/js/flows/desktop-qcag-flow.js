@@ -654,16 +654,24 @@ function qcagEnsureEditSingleItemModal() {
         <div class="qcag-edit-after-type">
           <div class="qcag-edit-grid">
             <label>Hình thức
-              <select id="qcagEditSingleItemAction">
+              <select id="qcagEditSingleItemAction" onchange="qcagEditSingleItemOnActionChange()">
                 <option value="">Chọn hình thức</option>
                 <option value="Làm mới">Làm mới</option>
                 <option value="Thay bạt">Thay bạt</option>
               </select>
             </label>
             <label>Brand
-              <select id="qcagEditSingleItemBrand">
+              <select id="qcagEditSingleItemBrand" onchange="qcagEditSingleItemOnBrandChange()">
                 <option value="">Chọn brand</option>
                 ${allBrands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+          <div id="qcagEditSingleItemSubTypeWrap" class="hidden" style="margin-top:8px;">
+            <label>Phân loại
+              <select id="qcagEditSingleItemSubType" onchange="qcagEditSingleItemOnSubTypeChange()">
+                <option value="">Chọn phân loại</option>
+                ${(typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('')}
               </select>
             </label>
           </div>
@@ -682,12 +690,12 @@ function qcagEnsureEditSingleItemModal() {
               </button>
             </label>
           </div>
-          <div class="qcag-edit-grid-3" style="margin-top:8px">
+          <div class="qcag-edit-grid-3" style="margin-top:8px;">
             <label>Chiều ngang (m)
-              <input id="qcagEditSingleItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this)"/>
+              <input id="qcagEditSingleItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditSingleItemOnWidthChange()"/>
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditSingleItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this)"/>
+              <input id="qcagEditSingleItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditSingleItemOnHeightChange()"/>
             </label>
             <label>Số trụ
               <input id="qcagEditSingleItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this)"/>
@@ -704,6 +712,152 @@ function qcagEnsureEditSingleItemModal() {
   document.body.appendChild(wrap);
 }
 
+function qcagEditSingleItemOnBrandChange() {
+  qcagEditSingleItemUpdateSubTypeUI();
+}
+
+function qcagEditSingleItemOnWidthChange() {
+  const subEl = document.getElementById('qcagEditSingleItemSubType');
+  const widthEl = document.getElementById('qcagEditSingleItemWidth');
+  const heightEl = document.getElementById('qcagEditSingleItemHeight');
+  if (!subEl || !widthEl || !heightEl) return;
+  const pair = typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(subEl.value, 'width', widthEl.value) : null;
+  if (pair) {
+    heightEl.value = pair.height;
+  }
+}
+
+function qcagEditSingleItemOnHeightChange() {
+  const subEl = document.getElementById('qcagEditSingleItemSubType');
+  const widthEl = document.getElementById('qcagEditSingleItemWidth');
+  const heightEl = document.getElementById('qcagEditSingleItemHeight');
+  if (!subEl || !widthEl || !heightEl) return;
+  const pair = typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(subEl.value, 'height', heightEl.value) : null;
+  if (pair) {
+    widthEl.value = pair.width;
+  }
+}
+
+function qcagEditSingleItemOnActionChange() {
+  const actionEl = document.getElementById('qcagEditSingleItemAction');
+  const noteEl = document.getElementById('qcagEditSingleItemNote');
+  const act = actionEl ? actionEl.value : '';
+  if (!noteEl) return;
+  if (act === 'Di dời') {
+    noteEl.placeholder = 'Nhập tên quán nơi lấy Logo (bắt buộc) và yêu cầu khác nếu có';
+  } else if (act === 'Thu hồi') {
+    noteEl.placeholder = 'Nhập nơi lưu trữ (bắt buộc) và yêu cầu khác nếu có';
+  } else {
+    noteEl.placeholder = 'Ghi chú';
+  }
+}
+
+function qcagEditSingleItemUpdateSubTypeUI() {
+  const typeEl = document.getElementById('qcagEditSingleItemType');
+  const brandEl = document.getElementById('qcagEditSingleItemBrand');
+  const subWrap = document.getElementById('qcagEditSingleItemSubTypeWrap');
+  const subEl = document.getElementById('qcagEditSingleItemSubType');
+  if (!subWrap || !subEl) return;
+  const isLogoIndoorTiger = (typeEl && typeEl.value === 'Logo indoor') && (brandEl && brandEl.value === 'Tiger');
+  const isLogoIndoorHeineken = (typeEl && typeEl.value === 'Logo indoor') && (brandEl && brandEl.value === 'Heineken');
+
+  if (isLogoIndoorTiger) {
+    subWrap.classList.remove('hidden');
+    const prev = subEl.value;
+    subEl.innerHTML = `<option value="">Chọn phân loại</option>` + (typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('');
+    if ((typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).some(s => s.name === prev)) subEl.value = prev;
+    else subEl.value = '';
+  } else if (isLogoIndoorHeineken) {
+    subWrap.classList.remove('hidden');
+    const prev = subEl.value;
+    subEl.innerHTML = `<option value="">Chọn phân loại</option>` + (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('');
+    if ((typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : []).some(s => s.name === prev)) subEl.value = prev;
+    else subEl.value = '';
+  } else {
+    subWrap.classList.add('hidden');
+    if (subEl.value) {
+      subEl.value = '';
+      qcagEditSingleItemOnSubTypeChange();
+    }
+  }
+}
+
+function qcagEditSingleItemOnSubTypeChange() {
+  const typeEl = document.getElementById('qcagEditSingleItemType');
+  const subEl = document.getElementById('qcagEditSingleItemSubType');
+  const widthEl = document.getElementById('qcagEditSingleItemWidth');
+  const heightEl = document.getElementById('qcagEditSingleItemHeight');
+  const actionEl = document.getElementById('qcagEditSingleItemAction');
+  const polesEl = document.getElementById('qcagEditSingleItemPoles');
+  const subType = subEl ? subEl.value : '';
+  const sl = String(subType || '').toLowerCase();
+  const selectedType = typeEl ? typeEl.value : 'Logo indoor';
+
+  if (actionEl) {
+    actionEl.disabled = false;
+    const prevAct = actionEl.value;
+    const actions = typeof getActionsForItem === 'function' ? getActionsForItem(selectedType, { subType }) : ['Làm mới', 'Sửa chữa', 'Di dời', 'Thu hồi'];
+    actionEl.innerHTML = `<option value="">Chọn hình thức</option>` + actions.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+    if (actions.includes(prevAct)) {
+      actionEl.value = prevAct;
+    } else {
+      actionEl.value = 'Làm mới';
+    }
+  }
+
+  if (sl.includes('tranh đèn') || sl.includes('tranh den') || sl.includes('light poster')) {
+    if (widthEl) { widthEl.value = '1.1'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.8'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.value = 0; polesEl.disabled = true; polesEl.style.opacity = '0.5'; }
+  } else if (sl.includes('emlemd') || sl.includes('emblemd')) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.77'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('square') || sl.includes('suqare')) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.71'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('group social') || sl.includes('ngôi sao') || sl.includes('ngoi sao')) {
+    if (widthEl) {
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+      if (!widthEl.value || !['0.6', '0.8', '1.0', '1'].includes(widthEl.value)) widthEl.value = '0.6';
+    }
+    if (heightEl) {
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+      if (!heightEl.value || !['0.9', '1.2', '1.5'].includes(heightEl.value)) heightEl.value = '0.9';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('young social') || sl.includes('lưới') || sl.includes('luoi')) {
+    if (widthEl) {
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+      if (!widthEl.value || !['0.68', '0.9'].includes(widthEl.value)) widthEl.value = '0.68';
+    }
+    if (heightEl) {
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+      if (!heightEl.value || !['0.9', '1.186'].includes(heightEl.value)) heightEl.value = '0.9';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else {
+    // Khác hoặc rỗng
+    if (widthEl) {
+      if (widthEl.disabled || ['1.1', '0.8', '0.6', '0.68'].includes(widthEl.value)) widthEl.value = '';
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+    }
+    if (heightEl) {
+      if (heightEl.disabled || ['0.8', '0.77', '0.71', '0.9', '1.2', '1.5', '1.186'].includes(heightEl.value)) heightEl.value = '';
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  }
+  qcagEditSingleItemOnActionChange();
+}
+
 function qcagEditSingleItemOnTypeChange() {
   const typeEl = document.getElementById('qcagEditSingleItemType');
   const brandEl = document.getElementById('qcagEditSingleItemBrand');
@@ -716,35 +870,93 @@ function qcagEditSingleItemOnTypeChange() {
   const previousAction = actionEl ? (actionEl.value || '') : '';
 
   const brands = getBrandsForType(selectedType);
+  const stLower = String(selectedType || '').toLowerCase();
+  const isRem = stLower.includes('rèm') || stLower.includes('rem');
+  const isMaiChe = !isRem && (stLower.includes('mái che') || stLower.includes('mai che') || stLower.includes('mái hiên') || stLower.includes('mai hien'));
+  const isNoPoles = isMaiChe || isRem;
+
+  const isTranhDen = stLower.includes('tranh đèn') || stLower.includes('tranh den');
+  const isEmlemd = stLower.includes('emlemd') || stLower.includes('emblemd');
+  const isTigerSquare = stLower.includes('tiger square');
+
   if (Array.isArray(brands) && brands.length > 0) {
     brandEl.innerHTML = `<option value="">Chọn brand</option>${brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
-    if (brands.includes(previousBrand)) {
+    if (isMaiChe || isTranhDen || isEmlemd || isTigerSquare) {
+      brandEl.value = 'Tiger';
+      brandEl.disabled = true;
+    } else if (brands.includes(previousBrand)) {
       brandEl.value = previousBrand;
+      brandEl.disabled = false;
     } else if (brands.length === 1) {
       brandEl.value = brands[0];
+      brandEl.disabled = false;
     } else {
       brandEl.value = '';
+      brandEl.disabled = false;
     }
   } else {
     brandEl.innerHTML = '<option value="">Chọn brand</option>';
     brandEl.value = '';
+    brandEl.disabled = false;
+  }
+  const widthEl = document.getElementById('qcagEditSingleItemWidth');
+  const heightEl = document.getElementById('qcagEditSingleItemHeight');
+  if (isTranhDen) {
+    if (widthEl) { widthEl.value = '1.1'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.8'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else if (isEmlemd) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.77'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else if (isTigerSquare) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.71'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else {
+    if (widthEl) {
+      if (widthEl.disabled || widthEl.value === '1.1' || widthEl.value === '0.8') widthEl.value = '';
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+    }
+    if (heightEl) {
+      if (heightEl.disabled || heightEl.value === '0.8' || heightEl.value === '0.77' || heightEl.value === '0.71') heightEl.value = '';
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+    }
   }
   try {
     if (actionEl) {
-      const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
-      const validActions = isLogoType ? ["Làm mới", "Sửa chữa"] : ["Làm mới", "Thay bạt"];
-      if (isLogoType) {
-        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
+      const subEl = document.getElementById('qcagEditSingleItemSubType');
+      const validActions = typeof getActionsForItem === 'function' ? getActionsForItem(selectedType, { subType: subEl ? subEl.value : '' }) : ['Làm mới', 'Thay bạt'];
+      if (isNoPoles) {
+        actionEl.disabled = true;
+        actionEl.innerHTML = `<option value="Làm mới">Làm mới</option>`;
+        actionEl.value = 'Làm mới';
       } else {
-        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
+        actionEl.disabled = false;
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option>` + validActions.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        actionEl.value = validActions.includes(previousAction) ? previousAction : '';
       }
-      if (validActions.includes(previousAction)) {
-        actionEl.value = previousAction;
+      qcagEditSingleItemOnActionChange();
+    }
+  } catch (e) {}
+
+  // Vô hiệu hóa hoặc bật lại input số trụ
+  try {
+    const polesEl = document.getElementById('qcagEditSingleItemPoles');
+    if (polesEl) {
+      if (isNoPoles) {
+        polesEl.value = 0;
+        polesEl.disabled = true;
+        polesEl.style.opacity = '0.5';
+        polesEl.style.cursor = 'not-allowed';
       } else {
-        actionEl.value = '';
+        polesEl.disabled = false;
+        polesEl.style.opacity = '';
+        polesEl.style.cursor = '';
       }
     }
   } catch (e) {}
+
+  qcagEditSingleItemUpdateSubTypeUI();
 }
 
 function qcagDesktopOpenEditItemModal(index) {
@@ -763,9 +975,30 @@ function qcagDesktopOpenEditItemModal(index) {
   const brandEl = document.getElementById('qcagEditSingleItemBrand');
   if (brandEl) brandEl.value = item.brand || '';
 
+  // Pre-fill subType
+  const subEl = document.getElementById('qcagEditSingleItemSubType');
+  if (subEl) {
+    if (item.subType) {
+      subEl.value = (typeof getTigerSubTypeLabel === 'function' ? getTigerSubTypeLabel(item.subType) : item.subType);
+    } else if (item.type && item.type.includes('Tranh đèn')) {
+      subEl.value = 'Light Poster - Tranh đèn';
+    } else if (item.type && (item.type.includes('Emlemd') || item.type.includes('Emblemd'))) {
+      subEl.value = 'Emlemd 2 mặt';
+    } else if (item.type && (item.type.includes('Tiger Square') || item.type.includes('Square') || item.type.includes('Suqare'))) {
+      subEl.value = 'Suqare Flat 1 mặt (treo tường)';
+    } else {
+      subEl.value = '';
+    }
+  }
+  qcagEditSingleItemUpdateSubTypeUI();
+  if (subEl && subEl.value) {
+    qcagEditSingleItemOnSubTypeChange();
+  }
+
   // Pre-fill action & note
   document.getElementById('qcagEditSingleItemAction').value = item.action || '';
   document.getElementById('qcagEditSingleItemNote').value = item.note || item.otherContent || '';
+  qcagEditSingleItemOnActionChange();
 
   // Pre-fill size fields
   const widthEl  = document.getElementById('qcagEditSingleItemWidth');
@@ -780,12 +1013,26 @@ function qcagDesktopOpenEditItemModal(index) {
     const sBtn = document.getElementById('qcagEditSingleItemSurveyToggle');
     const uBtn = document.getElementById('qcagEditSingleItemUseOldSizeToggle');
     if (sBtn) {
-      if (item.survey) sBtn.className = 'toggle-switch bg-gray-900 toggle-on rounded-full p-0.5 relative';
-      else sBtn.className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
+      if (item.survey) {
+        sBtn.classList.add('bg-gray-900', 'toggle-on');
+        sBtn.classList.remove('bg-gray-300');
+        sBtn.setAttribute('aria-pressed', 'true');
+      } else {
+        sBtn.classList.remove('bg-gray-900', 'toggle-on');
+        sBtn.classList.add('bg-gray-300');
+        sBtn.setAttribute('aria-pressed', 'false');
+      }
     }
     if (uBtn) {
-      if (item.useOldSize) uBtn.className = 'toggle-switch bg-gray-900 toggle-on rounded-full p-0.5 relative';
-      else uBtn.className = 'toggle-switch bg-gray-300 rounded-full p-0.5 relative';
+      if (item.useOldSize) {
+        uBtn.classList.add('bg-gray-900', 'toggle-on');
+        uBtn.classList.remove('bg-gray-300');
+        uBtn.setAttribute('aria-pressed', 'true');
+      } else {
+        uBtn.classList.remove('bg-gray-900', 'toggle-on');
+        uBtn.classList.add('bg-gray-300');
+        uBtn.setAttribute('aria-pressed', 'false');
+      }
     }
   } catch (e) {}
 
@@ -800,23 +1047,44 @@ function qcagCloseEditSingleItemModal() {
 }
 
 async function qcagDesktopConfirmEditSingleItemModal() {
-  if (_qcagEditItemIndex === null || !currentDetailRequest) return;
+  if (!currentDetailRequest) return;
   const idx = _qcagEditItemIndex;
+  if (typeof idx !== 'number' || idx < 0) return;
 
-  const newType   = (document.getElementById('qcagEditSingleItemType').value   || '').trim();
+  const newType   = (document.getElementById('qcagEditSingleItemType').value    || '').trim();
   const newAction = (document.getElementById('qcagEditSingleItemAction').value  || '').trim();
   const newBrand  = (document.getElementById('qcagEditSingleItemBrand').value   || '').trim();
   const newNote   = (document.getElementById('qcagEditSingleItemNote').value    || '').trim();
   const newWidth  = parseFloat((document.getElementById('qcagEditSingleItemWidth')  || {}).value)  || 0;
   const newHeight = parseFloat((document.getElementById('qcagEditSingleItemHeight') || {}).value) || 0;
-  const newPoles  = parseInt((document.getElementById('qcagEditSingleItemPoles')   || {}).value, 10) || 0;
+  
+  if (!newType) { showToast('Vui lòng chọn loại hạng mục'); return; }
+  
+  if (newAction === 'Di dời' && !newNote) {
+    showToast('Vui lòng nhập tên quán nơi lấy Logo cho hình thức Di dời');
+    return;
+  }
+  if (newAction === 'Thu hồi' && !newNote) {
+    showToast('Vui lòng nhập nơi lưu trữ cho hình thức Thu hồi');
+    return;
+  }
+
+  const ntLower = newType.toLowerCase();
+  const isNoPoles = newType === 'Mái che di động' || newType === 'Rèm Mái Che' || ntLower.includes('mái che') || ntLower.includes('mai che') || ntLower.includes('rèm') || ntLower.includes('rem');
+  const newPoles  = isNoPoles ? 0 : (parseInt((document.getElementById('qcagEditSingleItemPoles')   || {}).value, 10) || 0);
+
+  const subTypeEl = document.getElementById('qcagEditSingleItemSubType');
+  const newSubType = (newType === 'Logo indoor' && (newBrand === 'Tiger' || newBrand === 'Heineken') && subTypeEl) ? (subTypeEl.value || '').trim() : '';
 
   const sBtn = document.getElementById('qcagEditSingleItemSurveyToggle');
   const uBtn = document.getElementById('qcagEditSingleItemUseOldSizeToggle');
   const newSurvey = newType === 'Hạng mục khác' ? false : !!(sBtn && sBtn.classList.contains('toggle-on'));
   const newUseOldSize = !!(uBtn && uBtn.classList.contains('toggle-on'));
 
-  if (!newType) { showToast('Vui lòng chọn loại hạng mục'); return; }
+  if (newType === 'Logo indoor' && (newBrand === 'Tiger' || newBrand === 'Heineken') && !newSubType) {
+    showToast(`Vui lòng chọn phân loại logo ${newBrand}`);
+    return;
+  }
 
   qcagCloseEditSingleItemModal();
 
@@ -829,6 +1097,7 @@ async function qcagDesktopConfirmEditSingleItemModal() {
 
   const changes = [];
   if (newType   !== (oldItem.type   || '')) changes.push(`Loại: ${oldItem.type   || '-'} → ${newType}`);
+  if (newSubType !== (oldItem.subType || '')) changes.push(`Phân loại: ${oldItem.subType || '-'} → ${newSubType || '-'}`);
   if (newBrand  !== (oldItem.brand  || '')) changes.push(`Brand: ${oldItem.brand  || '-'} → ${newBrand}`);
   if (newAction !== (oldItem.action || '')) changes.push(`Hình thức: ${oldItem.action || '-'} → ${newAction}`);
   const oldNote = oldItem.note || oldItem.otherContent || '';
@@ -845,6 +1114,7 @@ async function qcagDesktopConfirmEditSingleItemModal() {
   items[idx] = {
     ...oldItem,
     type:         newType,
+    subType:      (newType === 'Logo indoor' && newBrand === 'Tiger') ? (newSubType || undefined) : undefined,
     brand:        newBrand,
     action:       newAction,
     note:         newNote,
@@ -903,7 +1173,7 @@ function qcagEnsureEditItemsModal() {
           <div class="qcag-edit-grid">
             <label>
               Hình thức
-              <select id="qcagEditItemAction" onchange="qcagEditItemsMaybeValidate()">
+              <select id="qcagEditItemAction" onchange="qcagEditItemOnActionChange()">
                 <option value="">Chọn hình thức</option>
                 <option value="Làm mới">Làm mới</option>
                 <option value="Thay bạt">Thay bạt</option>
@@ -912,23 +1182,32 @@ function qcagEnsureEditItemsModal() {
 
             <label>
               Brand
-              <select id="qcagEditItemBrand" onchange="qcagEditItemsMaybeValidate()">
+              <select id="qcagEditItemBrand" onchange="qcagEditItemOnBrandChange()">
                 <option value="">Chọn brand</option>
                 ${allBrands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}
               </select>
             </label>
           </div>
 
+          <div id="qcagEditItemSubTypeWrap" class="hidden" style="margin-top:8px;">
+            <label>Phân loại
+              <select id="qcagEditItemSubType" onchange="qcagEditItemOnSubTypeChange()">
+                <option value="">Chọn phân loại</option>
+                ${(typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+
           <label>Yêu cầu
-            <input id="qcagEditItemNote" type="text" placeholder="Ghi chú"/>
+            <input id="qcagEditItemNote" type="text" placeholder="Ghi chú" oninput="qcagEditItemsMaybeValidate()"/>
           </label>
 
           <div class="qcag-edit-grid-3">
             <label>Chiều ngang (m)
-              <input id="qcagEditItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemWidth" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemOnWidthChange(); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Chiều cao (m)
-              <input id="qcagEditItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemsMaybeValidate()" />
+              <input id="qcagEditItemHeight" type="text" inputmode="decimal" oninput="sanitizeDecimalInput(this); qcagEditItemOnHeightChange(); qcagEditItemsMaybeValidate()" />
             </label>
             <label>Số trụ
               <input id="qcagEditItemPoles" type="number" min="0" step="1" value="0" oninput="sanitizeIntegerInput(this); qcagEditItemsMaybeValidate()" />
@@ -966,12 +1245,165 @@ function qcagEnsureEditItemsModal() {
   document.body.appendChild(wrap);
 }
 
+function qcagEditItemOnBrandChange() {
+  qcagEditItemUpdateSubTypeUI();
+  qcagEditItemsMaybeValidate();
+}
+
+function qcagEditItemOnWidthChange() {
+  const subEl = document.getElementById('qcagEditItemSubType');
+  const widthEl = document.getElementById('qcagEditItemWidth');
+  const heightEl = document.getElementById('qcagEditItemHeight');
+  if (!subEl || !widthEl || !heightEl) return;
+  const pair = typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(subEl.value, 'width', widthEl.value) : null;
+  if (pair) {
+    heightEl.value = pair.height;
+  }
+}
+
+function qcagEditItemOnHeightChange() {
+  const subEl = document.getElementById('qcagEditItemSubType');
+  const widthEl = document.getElementById('qcagEditItemWidth');
+  const heightEl = document.getElementById('qcagEditItemHeight');
+  if (!subEl || !widthEl || !heightEl) return;
+  const pair = typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(subEl.value, 'height', heightEl.value) : null;
+  if (pair) {
+    widthEl.value = pair.width;
+  }
+}
+
+function qcagEditItemUpdateSubTypeUI() {
+  const typeEl = document.getElementById('qcagEditItemType');
+  const brandEl = document.getElementById('qcagEditItemBrand');
+  const subWrap = document.getElementById('qcagEditItemSubTypeWrap');
+  const subEl = document.getElementById('qcagEditItemSubType');
+  if (!subWrap || !subEl) return;
+  const isLogoIndoorTiger = (typeEl && typeEl.value === 'Logo indoor') && (brandEl && brandEl.value === 'Tiger');
+  const isLogoIndoorHeineken = (typeEl && typeEl.value === 'Logo indoor') && (brandEl && brandEl.value === 'Heineken');
+  if (isLogoIndoorTiger) {
+    subWrap.classList.remove('hidden');
+    const prev = subEl.value;
+    subEl.innerHTML = `<option value="">Chọn phân loại</option>` + (typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('');
+    if ((typeof tigerLogoSubTypes !== 'undefined' ? tigerLogoSubTypes : []).some(s => s.name === prev)) subEl.value = prev;
+    else subEl.value = '';
+  } else if (isLogoIndoorHeineken) {
+    subWrap.classList.remove('hidden');
+    const prev = subEl.value;
+    subEl.innerHTML = `<option value="">Chọn phân loại</option>` + (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : []).map(st => `<option value="${escapeHtml(st.name)}">${escapeHtml(st.name)}</option>`).join('');
+    if ((typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : []).some(s => s.name === prev)) subEl.value = prev;
+    else subEl.value = '';
+  } else {
+    subWrap.classList.add('hidden');
+    if (subEl.value) {
+      subEl.value = '';
+      qcagEditItemOnSubTypeChange();
+    }
+  }
+}
+
+function qcagEditItemOnActionChange() {
+  const actionEl = document.getElementById('qcagEditItemAction');
+  const noteEl = document.getElementById('qcagEditItemNote');
+  const act = actionEl ? actionEl.value : '';
+  if (noteEl) {
+    if (act === 'Di dời') {
+      noteEl.placeholder = 'Nhập tên quán nơi lấy Logo (bắt buộc) và yêu cầu khác nếu có';
+    } else if (act === 'Thu hồi') {
+      noteEl.placeholder = 'Nhập nơi lưu trữ (bắt buộc) và yêu cầu khác nếu có';
+    } else {
+      noteEl.placeholder = 'Ghi chú';
+    }
+  }
+  qcagEditItemsMaybeValidate();
+}
+
+function qcagEditItemOnSubTypeChange() {
+  const typeEl = document.getElementById('qcagEditItemType');
+  const subEl = document.getElementById('qcagEditItemSubType');
+  const widthEl = document.getElementById('qcagEditItemWidth');
+  const heightEl = document.getElementById('qcagEditItemHeight');
+  const actionEl = document.getElementById('qcagEditItemAction');
+  const polesEl = document.getElementById('qcagEditItemPoles');
+  const subType = subEl ? subEl.value : '';
+  const sl = String(subType || '').toLowerCase();
+  const selectedType = typeEl ? typeEl.value : 'Logo indoor';
+
+  if (actionEl) {
+    actionEl.disabled = false;
+    const prevAct = actionEl.value;
+    const actions = typeof getActionsForItem === 'function' ? getActionsForItem(selectedType, { subType }) : ['Làm mới', 'Sửa chữa', 'Di dời', 'Thu hồi'];
+    actionEl.innerHTML = `<option value="">Chọn hình thức</option>` + actions.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+    if (actions.includes(prevAct)) {
+      actionEl.value = prevAct;
+    } else {
+      actionEl.value = 'Làm mới';
+    }
+  }
+
+  if (sl.includes('tranh đèn') || sl.includes('tranh den') || sl.includes('light poster')) {
+    if (widthEl) { widthEl.value = '1.1'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.8'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.value = 0; polesEl.disabled = true; polesEl.style.opacity = '0.5'; }
+  } else if (sl.includes('emlemd') || sl.includes('emblemd')) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.77'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('square') || sl.includes('suqare')) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.71'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('group social') || sl.includes('ngôi sao') || sl.includes('ngoi sao')) {
+    if (widthEl) {
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+      if (!widthEl.value || !['0.6', '0.8', '1.0', '1'].includes(widthEl.value)) widthEl.value = '0.6';
+    }
+    if (heightEl) {
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+      if (!heightEl.value || !['0.9', '1.2', '1.5'].includes(heightEl.value)) heightEl.value = '0.9';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else if (sl.includes('young social') || sl.includes('lưới') || sl.includes('luoi')) {
+    if (widthEl) {
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+      if (!widthEl.value || !['0.68', '0.9'].includes(widthEl.value)) widthEl.value = '0.68';
+    }
+    if (heightEl) {
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+      if (!heightEl.value || !['0.9', '1.186'].includes(heightEl.value)) heightEl.value = '0.9';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  } else {
+    // Khác hoặc rỗng
+    if (widthEl) {
+      if (widthEl.disabled || ['1.1', '0.8', '0.6', '0.68'].includes(widthEl.value)) widthEl.value = '';
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+    }
+    if (heightEl) {
+      if (heightEl.disabled || ['0.8', '0.77', '0.71', '0.9', '1.2', '1.5', '1.186'].includes(heightEl.value)) heightEl.value = '';
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+    }
+    if (polesEl) { polesEl.disabled = false; polesEl.style.opacity = ''; }
+  }
+  qcagEditItemOnActionChange();
+  qcagEditItemsMaybeValidate();
+}
+
 function qcagDesktopOpenEditItemsModal() {
   if (!currentDetailRequest || !qcagDesktopCanEditItems(currentDetailRequest)) return;
   qcagEnsureEditItemsModal();
   const typeEl = document.getElementById('qcagEditItemType');
   const actionEl = document.getElementById('qcagEditItemAction');
   const brandEl = document.getElementById('qcagEditItemBrand');
+  const subWrap = document.getElementById('qcagEditItemSubTypeWrap');
+  const subEl = document.getElementById('qcagEditItemSubType');
+  if (subWrap) subWrap.classList.add('hidden');
+  if (subEl) subEl.value = '';
   typeEl.value = '';
   actionEl.value = '';
   brandEl.innerHTML = `<option value="">Chọn brand</option>${allBrands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
@@ -1029,40 +1461,95 @@ function qcagDesktopEditItemsOnTypeChange() {
   if (confirmBtn) confirmBtn.disabled = false;
 
   const brands = getBrandsForType(selectedType);
+  const stLower = String(selectedType || '').toLowerCase();
+  const isRem = stLower.includes('rèm') || stLower.includes('rem');
+  const isMaiChe = !isRem && (stLower.includes('mái che') || stLower.includes('mai che') || stLower.includes('mái hiên') || stLower.includes('mai hien'));
+  const isNoPoles = isMaiChe || isRem;
+
+  const isTranhDen = stLower.includes('tranh đèn') || stLower.includes('tranh den');
+  const isEmlemd = stLower.includes('emlemd') || stLower.includes('emblemd');
+  const isTigerSquare = stLower.includes('tiger square');
+
   if (!Array.isArray(brands) || brands.length === 0) {
     brandEl.innerHTML = '<option value="">Chọn brand</option>';
     return;
   }
   brandEl.innerHTML = `<option value="">Chọn brand</option>${brands.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join('')}`;
-  if (brands.includes(previousBrand)) {
+  if (isMaiChe || isTranhDen || isEmlemd || isTigerSquare) {
+    brandEl.value = 'Tiger';
+    brandEl.disabled = true;
+  } else if (brands.includes(previousBrand)) {
     brandEl.value = previousBrand;
+    brandEl.disabled = false;
   } else if (brands.length === 1) {
     brandEl.value = brands[0];
+    brandEl.disabled = false;
   } else {
     brandEl.value = '';
+    brandEl.disabled = false;
+  }
+  const widthEl = document.getElementById('qcagEditItemWidth');
+  const heightEl = document.getElementById('qcagEditItemHeight');
+  if (isTranhDen) {
+    if (widthEl) { widthEl.value = '1.1'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.8'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else if (isEmlemd) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.77'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else if (isTigerSquare) {
+    if (widthEl) { widthEl.value = '0.8'; widthEl.disabled = true; widthEl.style.opacity = '0.7'; }
+    if (heightEl) { heightEl.value = '0.71'; heightEl.disabled = true; heightEl.style.opacity = '0.7'; }
+  } else {
+    if (widthEl) {
+      if (widthEl.disabled || widthEl.value === '1.1' || widthEl.value === '0.8') widthEl.value = '';
+      widthEl.disabled = false;
+      widthEl.style.opacity = '';
+    }
+    if (heightEl) {
+      if (heightEl.disabled || heightEl.value === '0.8' || heightEl.value === '0.77' || heightEl.value === '0.71') heightEl.value = '';
+      heightEl.disabled = false;
+      heightEl.style.opacity = '';
+    }
   }
 
-  // Hide action for Logo types (logos don't require an action)
   try {
     if (actionEl) {
       const actionLabel = actionEl.parentElement;
-      const isLogoType = String(selectedType || '').toLowerCase().includes('logo') || String(selectedType || '').toLowerCase().includes('emblemd');
-      const validActions = isLogoType ? ["Làm mới", "Sửa chữa"] : ["Làm mới", "Thay bạt"];
-      if (isLogoType) {
-        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Sửa chữa">Sửa chữa</option>`;
+      const subEl = document.getElementById('qcagEditItemSubType');
+      const validActions = typeof getActionsForItem === 'function' ? getActionsForItem(selectedType, { subType: subEl ? subEl.value : '' }) : ['Làm mới', 'Thay bạt'];
+      if (isNoPoles) {
+        actionEl.disabled = true;
+        actionEl.innerHTML = `<option value="Làm mới">Làm mới</option>`;
+        actionEl.value = 'Làm mới';
         if (actionLabel) actionLabel.style.display = '';
       } else {
-        actionEl.innerHTML = `<option value="">Chọn hình thức</option><option value="Làm mới">Làm mới</option><option value="Thay bạt">Thay bạt</option>`;
+        actionEl.disabled = false;
+        actionEl.innerHTML = `<option value="">Chọn hình thức</option>` + validActions.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        actionEl.value = validActions.includes(previousAction) ? previousAction : '';
         if (actionLabel) actionLabel.style.display = '';
       }
-      if (validActions.includes(previousAction)) {
-        actionEl.value = previousAction;
+      qcagEditItemOnActionChange();
+    }
+  } catch (e) {}
+
+  // Vô hiệu hóa hoặc bật lại input số trụ
+  try {
+    const polesEl = document.getElementById('qcagEditItemPoles');
+    if (polesEl) {
+      if (isNoPoles) {
+        polesEl.value = 0;
+        polesEl.disabled = true;
+        polesEl.style.opacity = '0.5';
+        polesEl.style.cursor = 'not-allowed';
       } else {
-        actionEl.value = '';
+        polesEl.disabled = false;
+        polesEl.style.opacity = '';
+        polesEl.style.cursor = '';
       }
     }
   } catch (e) {}
 
+  qcagEditItemUpdateSubTypeUI();
   qcagEditItemsMaybeValidate();
 }
 
@@ -1101,6 +1588,25 @@ function qcagEditItemsMaybeValidate() {
   const brandVal = (brandEl || {}).value || '';
   if (!brandVal) { confirmBtn.disabled = true; return false; }
 
+  if (typeVal === 'Logo indoor' && (brandVal === 'Tiger' || brandVal === 'Heineken')) {
+    const subEl = document.getElementById('qcagEditItemSubType');
+    if (!subEl || !subEl.value) {
+      confirmBtn.disabled = true;
+      return false;
+    }
+  }
+
+  const noteEl = document.getElementById('qcagEditItemNote');
+  const noteVal = (noteEl || {}).value || '';
+  if (actionVal === 'Di dời' && !noteVal.trim()) {
+    confirmBtn.disabled = true;
+    return false;
+  }
+  if (actionVal === 'Thu hồi' && !noteVal.trim()) {
+    confirmBtn.disabled = true;
+    return false;
+  }
+
   // Width/height/poles accept only numbers (sanitizers on inputs), no further required checks
   confirmBtn.disabled = false;
   return true;
@@ -1121,19 +1627,37 @@ async function qcagDesktopConfirmEditItemsModal() {
   const useOldSize = !!(uBtn && uBtn.classList.contains('toggle-on'));
   const otherContent = (document.getElementById('qcagEditItemOtherContent') || {}).value || '';
 
+  const subTypeEl = document.getElementById('qcagEditItemSubType');
+  const subType = (type === 'Logo indoor' && (brand === 'Tiger' || brand === 'Heineken') && subTypeEl) ? (subTypeEl.value || '').trim() : '';
+
   if (!type) {
     showToast('Vui lòng nhập Loại bảng hiệu');
+    return;
+  }
+  if (type === 'Logo indoor' && (brand === 'Tiger' || brand === 'Heineken') && !subType) {
+    showToast(`Vui lòng chọn phân loại logo ${brand}`);
+    return;
+  }
+  if (action === 'Di dời' && !note.trim()) {
+    showToast('Vui lòng nhập tên quán nơi lấy Logo cho hình thức Di dời');
+    return;
+  }
+  if (action === 'Thu hồi' && !note.trim()) {
+    showToast('Vui lòng nhập nơi lưu trữ cho hình thức Thu hồi');
     return;
   }
 
   const items = qcagDesktopParseJson(currentDetailRequest.items, []);
   const now = new Date().toISOString();
+  const tLower = type.toLowerCase();
+  const isNoPoles = type === 'Mái che di động' || type === 'Rèm Mái Che' || tLower.includes('mái che') || tLower.includes('mai che') || tLower.includes('rèm') || tLower.includes('rem');
   items.push({
     type,
+    subType: subType || undefined,
     action,
     brand,
     note,
-    poles: polesVal,
+    poles: isNoPoles ? 0 : polesVal,
     width: width || undefined,
     height: height || undefined,
     survey,
@@ -1144,7 +1668,7 @@ async function qcagDesktopConfirmEditItemsModal() {
     otherContent: type === 'Hạng mục khác' ? otherContent : undefined
   });
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
-  comments.push({authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now});
+  comments.push({authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${subType ? ' - ' + subType : ''}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now});
 
   const updated = {
     ...currentDetailRequest,
@@ -2538,12 +3062,22 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
       ${items.map((item, idx) => {
         // Decide type color class for desktop QCAG view
         let typeClass = '';
+        let isNoPoles = false;
         try {
           const tt = String(item.type || '').toLowerCase();
-          // Prefer classifying as Bảng if the string contains 'bảng'
-          if (tt.includes('bảng')) typeClass = 'qcag-type-bang';
-          else if (tt.includes('hộp đèn') || tt.includes('hộp') || tt.includes('hop')) typeClass = 'qcag-type-hopden';
-          else if (tt.includes('logo')) typeClass = 'qcag-type-logo';
+          if (tt.includes('rèm') || tt.includes('rem')) {
+            typeClass = 'qcag-type-bang';
+            isNoPoles = true;
+          } else if (tt.includes('mái che') || tt.includes('mai che') || tt.includes('mái hiên') || tt.includes('mai hien')) {
+            typeClass = 'qcag-type-maiche';
+            isNoPoles = true;
+          } else if (tt.includes('bảng')) {
+            typeClass = 'qcag-type-bang';
+          } else if (tt.includes('hộp đèn') || tt.includes('hộp') || tt.includes('hop')) {
+            typeClass = 'qcag-type-hopden';
+          } else if (tt.includes('logo')) {
+            typeClass = 'qcag-type-logo';
+          }
         } catch (e) { typeClass = ''; }
         const requestText = item.type === 'Hạng mục khác' ? (item.otherContent || '-') : (item.note || '-');
         let size = '-';
@@ -2573,7 +3107,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
             size = `${item.width || '-'}m x ${item.height || '-'}m`;
           }
         }
-        const poles = (item.type !== 'Hạng mục khác') ? ((item.poles || 0) + ' trụ') : '-';
+        const poles = (item.type !== 'Hạng mục khác' && !isNoPoles) ? ((item.poles || 0) + ' trụ') : '-';
         const sizeHtml = typeof size === 'string' ? size : escapeHtml(String(size));
         const actionCell = canManageItems
           ? `<div class="qcag-item-actions-cell"><button class="qcag-item-edit-btn" onclick="qcagDesktopOpenEditItemModal(${idx})" title="Sửa hạng mục"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="qcag-item-delete-btn" onclick="qcagDesktopRemoveItem(${idx})" title="Xóa hạng mục">✕</button></div>`
@@ -2600,7 +3134,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false) {
         } catch (e) {}
 
         const badgesHtml = `${brandBadge}${addedBadgeHtml}${editedBadgeHtml}`;
-        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div class="qcag-item-type ${typeClass}">${escapeHtml(item.type || '-')}</div><div>${escapeHtml(item.action || '-')}</div><div><span class="qcag-brand-badge ${brandClass}">${escapeHtml(item.brand || '-')}</span></div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
+        return `<div class="qcag-items-row"><div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div><div class="qcag-item-type ${typeClass}">${escapeHtml(getItemDisplayName(item))}</div><div>${escapeHtml(item.action || '-')}</div><div><span class="qcag-brand-badge ${brandClass}">${escapeHtml(item.brand || '-')}</span></div><div>${sizeHtml}${sizeExtraNote}</div><div>${escapeHtml(poles)}</div><div>${escapeHtml(requestText)}</div>${actionCell}</div>`;
       }).join('')}
     </div>
   `;

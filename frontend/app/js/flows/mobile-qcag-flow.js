@@ -76,6 +76,52 @@
     if (appTitle) appTitle.textContent = 'QCAG MOBILE - DANH SACH XU LY';
   }
 
+  function unpatchHomeForHeinekenMobile() {
+    const home = document.getElementById('homeScreen');
+    if (!home) return;
+
+    const statsNew = document.getElementById('homeStatsGrid');
+    if (statsNew && statsNew.parentElement) {
+      statsNew.parentElement.classList.remove('hidden');
+      statsNew.parentElement.style.display = '';
+    }
+
+    const statWarrantyPending = document.getElementById('statWarrantyPending');
+    if (statWarrantyPending) {
+      let wrap = statWarrantyPending;
+      for (let i = 0; i < 3 && wrap; i++) wrap = wrap.parentElement;
+      if (wrap) {
+        wrap.classList.remove('hidden');
+        wrap.style.display = '';
+      }
+    }
+
+    const note = document.getElementById('homeLoadNote');
+    if (note) {
+      note.classList.remove('hidden');
+      note.style.display = '';
+    }
+
+    const newBtn = document.querySelector('#homeActions button.qcag-mobile-action-btn') || document.querySelector('#homeActions button');
+    if (newBtn && newBtn.classList.contains('qcag-mobile-action-btn')) {
+      newBtn.classList.remove('qcag-mobile-action-btn', 'bg-blue-600');
+      newBtn.onclick = function () { startNewRequest(); };
+      newBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg> Tạo Yêu Cầu Mới';
+    }
+
+    const warrantyBtn = document.querySelectorAll('#homeActions button')[2];
+    if (warrantyBtn && warrantyBtn.classList.contains('qcag-mobile-action-btn')) {
+      warrantyBtn.classList.remove('qcag-mobile-action-btn', 'bg-emerald-600', 'border', 'border-emerald-700');
+      warrantyBtn.onclick = function () { startWarrantyCheck(); };
+      warrantyBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg> Kiểm Tra Bảo Hành';
+    }
+
+    const appTitle = document.querySelector('#homeScreen h1.text-sm');
+    if (appTitle && appTitle.textContent.includes('QCAG MOBILE')) {
+      appTitle.textContent = (typeof defaultConfig !== 'undefined' && defaultConfig && defaultConfig.app_title) || 'Quản Lý Yêu Cầu';
+    }
+  }
+
   function _parseJson(raw, fallback) {
     try {
       return JSON.parse(raw || '');
@@ -368,7 +414,10 @@
     const enabled = isQcagMobileMode();
     document.body.classList.toggle('qcag-mobile-mode', enabled);
 
-    if (!enabled) return;
+    if (!enabled) {
+      unpatchHomeForHeinekenMobile();
+      return;
+    }
 
     patchSessionBarForQcagMobile();
     patchHomeForQcagMobile();

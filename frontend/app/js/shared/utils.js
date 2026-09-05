@@ -14,7 +14,20 @@ function escapeHtml(str) {
 function getBrandsForType(type) {
   try {
     const t = String(type || '');
-    if (t.includes('Emblemd') || t === 'Logo indoor 2 mặt (Emblemd)') {
+    const tl = t.toLowerCase();
+    if (tl.includes('emlemd') || tl.includes('emblemd') || t === 'Logo indoor - Emlemd 2 mặt' || t === 'Logo indoor 2 mặt (Emblemd)') {
+      return ['Tiger'];
+    }
+    if (tl.includes('mái che di động') || tl.includes('mai che di dong') || tl.includes('mái hiên di động') || tl.includes('mai hien di dong') || t === 'Mái che di động') {
+      return ['Tiger'];
+    }
+    if (tl.includes('rèm mái che') || tl.includes('rem mai che') || t === 'Rèm Mái Che') {
+      return ['Tiger', 'Bivina', 'Bia Việt', 'Larue'];
+    }
+    if (tl.includes('tranh đèn') || tl.includes('tranh den') || t === 'Logo indoor - Tranh đèn') {
+      return ['Tiger'];
+    }
+    if (tl.includes('tiger square') || t === 'Logo indoor - Tiger Square (1 mặt treo tường)') {
       return ['Tiger'];
     }
   } catch (e) {}
@@ -32,6 +45,137 @@ function getBrandsForType(type) {
   }
 
   return allBrands;
+}
+
+function getActionsForItem(type, item) {
+  const tl = String(type || (item && item.type) || '').toLowerCase();
+  const st = String((item && item.subType) || '').toLowerCase();
+  const isTranhDen = tl.includes('tranh đèn') || tl.includes('tranh den') || tl.includes('light poster') || st.includes('tranh đèn') || st.includes('tranh den') || st.includes('light poster');
+  const isLogo = tl.includes('logo') || tl.includes('emblemd') || tl.includes('emlemd');
+  const isRem = tl.includes('rèm') || tl.includes('rem');
+  const isMaiChe = !isRem && (tl.includes('mái che') || tl.includes('mai che') || tl.includes('mái hiên') || tl.includes('mai hien'));
+
+  if (isMaiChe || isRem) {
+    return ['Làm mới'];
+  }
+  if (isTranhDen) {
+    return ['Làm mới', 'Thay Poster', 'Sửa chữa', 'Di dời', 'Thu hồi'];
+  }
+  if (isLogo) {
+    return ['Làm mới', 'Sửa chữa', 'Di dời', 'Thu hồi'];
+  }
+  return ['Làm mới', 'Thay bạt'];
+}
+
+function isPolesDisabledType(type, item) {
+  const t = String(type || (item && item.type) || '').toLowerCase();
+  const st = String((item && item.subType) || '').toLowerCase();
+  if (st.includes('tranh đèn') || st.includes('tranh den') || st.includes('light poster')) return true;
+  return t.includes('mái che') || t.includes('mai che') || t.includes('mái hiên') || t.includes('mai hien') || t.includes('rèm') || t.includes('rem') || t.includes('tranh đèn') || t.includes('tranh den') || t.includes('light poster');
+}
+
+function getLogoSubTypeLabel(subType) {
+  if (!subType) return '';
+  const sl = String(subType).toLowerCase();
+  if (sl.includes('tranh đèn') || sl.includes('tranh den') || sl.includes('light poster')) {
+    return 'Light Poster - Tranh đèn';
+  }
+  if (sl.includes('emlemd') || sl.includes('emblemd')) {
+    return 'Emlemd 2 mặt';
+  }
+  if (sl.includes('square') || sl.includes('suqare')) {
+    return 'Suqare Flat 1 mặt (treo tường)';
+  }
+  if (sl.includes('group social') || sl.includes('ngôi sao') || sl.includes('ngoi sao')) {
+    return 'Group Social (Model Ngôi Sao)';
+  }
+  if (sl.includes('young social') || sl.includes('lưới') || sl.includes('luoi')) {
+    return 'Young Social (Model Lưới)';
+  }
+  return subType;
+}
+
+function getTigerSubTypeLabel(subType) {
+  return getLogoSubTypeLabel(subType);
+}
+
+function getMatchingHeinekenPair(subType, changedField, value) {
+  const s = String(subType || '').toLowerCase();
+  let pairs = [];
+  if (s.includes('group social') || s.includes('ngôi sao') || s.includes('ngoi sao')) {
+    pairs = [
+      { width: 0.6, height: 0.9 },
+      { width: 0.8, height: 1.2 },
+      { width: 1.0, height: 1.5 }
+    ];
+  } else if (s.includes('young social') || s.includes('lưới') || s.includes('luoi')) {
+    pairs = [
+      { width: 0.68, height: 0.9 },
+      { width: 0.9, height: 1.186 }
+    ];
+  }
+  if (!pairs.length) return null;
+  const num = parseFloat(value);
+  if (isNaN(num)) return null;
+
+  if (changedField === 'width') {
+    return pairs.find(p => Math.abs(p.width - num) < 0.001) || null;
+  } else if (changedField === 'height') {
+    return pairs.find(p => Math.abs(p.height - num) < 0.001) || null;
+  }
+  return null;
+}
+
+function getMatchingOutdoorLogoPair(brand, changedField, value) {
+  const b = String(brand || '').toLowerCase();
+  let pairs = [];
+  if (b.includes('heineken')) {
+    pairs = (typeof heinekenOutdoorSizes !== 'undefined' ? heinekenOutdoorSizes : [
+      { width: 1.5, height: 0.75 },
+      { width: 2.0, height: 1.0 },
+      { width: 3.0, height: 1.5 },
+      { width: 4.0, height: 2.0 },
+      { width: 5.0, height: 2.5 }
+    ]);
+  } else if (b.includes('tiger')) {
+    pairs = (typeof tigerOutdoorSizes !== 'undefined' ? tigerOutdoorSizes : [
+      { width: 1.5, height: 0.5 },
+      { width: 2.4, height: 0.8 },
+      { width: 3.0, height: 1.0 },
+      { width: 3.9, height: 1.3 },
+      { width: 4.5, height: 1.5 }
+    ]);
+  }
+  if (!pairs.length) return null;
+  const num = parseFloat(value);
+  if (isNaN(num)) return null;
+
+  if (changedField === 'width') {
+    return pairs.find(p => Math.abs(p.width - num) < 0.001) || null;
+  } else if (changedField === 'height') {
+    return pairs.find(p => Math.abs(p.height - num) < 0.001) || null;
+  }
+  return null;
+}
+
+function getItemDisplayName(item) {
+  if (!item) return '-';
+  const t = item.type || '-';
+  if (item.subType && item.subType !== 'Khác') {
+    const tl = t.toLowerCase();
+    if (tl.includes('logo indoor') && !t.includes('-')) {
+      return `${t} - ${getTigerSubTypeLabel(item.subType)}`;
+    }
+  }
+  return t;
+}
+
+function showDefaultFieldToast(e) {
+  if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
+  if (typeof showToast === 'function') {
+    showToast('Hạng mục này đã được mặc định những thông tin này không thể thay đổi');
+  }
 }
 
 function sanitizeDecimalInput(el) {
@@ -107,6 +251,10 @@ function toggleCustomSelect(e, id, field) {
   const options = container.querySelector('.cs-options');
   if (!options) return;
 
+  if (field === 'heinekenWidth' || field === 'heinekenHeight' || field === 'outdoorLogoWidth' || field === 'outdoorLogoHeight') {
+    options.classList.add('dropup');
+  }
+
   const isHidden = options.classList.contains('hidden');
   closeAllCustomSelects();
   if (isHidden) options.classList.remove('hidden');
@@ -120,6 +268,12 @@ function chooseCustomOption(id, field, value) {
   try {
     const trig = document.querySelector(`.custom-select[data-id="${id}"][data-field="${field}"] .cs-trigger`);
     if (trig) trig.classList.remove('field-error');
+    if (['heinekenWidth', 'heinekenHeight', 'outdoorLogoWidth', 'outdoorLogoHeight'].includes(field)) {
+      const wTrig = document.getElementById(`width-${id}`);
+      const hTrig = document.getElementById(`height-${id}`);
+      if (wTrig) wTrig.classList.remove('field-error');
+      if (hTrig) hTrig.classList.remove('field-error');
+    }
   } catch (e) {}
 
   try {

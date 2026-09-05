@@ -75,7 +75,8 @@ async function submitWarrantyRequest() {
     if (result.isOk) {
       try { blurActiveInput(); } catch (e) {}
       hideLoadingOverlay();
-      document.getElementById('confirmModal').classList.remove('hidden');
+      if (typeof openConfirmSuccessModal === 'function') openConfirmSuccessModal();
+      else document.getElementById('confirmModal').classList.remove('hidden');
     } else {
       hideLoadingOverlay();
       showToast('Lỗi tạo yêu cầu');
@@ -87,7 +88,8 @@ async function submitWarrantyRequest() {
     updateRequestCount();
     try { blurActiveInput(); } catch (e) {}
     hideLoadingOverlay();
-    document.getElementById('confirmModal').classList.remove('hidden');
+    if (typeof openConfirmSuccessModal === 'function') openConfirmSuccessModal();
+    else document.getElementById('confirmModal').classList.remove('hidden');
   }
 
   btn.disabled = false;

@@ -266,7 +266,15 @@ body.modal-open #app > *:not(.fixed) {
   user-select: none;
 }
 /* Ensure modal overlays remain interactive */
-body.modal-open .fixed.z-60 {
+body.modal-open .fixed.z-60,
+body.modal-open .fixed[class*="z-"],
+body.modal-open #confirmModal,
+body.modal-open #duplicateOutletModal,
+body.modal-open #duplicateItemsModal,
+body.modal-open #otherOutletModal,
+body.modal-open #logoutModal,
+body.modal-open #deleteModal,
+body.modal-open #mapModal {
   pointer-events: auto !important;
 }
 
@@ -281,53 +289,94 @@ body.modal-open .fixed.z-60 {
   background: rgba(255,255,255,0.02) !important; /* slight lightening */
 }
 
-/* Make the Tab 1 primary action area sticky so the "Tiếp tục" button is always visible
-   inside the Tab 1 scroll container (prevents it from being pushed off-screen). */
-/* Make Tab containers flush so their action/footer area can stick to screen bottom */
+/* ============================================================
+   WIZARD TABS FIXED FOOTER (Tab 1, Tab 2, Tab 3 & Warranty)
+   Nút "Tiếp tục" / Action buttons luôn cố định ở bottom màn hình
+   ============================================================ */
+
 #tab1,
 #tab2,
-#tab3 {
-  position: relative; /* ensure sticky works within these scroll containers */
-  padding-bottom: 0 !important; /* remove parent bottom padding so sticky can reach screen bottom */
-}
-#tab1 > .mt-6,
-#tab2 > .mt-6,
-#tab3 > .mt-6 {
-  position: sticky;
-  left: calc(-1 * 1rem); /* compensate parent .p-4 horizontal padding (1rem) so background stretches edge-to-edge */
-  right: calc(-1 * 1rem);
-  bottom: 0;
-  background: var(--surface-1); /* solid background attached to bottom */
-  padding: 12px 1rem calc(12px + env(safe-area-inset-bottom)); /* include safe-area, keep inner horizontal padding */
-  border-top: 1px solid var(--border-1);
-  z-index: 50;
+#tab3,
+#wTab1,
+#wTab2 {
+  position: relative;
+  padding-bottom: 0 !important;
 }
 
-/* Make the action/footer area fixed to the bottom immediately when the tab is visible
-   (no .hidden). Also add bottom padding to the tab content so it isn't covered. */
+/* Nút footer cố định ở bottom của màn hình cho tất cả các tab */
+#tab1:not(.hidden) > .mt-6,
 #tab2:not(.hidden) > .mt-6,
-#tab3:not(.hidden) > .mt-6 {
+#tab3:not(.hidden) > .mt-6,
+#wTab1:not(.hidden) > .mt-6,
+#wTab2:not(.hidden) > .mt-6 {
   position: fixed !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
+  margin: 0 !important;
   background: var(--surface-1) !important;
   padding: 12px 1rem calc(12px + env(safe-area-inset-bottom)) !important;
   border-top: 1px solid var(--border-1) !important;
-  z-index: 60 !important;
+  z-index: 40 !important;
 }
 
-/* Ensure the visible tab content has extra bottom space so content isn't hidden
-   behind the fixed action area. The value should be slightly larger than the
-   action area height to provide breathing room. */
+/* Tăng padding-bottom cho nội dung cuộn để không bị footer che khuất */
+#tab1:not(.hidden),
 #tab2:not(.hidden),
-#tab3:not(.hidden) {
-  /* increase bottom padding so scroll can reveal content hidden behind fixed footer
-     increased from 72px to 120px to account for larger buttons and any extra margins */
+#tab3:not(.hidden),
+#wTab1:not(.hidden),
+#wTab2:not(.hidden) {
   padding-bottom: calc(120px + env(safe-area-inset-bottom)) !important;
 }
-#tab1 > .mt-6 > button {
+
+#tab1 > .mt-6 > button,
+#wTab1 > .mt-6 > button {
   width: 100%;
+}
+
+/* ============================================================
+   MODALS & BOTTOM SHEETS Z-INDEX FIX
+   Đảm bảo tất cả modal luôn nằm trên cùng (z-index: 99999)
+   Hoàn toàn không bị các nút fixed/sticky đè lên
+   ============================================================ */
+
+#confirmModal,
+#duplicateOutletModal,
+#duplicateItemsModal,
+#otherOutletModal,
+#logoutModal,
+#deleteModal,
+#mapModal,
+.z-60,
+.z-\[99999\] {
+  z-index: 99999 !important;
+}
+
+#confirmModal > div,
+#duplicateOutletModal > div,
+#duplicateItemsModal > div,
+#otherOutletModal > div,
+#logoutModal > div,
+#deleteModal > div {
+  position: relative;
+  z-index: 100000 !important;
+}
+
+/* Khi có bất kỳ modal nào mở, ẩn hoàn toàn các nút footer fixed bottom để tránh chèn đè */
+body.modal-open #tab1 > .mt-6,
+body.modal-open #tab2 > .mt-6,
+body.modal-open #tab3 > .mt-6,
+body.modal-open #wTab1 > .mt-6,
+body.modal-open #wTab2 > .mt-6,
+body:has(#confirmModal:not(.hidden)) #tab1 > .mt-6,
+body:has(#confirmModal:not(.hidden)) #tab2 > .mt-6,
+body:has(#confirmModal:not(.hidden)) #tab3 > .mt-6,
+body:has(#confirmModal:not(.hidden)) #wTab1 > .mt-6,
+body:has(#confirmModal:not(.hidden)) #wTab2 > .mt-6,
+body:has(#duplicateOutletModal:not(.hidden)) #tab1 > .mt-6,
+body:has(#duplicateItemsModal:not(.hidden)) #tab1 > .mt-6,
+body:has(#otherOutletModal:not(.hidden)) #tab1 > .mt-6 {
+  display: none !important;
 }
 
 /* Ensure primary action buttons in Tab 2 keep dark appearance in dark mode */
@@ -1749,7 +1798,46 @@ body.dark .qcag-survey-badge,
 .cs-trigger { width: 100%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; cursor: pointer; font-size:14px; }
 .cs-trigger .cs-label { color: #111; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cs-options { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: #fff; border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,0.10); max-height: 260px; overflow-y: auto; z-index: 80; }
-.cs-options.dropup { top: auto; bottom: calc(100% + 6px); }
+.cs-options.dropup { top: auto !important; bottom: calc(100% + 6px) !important; box-shadow: 0 -8px 20px rgba(0,0,0,0.15) !important; }
+.theme-dark .cs-options.dropup { box-shadow: 0 -8px 20px rgba(0,0,0,0.4) !important; }
+
+/* Khung hiển thị mặc định cố định bo tròn và màu nền phân biệt */
+.cs-fixed-box {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  background: #e9eef4;
+  border-radius: 10px !important;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background .15s, border-color .15s;
+}
+.cs-fixed-box:hover {
+  background: #e2e8f0;
+}
+.theme-dark #newRequestScreen #tab2 .cs-fixed-box,
+[data-theme="dark"] #newRequestScreen #tab2 .cs-fixed-box,
+.theme-dark .cs-fixed-box,
+[data-theme="dark"] .cs-fixed-box {
+  background: #191d24 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  border-radius: 10px !important;
+}
+.theme-dark #newRequestScreen #tab2 .cs-fixed-box:hover,
+[data-theme="dark"] #newRequestScreen #tab2 .cs-fixed-box:hover,
+.theme-dark .cs-fixed-box:hover,
+[data-theme="dark"] .cs-fixed-box:hover {
+  background: #14171d !important;
+}
 
 /* Locked outlet input styling */
 .input-locked {

@@ -56,6 +56,22 @@ function disableModalBackdrop() {
   } catch (e) {}
 }
 
+function openConfirmSuccessModal() {
+  const m = document.getElementById('confirmModal');
+  if (m) {
+    m.classList.remove('hidden');
+    enableModalBackdrop();
+  }
+}
+
+function closeConfirmSuccessModal() {
+  const m = document.getElementById('confirmModal');
+  if (m) {
+    m.classList.add('hidden');
+    disableModalBackdrop();
+  }
+}
+
 // ── Loading Overlay ──────────────────────────────────────────────────────
 function showLoadingOverlay(message, subMessage) {
   var el = document.getElementById('loadingOverlay');

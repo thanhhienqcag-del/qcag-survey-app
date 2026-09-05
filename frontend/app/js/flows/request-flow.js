@@ -293,23 +293,185 @@ function updateRequestItem(id, field, value) {
     } else {
       item[field] = value;
     }
+
     if (field === 'type') {
-      // reset action; set default brand for Emblemd type
-      item.action = '';
       try {
         const tv = String(value || '');
-        if (tv.includes('Emblemd') || tv === 'Logo indoor 2 mặt (Emblemd)') {
+        const tl = tv.toLowerCase();
+        const isRem = tl.includes('rèm') || tl.includes('rem');
+        const isMaiChe = !isRem && (tl.includes('mái che') || tl.includes('mai che') || tl.includes('mái hiên') || tl.includes('mai hien'));
+        const isTranhDen = tl.includes('tranh đèn') || tl.includes('tranh den');
+        const isEmlemd = tl.includes('emlemd') || tl.includes('emblemd');
+        const isTigerSquare = tl.includes('tiger square');
+
+        item.subType = '';
+
+        if (isEmlemd || isMaiChe || isTranhDen || isTigerSquare) {
           item.brand = 'Tiger';
         } else {
           item.brand = '';
         }
+
+        if (isTranhDen) {
+          item.width = 1.1;
+          item.height = 0.8;
+          item.action = 'Làm mới';
+          item.useOldSize = false;
+        } else if (isEmlemd) {
+          item.width = 0.8;
+          item.height = 0.77;
+          item.useOldSize = false;
+        } else if (isTigerSquare) {
+          item.width = 0.8;
+          item.height = 0.71;
+          item.useOldSize = false;
+        } else {
+          item.width = '';
+          item.height = '';
+        }
+
+        if (tl.includes('logo outdoor') || tv === 'Logo Outdoor') {
+          item.subType = '';
+          item.width = '';
+          item.height = '';
+          item.brand = '';
+          item.useOldSize = false;
+        }
+
+        // Mái che di động, Rèm Mái Che: mặc định hình thức 'Làm mới', vô hiệu hóa trụ (0)
+        if (isMaiChe || isRem) {
+          item.action = 'Làm mới';
+          item.poles = 0;
+        } else if (isTranhDen) {
+          item.poles = 0;
+          if (!item.action) item.action = 'Làm mới';
+        } else if (!isEmlemd && !isTigerSquare) {
+          item.action = '';
+        }
       } catch (e) { item.brand = ''; }
     }
+
+    if (field === 'brand') {
+      try {
+        const tl = String(item.type || '').toLowerCase();
+        if (tl.includes('logo indoor') || item.type === 'Logo indoor') {
+          item.subType = '';
+          item.width = '';
+          item.height = '';
+        } else if (tl.includes('logo outdoor') || item.type === 'Logo Outdoor') {
+          item.subType = '';
+          item.useOldSize = false;
+          item.width = '';
+          item.height = '';
+        }
+      } catch (e) {}
+    }
+
+    if (field === 'subType') {
+      try {
+        const sub = String(value || '').toLowerCase();
+        if (sub.includes('tranh đèn') || sub.includes('tranh den') || sub.includes('light poster')) {
+          item.width = 1.1;
+          item.height = 0.8;
+          if (!item.action) item.action = 'Làm mới';
+          item.poles = 0;
+          item.useOldSize = false;
+        } else if (sub.includes('emlemd') || sub.includes('emblemd')) {
+          item.width = 0.8;
+          item.height = 0.77;
+          item.useOldSize = false;
+        } else if (sub.includes('square') || sub.includes('suqare')) {
+          item.width = 0.8;
+          item.height = 0.71;
+          item.useOldSize = false;
+        } else if (sub.includes('group social') || sub.includes('ngôi sao') || sub.includes('ngoi sao')) {
+          item.width = '';
+          item.height = '';
+          item.useOldSize = false;
+        } else if (sub.includes('young social') || sub.includes('lưới') || sub.includes('luoi')) {
+          item.width = '';
+          item.height = '';
+          item.useOldSize = false;
+        } else {
+          item.width = '';
+          item.height = '';
+        }
+      } catch (e) {}
+    }
+
+    if (field === 'heinekenSizeSet') {
+      try {
+        const parts = String(value || '').split('x');
+        if (parts.length === 2) {
+          item.width = parseFloat(parts[0]);
+          item.height = parseFloat(parts[1]);
+          item.useOldSize = false;
+        }
+      } catch (e) {}
+    }
+
+    if (field === 'heinekenWidth') {
+      try {
+        const wVal = parseFloat(value);
+        item.width = wVal;
+        const pair = (typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(item.subType, 'width', wVal) : null);
+        if (pair) {
+          item.width = pair.width;
+          item.height = pair.height;
+        }
+        item.useOldSize = false;
+      } catch (e) {}
+    }
+
+    if (field === 'heinekenHeight') {
+      try {
+        const hVal = parseFloat(value);
+        item.height = hVal;
+        const pair = (typeof getMatchingHeinekenPair === 'function' ? getMatchingHeinekenPair(item.subType, 'height', hVal) : null);
+        if (pair) {
+          item.width = pair.width;
+          item.height = pair.height;
+        }
+        item.useOldSize = false;
+      } catch (e) {}
+    }
+
+    if (field === 'outdoorLogoWidth') {
+      try {
+        const wVal = parseFloat(value);
+        item.width = wVal;
+        const pair = (typeof getMatchingOutdoorLogoPair === 'function' ? getMatchingOutdoorLogoPair(item.brand, 'width', wVal) : null);
+        if (pair) {
+          item.width = pair.width;
+          item.height = pair.height;
+        }
+        item.useOldSize = false;
+      } catch (e) {}
+    }
+
+    if (field === 'outdoorLogoHeight') {
+      try {
+        const hVal = parseFloat(value);
+        item.height = hVal;
+        const pair = (typeof getMatchingOutdoorLogoPair === 'function' ? getMatchingOutdoorLogoPair(item.brand, 'height', hVal) : null);
+        if (pair) {
+          item.width = pair.width;
+          item.height = pair.height;
+        }
+        item.useOldSize = false;
+      } catch (e) {}
+    }
+
+    const tlAct = String(item.type || '').toLowerCase();
+    const isFixedActionType = tlAct.includes('mái che') || tlAct.includes('mai che') || tlAct.includes('mái hiên') || tlAct.includes('mai hien') || tlAct.includes('rèm') || tlAct.includes('rem');
+    if (field === 'action' && isFixedActionType) {
+      item.action = 'Làm mới';
+    }
     // Only re-render the whole items list when the change affects layout
-    // (type, brand, survey, useOldSize, action). Avoid re-render on simple
+    // (type, brand, subType, survey, useOldSize, action, heineken sizes, outdoor sizes). Avoid re-render on simple
     // numeric/text updates (width/height/poles/otherContent) to prevent
     // DOM replacement that blurs inputs on mobile.
-    const layoutFields = ['type','brand','survey','useOldSize','action'];
+    const layoutFields = ['type','brand','subType','survey','useOldSize','action','heinekenSizeSet','heinekenWidth','heinekenHeight','outdoorLogoWidth','outdoorLogoHeight'];
     const shouldRender = layoutFields.includes(field);
     if (shouldRender) renderRequestItems();
     try { saveNewRequestDraft(); } catch (e) {}
@@ -319,6 +481,14 @@ function updateRequestItem(id, field, value) {
 function setPolesSilent(id, value) {
   const item = currentRequestItems.find(i => i.id === id);
   if (!item) return;
+  if (isPolesDisabledType(item.type)) {
+    item.poles = 0;
+    const el = document.getElementById(`poles-${id}`);
+    if (el) el.value = 0;
+    try { showDefaultFieldToast(); } catch (e) {}
+    try { saveNewRequestDraft(); } catch (e) {}
+    return;
+  }
   const v = parseInt(value, 10);
   item.poles = Number.isNaN(v) ? 0 : v;
   const el = document.getElementById(`poles-${id}`);
@@ -327,6 +497,11 @@ function setPolesSilent(id, value) {
 }
 
 function incrementPoles(id, delta) {
+  const item = currentRequestItems.find(i => i.id === id);
+  if (item && isPolesDisabledType(item.type, item)) {
+    try { showDefaultFieldToast(); } catch (e) {}
+    return;
+  }
   const el = document.getElementById(`poles-${id}`);
   const cur = el ? (parseInt(el.value || '0', 10) || 0) : (currentRequestItems.find(i => i.id === id)?.poles || 0);
   setPolesSilent(id, cur + delta);
@@ -335,6 +510,16 @@ function incrementPoles(id, delta) {
 function toggleOldSize(id) {
   const item = currentRequestItems.find(i => i.id === id);
   if (item) {
+    const tl = String(item.type || '').toLowerCase();
+    const sub = String(item.subType || '').toLowerCase();
+    const isLogoIndoor = (item.type === 'Logo indoor' || tl.includes('logo indoor'));
+    const isLogoOutdoor = (item.type === 'Logo Outdoor' || tl.includes('logo outdoor'));
+    const isLogoOutdoorFixed = isLogoOutdoor && (item.brand === 'Tiger' || item.brand === 'Heineken');
+    const isFixedSubType = sub.includes('tranh đèn') || sub.includes('tranh den') || sub.includes('light poster') || sub.includes('emlemd') || sub.includes('emblemd') || sub.includes('square') || sub.includes('suqare') || (isLogoIndoor && (item.brand === 'Tiger' || item.brand === 'Heineken')) || isLogoOutdoorFixed;
+    if (tl.includes('tranh đèn') || tl.includes('tranh den') || tl.includes('emlemd') || tl.includes('emblemd') || tl.includes('tiger square') || isFixedSubType) {
+      try { showDefaultFieldToast(); } catch (e) {}
+      return;
+    }
     item.useOldSize = !item.useOldSize;
     renderRequestItems();
     try { saveNewRequestDraft(); } catch (e) {}
@@ -365,6 +550,70 @@ function renderRequestItems() {
   container.innerHTML = currentRequestItems.map((item, index) => {
     const brands = getBrandsForType(item.type);
     const isOther = item.type === 'Hạng mục khác';
+    const tl = String(item.type || '').toLowerCase();
+    const isRem = tl.includes('rèm') || tl.includes('rem');
+    const isMaiChe = !isRem && (tl.includes('mái che') || tl.includes('mai che') || tl.includes('mái hiên') || tl.includes('mai hien'));
+    const isTranhDenLegacy = tl.includes('tranh đèn') || tl.includes('tranh den');
+    const isEmlemdLegacy = tl.includes('emlemd') || tl.includes('emblemd');
+    const isTigerSquareLegacy = tl.includes('tiger square');
+    const isFixedTiger = isEmlemdLegacy || isMaiChe || isTranhDenLegacy || isTigerSquareLegacy;
+
+    const isLogoIndoor = (item.type === 'Logo indoor' || tl.includes('logo indoor'));
+    const isLogoIndoorTiger = isLogoIndoor && (item.brand === 'Tiger');
+    const isLogoIndoorHeineken = isLogoIndoor && (item.brand === 'Heineken');
+
+    const isLogoOutdoor = (item.type === 'Logo Outdoor' || tl.includes('logo outdoor'));
+    const isLogoOutdoorTiger = isLogoOutdoor && (item.brand === 'Tiger');
+    const isLogoOutdoorHeineken = isLogoOutdoor && (item.brand === 'Heineken');
+    const isLogoOutdoorFixed = isLogoOutdoorTiger || isLogoOutdoorHeineken;
+    let outdoorSizesList = [];
+    if (isLogoOutdoorHeineken) {
+      outdoorSizesList = (typeof heinekenOutdoorSizes !== 'undefined' ? heinekenOutdoorSizes : []);
+    } else if (isLogoOutdoorTiger) {
+      outdoorSizesList = (typeof tigerOutdoorSizes !== 'undefined' ? tigerOutdoorSizes : []);
+    }
+
+    const sub = String(item.subType || '').toLowerCase();
+    const isTranhDen = isTranhDenLegacy || (isLogoIndoorTiger && (sub.includes('tranh đèn') || sub.includes('tranh den') || sub.includes('light poster')));
+    const isEmlemd = isEmlemdLegacy || (isLogoIndoorTiger && (sub.includes('emlemd') || sub.includes('emblemd')));
+    const isTigerSquare = isTigerSquareLegacy || (isLogoIndoorTiger && (sub.includes('square') || sub.includes('suqare')));
+
+    const isHeinekenGroupSocial = isLogoIndoorHeineken && (sub.includes('group social') || sub.includes('ngôi sao') || sub.includes('ngoi sao'));
+    const isHeinekenYoungSocial = isLogoIndoorHeineken && (sub.includes('young social') || sub.includes('lưới') || sub.includes('luoi'));
+    let hkSubObj = null;
+    if (isHeinekenGroupSocial) {
+      hkSubObj = (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes[0] : null);
+    } else if (isHeinekenYoungSocial) {
+      hkSubObj = (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes[1] : null);
+    }
+
+    let isFixedSize = false;
+    let fixedWidth = null;
+    let fixedHeight = null;
+    let isFixedAction = isMaiChe || isRem;
+    let noPoles = isPolesDisabledType(item.type, item);
+
+    if (isTranhDen) {
+      isFixedSize = true;
+      fixedWidth = 1.1;
+      fixedHeight = 0.8;
+      noPoles = true;
+    } else if (isEmlemd) {
+      isFixedSize = true;
+      fixedWidth = 0.8;
+      fixedHeight = 0.77;
+    } else if (isTigerSquare) {
+      isFixedSize = true;
+      fixedWidth = 0.8;
+      fixedHeight = 0.71;
+    }
+
+    if (isFixedAction) { item.action = 'Làm mới'; }
+    if (isFixedTiger) { item.brand = 'Tiger'; }
+    if (isFixedSize) { item.width = fixedWidth; item.height = fixedHeight; }
+    if (isLogoIndoorHeineken || isLogoOutdoorFixed) { item.useOldSize = false; }
+    if (noPoles) { item.poles = 0; }
+    const hasBrandAndAction = item.type && (item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo') || tl.includes('mái che') || tl.includes('mai che') || tl.includes('rèm') || tl.includes('rem'));
     return `
       <div id="requestItem-${item.id}" class="bg-gray-50 rounded-xl p-4">
         <div class="flex items-center justify-between mb-3">
@@ -402,12 +651,15 @@ function renderRequestItems() {
           </div>
 
           ${item.type && !isOther ? `
-            ${(item.type && (item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo'))) ? `
+            ${hasBrandAndAction ? `
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Brand</label>
-                  ${((item.type||'').includes('Emblemd') || (item.type||'') === 'Logo indoor 2 mặt (Emblemd)') ? `
-                    <div class="py-2 px-3 bg-gray-100 rounded text-sm font-medium">Tiger</div>
+                  ${isFixedTiger ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>Tiger</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
                     <input type="hidden" name="brand-${item.id}" value="Tiger">
                   ` : `
                     <div class="custom-select" data-id="${item.id}" data-field="brand">
@@ -420,24 +672,34 @@ function renderRequestItems() {
                 </div>
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Hình thức</label>
-                  <div class="custom-select" data-id="${item.id}" data-field="action">
-                    <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
-                    <div class="cs-options hidden">
-                      <div class="cs-option" data-value="Làm mới">Làm mới</div>
-                      ${((item.type||'').includes('Logo') || (item.type||'').toLowerCase().includes('emblemd')) ? `<div class="cs-option" data-value="Sửa chữa">Sửa chữa</div>` : `<div class="cs-option" data-value="Thay bạt">Thay bạt</div>`}
+                  ${isFixedAction ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>Làm mới</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     </div>
-                  </div>
+                    <input type="hidden" name="action-${item.id}" value="Làm mới">
+                  ` : `
+                    <div class="custom-select" data-id="${item.id}" data-field="action">
+                      <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
+                      <div class="cs-options hidden">
+                        ${getActionsForItem(item.type, item).map(act => `<div class="cs-option" data-value="${escapeHtml(act)}">${escapeHtml(act)}</div>`).join('')}
+                      </div>
+                    </div>
+                  `}
                 </div>
               </div>
             ` : `
               <div>
                 <label class="block text-xs text-gray-500 mb-1">Brand</label>
-                ${((item.type||'').includes('Emblemd') || (item.type||'') === 'Logo indoor 2 mặt (Emblemd)') ? `
-                  <div class="py-2 px-3 bg-gray-100 rounded text-sm font-medium">Tiger</div>
+                ${isFixedTiger ? `
+                  <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                    <span>Tiger</span>
+                    <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                  </div>
                   <input type="hidden" name="brand-${item.id}" value="Tiger">
                 ` : `
                   <div class="custom-select" data-id="${item.id}" data-field="brand">
-                    <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
+                    <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
                     <div class="cs-options hidden">
                       ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
                     </div>
@@ -446,45 +708,169 @@ function renderRequestItems() {
               </div>
             `}
 
-            ${(item.type && (item.type.includes('Bảng') || item.type.includes('Logo') || item.type.includes('Hộp đèn'))) ? `
+            ${isLogoIndoorTiger || isLogoIndoorHeineken ? `
               <div>
-                <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
-                <textarea onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="2" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
+                <label class="block text-xs text-gray-500 mb-1">Phân loại</label>
+                <div class="custom-select" data-id="${item.id}" data-field="subType">
+                  <button type="button" id="subType-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'subType')">
+                    <span class="cs-label">${item.subType ? escapeHtml(getLogoSubTypeLabel(item.subType)) : 'Chọn phân loại'}</span>
+                  </button>
+                  <div class="cs-options hidden">
+                    ${(isLogoIndoorTiger ? tigerLogoSubTypes : (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : [])).map(s => `<div class="cs-option" data-value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</div>`).join('')}
+                  </div>
+                </div>
+              </div>
+            ` : ''}
+
+            ${hasBrandAndAction ? `
+              <div>
+                ${item.action === 'Di dời' ? `
+                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                    <span>Yêu cầu riêng</span>
+                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Tên quán lấy Logo</span>
+                  </label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập tên quán nơi lấy Logo và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>Bạn bắt buộc phải nhập tên quán nơi lấy Logo và yêu cầu khác nếu có</span>
+                  </p>
+                ` : item.action === 'Thu hồi' ? `
+                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                    <span>Yêu cầu riêng</span>
+                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Nơi lưu trữ</span>
+                  </label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập nơi lưu trữ và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>Bạn bắt buộc phải nhập nơi lưu trữ và yêu cầu khác nếu có</span>
+                  </p>
+                ` : `
+                  <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="2" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
+                `}
               </div>
             ` : ''}
 
             ${!item.survey ? `
             <div class="py-2">
               <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
-                <span>Số trụ</span>
+                <span class="${noPoles ? 'text-gray-400' : ''}">Số trụ</span>
                 <span>Kích thước cũ</span>
               </div>
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3">
-                  <div class="flex items-center gap-2">
-                    <button onclick="incrementPoles(${item.id}, -1)" class="px-2 py-1 bg-gray-100 rounded">-</button>
-                    <input id="poles-${item.id}" type="text" inputmode="numeric" pattern="\\d*" value="${item.poles || 0}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-12 px-2 py-1 border border-gray-200 rounded text-sm text-center">
-                    <button onclick="incrementPoles(${item.id}, 1)" class="px-2 py-1 bg-gray-100 rounded">+</button>
-                    <span class="text-xs text-gray-500">trụ</span>
+                  <div class="flex items-center gap-2" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : ''}>
+                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, -1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">-</button>
+                    <input id="poles-${item.id}" type="text" ${noPoles ? `readonly onclick="showDefaultFieldToast(event)"` : ''} inputmode="numeric" pattern="\\d*" value="${noPoles ? 0 : (item.poles || 0)}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-12 h-8 px-2 border border-gray-200 rounded-lg text-sm text-center ${noPoles ? 'opacity-50 bg-gray-100 cursor-not-allowed text-gray-400' : ''}">
+                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, 1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">+</button>
+                    <span class="text-xs ${noPoles ? 'text-gray-400' : 'text-gray-500'}">trụ</span>
                   </div>
                 </div>
                 <div class="flex items-center gap-3">
-                  <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} rounded-full p-0.5 relative">
+                  <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} ${isFixedSize || isLogoIndoorHeineken || isLogoOutdoorFixed ? 'opacity-40 cursor-not-allowed' : ''} rounded-full p-0.5 relative">
                     <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
                   </button>
                 </div>
               </div>
             </div>
 
-            ${!item.useOldSize ? `
+            ${isLogoIndoorHeineken ? `
+              ${!item.subType ? `
+                <div class="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                  Vui lòng chọn Phân loại để chọn kích thước
+                </div>
+              ` : `
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
+                    <div class="custom-select" data-id="${item.id}" data-field="heinekenWidth">
+                      <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenWidth')">
+                        <span class="cs-label font-medium">${item.width ? `${item.width}m` : 'Chọn ngang'}</span>
+                      </button>
+                      <div class="cs-options hidden dropup">
+                        ${(hkSubObj ? hkSubObj.sizes : []).map(s => `
+                          <div class="cs-option ${Math.abs(item.width - s.width) < 0.001 ? 'selected' : ''}" data-value="${s.width}">
+                            ${s.width}m
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
+                    <div class="custom-select" data-id="${item.id}" data-field="heinekenHeight">
+                      <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenHeight')">
+                        <span class="cs-label font-medium">${item.height ? `${item.height}m` : 'Chọn cao'}</span>
+                      </button>
+                      <div class="cs-options hidden dropup">
+                        ${(hkSubObj ? hkSubObj.sizes : []).map(s => `
+                          <div class="cs-option ${Math.abs(item.height - s.height) < 0.001 ? 'selected' : ''}" data-value="${s.height}">
+                            ${s.height}m
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `}
+            ` : isLogoOutdoorFixed ? `
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
-                  <input id="width-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.width}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'width', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
+                  <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoWidth">
+                    <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoWidth')">
+                      <span class="cs-label font-medium">${item.width ? `${item.width}m` : 'Chọn ngang'}</span>
+                    </button>
+                    <div class="cs-options hidden dropup">
+                      ${outdoorSizesList.map(s => `
+                        <div class="cs-option ${Math.abs(item.width - s.width) < 0.001 ? 'selected' : ''}" data-value="${s.width}">
+                          ${s.width}m
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
-                  <input id="height-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.height}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'height', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
+                  <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoHeight">
+                    <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoHeight')">
+                      <span class="cs-label font-medium">${item.height ? `${item.height}m` : 'Chọn cao'}</span>
+                    </button>
+                    <div class="cs-options hidden dropup">
+                      ${outdoorSizesList.map(s => `
+                        <div class="cs-option ${Math.abs(item.height - s.height) < 0.001 ? 'selected' : ''}" data-value="${s.height}">
+                          ${s.height}m
+                        </div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ` : !item.useOldSize ? `
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
+                  ${isFixedSize ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>${fixedWidth}</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <input type="hidden" id="width-${item.id}" value="${fixedWidth}">
+                  ` : `
+                    <input id="width-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.width}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'width', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
+                  `}
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
+                  ${isFixedSize ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>${fixedHeight}</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <input type="hidden" id="height-${item.id}" value="${fixedHeight}">
+                  ` : `
+                    <input id="height-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.height}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'height', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
+                  `}
                 </div>
               </div>
             ` : `
@@ -666,10 +1052,14 @@ function isTab2Complete() {
         if (!item.otherContent) return false;
       } else {
         if (!item.brand) return false;
-        if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn')) && !item.action) return false;
+        const isLogoIndoorWithSub = (item.type === 'Logo indoor' || String(item.type || '').toLowerCase().includes('logo indoor')) && (item.brand === 'Tiger' || item.brand === 'Heineken');
+        if (isLogoIndoorWithSub && !item.subType) return false;
+        if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo') || isPolesDisabledType(item.type)) && !item.action) return false;
+        if (item.action === 'Di dời' && !String(item.note || '').trim()) return false;
+        if (item.action === 'Thu hồi' && !String(item.note || '').trim()) return false;
         if (!item.survey) {
           if (!item.useOldSize && (!item.width || !item.height)) return false;
-          if (!Number.isInteger(item.poles) || item.poles < 0) return false;
+          if (!isPolesDisabledType(item.type) && (!Number.isInteger(item.poles) || item.poles < 0)) return false;
         }
       }
     }
@@ -775,9 +1165,24 @@ function validateTab2() {
         markItemCustomSelectError(item.id, 'brand');
         hasError = true;
       }
-      // Hình thức (Làm mới / Thay bạt / Sửa chữa) là bắt buộc cho Bảng, Hộp đèn và Logo
-      if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo')) && !item.action) {
+      const isLogoIndoorTiger = (item.type === 'Logo indoor' || String(item.type || '').toLowerCase().includes('logo indoor')) && (item.brand === 'Tiger');
+      const isLogoIndoorHeineken = (item.type === 'Logo indoor' || String(item.type || '').toLowerCase().includes('logo indoor')) && (item.brand === 'Heineken');
+      if ((isLogoIndoorTiger || isLogoIndoorHeineken) && !item.subType) {
+        markItemCustomSelectError(item.id, 'subType');
+        hasError = true;
+      }
+      // Hình thức (Làm mới / Thay bạt / Sửa chữa / Di dời / Thu hồi / Thay Poster) là bắt buộc cho Bảng, Hộp đèn, Logo, Mái che, Rèm
+      if ((item.type.includes('Bảng') || item.type.includes('Hộp đèn') || item.type.includes('Logo') || isPolesDisabledType(item.type, item)) && !item.action) {
         markItemCustomSelectError(item.id, 'action');
+        hasError = true;
+      }
+      if (item.action === 'Di dời' && !String(item.note || '').trim()) {
+        markFieldError(document.getElementById(`note-${item.id}`));
+        showToast('Vui lòng nhập tên quán nơi lấy Logo cho hạng mục Di dời');
+        hasError = true;
+      } else if (item.action === 'Thu hồi' && !String(item.note || '').trim()) {
+        markFieldError(document.getElementById(`note-${item.id}`));
+        showToast('Vui lòng nhập nơi lưu trữ cho hạng mục Thu hồi');
         hasError = true;
       }
       if (!item.survey) {
@@ -785,9 +1190,11 @@ function validateTab2() {
           if (!item.width) { markFieldError(document.getElementById(`width-${item.id}`)); hasError = true; }
           if (!item.height) { markFieldError(document.getElementById(`height-${item.id}`)); hasError = true; }
         }
-        if (!Number.isInteger(item.poles) || item.poles < 0) {
-          markFieldError(document.getElementById(`poles-${item.id}`));
-          hasError = true;
+        if (!isPolesDisabledType(item.type, item)) {
+          if (!Number.isInteger(item.poles) || item.poles < 0) {
+            markFieldError(document.getElementById(`poles-${item.id}`));
+            hasError = true;
+          }
         }
       }
     } else {
@@ -992,7 +1399,8 @@ async function submitNewRequest() {
       resetNewRequestForm();
 
       hideLoadingOverlay();
-      document.getElementById('confirmModal').classList.remove('hidden');
+      if (typeof openConfirmSuccessModal === 'function') openConfirmSuccessModal();
+      else document.getElementById('confirmModal').classList.remove('hidden');
 
       // Release the guard — form is now clean, future submissions are safe.
       _isNewRequestSubmitting = false;
@@ -1013,7 +1421,8 @@ async function submitNewRequest() {
     try { if (typeof clearNewRequestDraft === 'function') clearNewRequestDraft(_currentNewRequestDraftId); } catch (e) {}
     resetNewRequestForm();
     hideLoadingOverlay();
-    document.getElementById('confirmModal').classList.remove('hidden');
+    if (typeof openConfirmSuccessModal === 'function') openConfirmSuccessModal();
+    else document.getElementById('confirmModal').classList.remove('hidden');
     _isNewRequestSubmitting = false;
     return;
   }
@@ -1080,7 +1489,8 @@ async function _bgUploadAndPatch(backendId, tkCode, statusFiles) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function viewLastCreatedRequest() {
-  try { document.getElementById('confirmModal').classList.add('hidden'); } catch (e) {}
+  if (typeof closeConfirmSuccessModal === 'function') closeConfirmSuccessModal();
+  else { try { document.getElementById('confirmModal').classList.add('hidden'); } catch (e) {} }
   try {
     if (typeof lastCreatedRequestId !== 'undefined' && lastCreatedRequestId) {
       showRequestDetail(lastCreatedRequestId);
@@ -1095,7 +1505,8 @@ function viewLastCreatedRequest() {
 // ── Modal actions ─────────────────────────────────────────────────────
 
 function createAnotherRequest() {
-  document.getElementById('confirmModal').classList.add('hidden');
+  if (typeof closeConfirmSuccessModal === 'function') closeConfirmSuccessModal();
+  else { try { document.getElementById('confirmModal').classList.add('hidden'); } catch (e) {} }
   if (lastRequestType === 'new') {
     resetNewRequestForm();
     switchTab(1);
@@ -1106,7 +1517,8 @@ function createAnotherRequest() {
 }
 
 function goHomeFromModal() {
-  document.getElementById('confirmModal').classList.add('hidden');
+  if (typeof closeConfirmSuccessModal === 'function') closeConfirmSuccessModal();
+  else { try { document.getElementById('confirmModal').classList.add('hidden'); } catch (e) {} }
   goHome();
 }
 
@@ -1171,8 +1583,8 @@ function resetNewRequestForm() {
 function hasSignageItems() {
   try {
     return Array.isArray(currentRequestItems) && currentRequestItems.some(i => {
-      const t = (i && i.type) || '';
-      return t.includes('Bảng') || t.includes('Hộp đèn');
+      const t = String((i && i.type) || '').toLowerCase();
+      return t.includes('bảng') || t.includes('hộp đèn') || t.includes('mái che') || t.includes('mai che') || t.includes('mái hiên') || t.includes('mai hien') || t.includes('rèm') || t.includes('rem');
     });
   } catch (e) { return false; }
 }
