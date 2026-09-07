@@ -33,14 +33,14 @@ function loadAllRequestsFromStorage() {
 
 // ── SDK initialization ────────────────────────────────────────────────
 
-// ── Desktop banner notification system ──────────────────────────────
-// Shows a non-blocking banner at top of screen when new/warranty/edit requests arrive.
-// Auto-dismisses after 12 seconds; click navigates to the request.
+// ── Floating Drop-down Toast Notification System ─────────────────────
+// Shows a sleek, non-intrusive floating toast at the top center of the screen
+// Auto-dismisses after 3 seconds; clicking navigates to the request.
 var _ksBannerQueue = [];
 var _ksBannerVisible = false;
 
 function _ksShowDesktopBanner(title, body, backendId, type) {
-  _ksBannerQueue.push({ title: title, body: body, backendId: backendId, type: type });
+  _ksBannerQueue.push({ title: title, body: body, backendId: backendId, type: type || 'new' });
   if (!_ksBannerVisible) _ksProcessBannerQueue();
 }
 
@@ -53,35 +53,34 @@ function _ksProcessBannerQueue() {
   var old = document.getElementById('ksDesktopBanner');
   if (old) old.remove();
 
-  var colors = {
-    'new':       'bg-blue-600',
-    'warranty':  'bg-orange-600',
-    'editing':   'bg-yellow-500 text-gray-900',
-    'done':      'bg-green-600',
+  var typeStyles = {
+    'new':      { border: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.15)', badgeCol: '#38bdf8', icon: '🆕', glow: 'rgba(56, 189, 248, 0.2)' },
+    'warranty': { border: 'rgba(251, 146, 60, 0.45)',  badgeBg: 'rgba(251, 146, 60, 0.15)',  badgeCol: '#fb923c', icon: '🔧', glow: 'rgba(251, 146, 60, 0.2)' },
+    'editing':  { border: 'rgba(251, 191, 36, 0.55)',  badgeBg: 'rgba(251, 191, 36, 0.15)',  badgeCol: '#fbbf24', icon: '✏️', glow: 'rgba(251, 191, 36, 0.25)' },
+    'done':     { border: 'rgba(52, 211, 153, 0.45)', badgeBg: 'rgba(52, 211, 153, 0.15)', badgeCol: '#34d399', icon: '✅', glow: 'rgba(52, 211, 153, 0.2)' },
   };
-  var bgClass = colors[item.type] || 'bg-blue-600';
+  var style = typeStyles[item.type] || typeStyles['new'];
 
   var banner = document.createElement('div');
   banner.id = 'ksDesktopBanner';
-  banner.className = 'fixed top-0 left-0 right-0 z-[9999] ' + bgClass + ' text-white px-4 py-3 shadow-lg flex items-center justify-between cursor-pointer transition-all duration-300';
-  banner.style.transform = 'translateY(-100%)';
+  banner.style.cssText = 'position: fixed; top: 16px; left: 50%; transform: translate(-50%, -24px) scale(0.95); opacity: 0; z-index: 99999; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 440px); width: max-content; padding: 9px 14px; border-radius: 9999px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1.5px solid ' + style.border + '; box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 16px ' + style.glow + '; cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; user-select: none; font-family: inherit;';
+  
   banner.innerHTML =
-    '<div class="flex items-center gap-3 flex-1 min-w-0">' +
-      '<span class="text-xl">' + (item.type === 'new' ? '🆕' : item.type === 'warranty' ? '🔧' : item.type === 'editing' ? '✏️' : '✅') + '</span>' +
-      '<div class="min-w-0">' +
-        '<div class="font-bold text-sm truncate">' + (item.title || '').replace(/</g, '&lt;') + '</div>' +
-        '<div class="text-xs opacity-90 truncate">' + (item.body || '').replace(/</g, '&lt;') + '</div>' +
-      '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9999px;background:' + style.badgeBg + ';flex-shrink:0;font-size:14px;">' + style.icon + '</div>' +
+    '<div style="min-width:0;flex:1;line-height:1.25;">' +
+      '<div style="font-size:13px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.title || '').replace(/</g, '&lt;') + '</div>' +
+      '<div style="font-size:11.5px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">' + (item.body || '').replace(/</g, '&lt;') + '</div>' +
     '</div>' +
-    '<button id="ksDesktopBannerClose" class="ml-3 text-white/80 hover:text-white text-lg font-bold leading-none">✕</button>';
+    '<button id="ksDesktopBannerClose" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;border:none;background:rgba(255,255,255,0.08);color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:4px;transition:background 0.2s;" title="Đóng">✕</button>';
 
   document.body.appendChild(banner);
-  // Slide in
+  // Animate in
   requestAnimationFrame(function () {
-    banner.style.transform = 'translateY(0)';
+    banner.style.transform = 'translate(-50%, 0) scale(1)';
+    banner.style.opacity = '1';
   });
 
-  // Play notification sound (short beep via Web Audio API)
+  // Play notification sound (short soft beep via Web Audio API)
   try {
     var audioCtx = window.__ksAudioCtx || (window.__ksAudioCtx = new (window.AudioContext || window.webkitAudioContext)());
     var osc = audioCtx.createOscillator();
@@ -89,14 +88,14 @@ function _ksProcessBannerQueue() {
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.frequency.value = 880;
-    gain.gain.value = 0.15;
+    gain.gain.value = 0.12;
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.15);
+    osc.stop(audioCtx.currentTime + 0.12);
   } catch (_) {}
 
   // Click → navigate to request
   banner.addEventListener('click', function (e) {
-    if (e.target && e.target.id === 'ksDesktopBannerClose') {
+    if (e.target && (e.target.id === 'ksDesktopBannerClose' || e.target.closest('#ksDesktopBannerClose'))) {
       _ksDismissBanner(banner);
       return;
     }
@@ -112,27 +111,19 @@ function _ksProcessBannerQueue() {
     _ksDismissBanner(banner);
   });
 
-  // Close button
-  var closeBtn = document.getElementById('ksDesktopBannerClose');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      _ksDismissBanner(banner);
-    });
-  }
-
-  // Auto-dismiss after 12 seconds
-  setTimeout(function () { _ksDismissBanner(banner); }, 12000);
+  // Auto-dismiss after 3 seconds (3000ms)
+  setTimeout(function () { _ksDismissBanner(banner); }, 3000);
 }
 
 function _ksDismissBanner(banner) {
   if (!banner || !banner.parentNode) { _ksBannerVisible = false; _ksProcessBannerQueue(); return; }
-  banner.style.transform = 'translateY(-100%)';
+  banner.style.transform = 'translate(-50%, -24px) scale(0.95)';
+  banner.style.opacity = '0';
   setTimeout(function () {
     try { banner.remove(); } catch (_) {}
     _ksBannerVisible = false;
     _ksProcessBannerQueue();
-  }, 350);
+  }, 250);
 }
 
 // Track known request IDs so we only show banners for genuinely new arrivals
@@ -264,6 +255,13 @@ async function initApp() {
     const result = await window.dataSdk.init({
       onDataChanged: (data) => {
         allRequests = _ksDedupeRequests(data);
+        if (typeof _qcagDesktopFullRequestCache !== 'undefined' && typeof qcagDesktopMergePreserveImageFields === 'function') {
+          (allRequests || []).forEach(r => {
+            if (r && r.__backendId && _qcagDesktopFullRequestCache[r.__backendId]) {
+              _qcagDesktopFullRequestCache[r.__backendId] = qcagDesktopMergePreserveImageFields(r, _qcagDesktopFullRequestCache[r.__backendId]);
+            }
+          });
+        }
         // Snapshot known IDs for banner detection (first call builds baseline)
         _ksSnapshotKnownIds();
         updateRequestCount();
@@ -293,19 +291,25 @@ async function initApp() {
 
                 if (hasChanged) {
                   if (typeof qcagDesktopGetFullRequest === 'function' && typeof _qcagDesktopInPlaceRefresh === 'function') {
-                    qcagDesktopGetFullRequest(updated.__backendId).then(full => {
+                    qcagDesktopGetFullRequest(updated.__backendId, true).then(full => {
                       if (full) {
                         const statRank = s => (s === 'done' || s === 'processed') ? 2 : s === 'processing' ? 1 : 0;
                         const currS = String((currentDetailRequest && currentDetailRequest.__backendId === full.__backendId ? currentDetailRequest.status : '') || '').toLowerCase();
                         if (statRank(currS) > statRank(String(full.status || '').toLowerCase()) && !full.editingRequestedAt) return;
                         currentDetailRequest = full;
                         if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(full);
+                        if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined') {
+                          _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(full));
+                        }
                         _qcagDesktopInPlaceRefresh(full);
                       }
                     }).catch(() => {});
                   } else if (typeof _qcagDesktopInPlaceRefresh === 'function') {
                     currentDetailRequest = updated;
                     if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(updated);
+                    if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined') {
+                      _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(updated));
+                    }
                     _qcagDesktopInPlaceRefresh(updated);
                   }
                 }

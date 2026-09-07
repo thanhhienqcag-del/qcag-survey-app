@@ -318,7 +318,7 @@ async function qcagDesktopWarmRequestAssets(req) {
   await Promise.all(urls.map(qcagDesktopWarmImage));
 }
 
-async function qcagDesktopGetFullRequest(idOrReq) {
+async function qcagDesktopGetFullRequest(idOrReq, forceRefresh) {
   const id = typeof idOrReq === 'string'
     ? idOrReq
     : (idOrReq && idOrReq.__backendId);
@@ -329,16 +329,22 @@ async function qcagDesktopGetFullRequest(idOrReq) {
     : allRequests.find(r => r.__backendId === id);
   if (!base) return null;
 
-  if (_qcagDesktopFullRequestCache[id]) return _qcagDesktopFullRequestCache[id];
+  const cached = _qcagDesktopFullRequestCache[id];
+  if (cached && !forceRefresh) {
+    if (base && (base.updatedAt !== cached.updatedAt || base.editingRequestedAt !== cached.editingRequestedAt || base.status !== cached.status || (base.comments || '').length !== (cached.comments || '').length)) {
+      _qcagDesktopFullRequestCache[id] = qcagDesktopMergePreserveImageFields(base, cached);
+    }
+    return _qcagDesktopFullRequestCache[id];
+  }
   if (_qcagDesktopFullRequestPending[id]) return _qcagDesktopFullRequestPending[id];
 
   _qcagDesktopFullRequestPending[id] = (async () => {
-    let merged = base;
+    let merged = cached ? qcagDesktopMergePreserveImageFields(base, cached) : base;
     if (window.dataSdk && typeof window.dataSdk.getOne === 'function') {
       try {
         const r = await window.dataSdk.getOne(id);
         if (r && r.isOk && r.data) {
-          merged = Object.assign({}, base, r.data);
+          merged = Object.assign({}, merged, r.data);
           const idx = allRequests.findIndex(x => x.__backendId === id);
           if (idx !== -1) allRequests[idx] = merged;
         }
@@ -3610,17 +3616,19 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
   // Phase 2: if not yet fully cached, fetch full request in background and refresh image
   //   sections in-place so the user sees real images appear without a full re-render.
   const _cachedFull = _qcagDesktopFullRequestCache[id];
-  let request = _cachedFull || allRequests.find(r => r.__backendId === id);
+  const _latestInAll = allRequests.find(r => r.__backendId === id);
+  let request = _cachedFull
+    ? qcagDesktopMergePreserveImageFields(_latestInAll || _cachedFull, _cachedFull)
+    : _latestInAll;
   if (!request) return;
 
+  _qcagDesktopFullRequestCache[id] = request;
   const _needsFullFetch = !_cachedFull;
 
   const isSameReq = _qcagDesktopCurrentId === id;
   _qcagDesktopCurrentId = id;
   currentDetailRequest = request;
-  if (!isSameReq) {
-    _qcagDesktopOpenRequestSnapshot = request ? JSON.parse(JSON.stringify(request)) : null;
-  }
+  _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(request));
   if (!keepPendingComment) _qcagDesktopPendingCommentImages = [];
 
   // Save current scroll before re-render so list doesn't jump to top
@@ -4159,15 +4167,41 @@ async function qcagDesktopUploadMQ(input) {
   }
 
   // Normal MQ flow:
-  // Store compressed image as base64 only — GCS upload is DEFERRED to the
-  // "Hoàn thành" / "Đã chỉnh sửa" confirm step (qcagDesktopMarkProcessed).
-  // This ensures the user sees the image under the "chờ xác nhận" (processing)
-  // tag first, and GCS storage only happens when they explicitly confirm.
+  // 1. Show immediate local preview
+  // 2. Upload compressed image directly to GCS so DB payload remains slim & instant
+  // 3. Mark status as 'processing' (Chờ xác nhận) until user clicks "Hoàn thành" / "Đã chỉnh sửa"
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+  
+  // Show immediate local preview
+  currentDetailRequest.designImages = JSON.stringify([dataUrl]);
+  currentDetailRequest.designFilename = file.name;
+  qcagDesktopRefreshMQInPlace(currentDetailRequest);
+
+  let finalImageUrl = dataUrl;
+  if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
+    showToast('Đang tải MQ lên cloud...', 2000);
+    const mqSubfolder = 'mq-' + String(targetRequest.outletCode || 'OUTLET')
+      .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+    try {
+      const uploaded = await window.dataSdk.uploadImage(
+        dataUrl, file.name || 'mq.webp', targetId, mqSubfolder
+      );
+      if (typeof uploaded === 'string' && uploaded.trim()) {
+        finalImageUrl = qcagDesktopNormalizeImageUrl(uploaded);
+      } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+        finalImageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
+      }
+    } catch (e) {
+      console.warn('[qcagDesktopUploadMQ] GCS upload failed, fallback to base64:', e);
+    }
+  }
+
+  // Guard after async upload
+  if (_qcagDesktopCurrentId !== targetId) return;
 
   const updated = {
     ...currentDetailRequest,
-    designImages: JSON.stringify([dataUrl]),
+    designImages: JSON.stringify([finalImageUrl]),
     designFilename: file.name,
     designUpdatedAt: new Date().toISOString(),
     // Track who last uploaded/edited the MQ (updated on every upload)
@@ -4176,15 +4210,14 @@ async function qcagDesktopUploadMQ(input) {
     editingRequestedAt: isPendingEdit
       ? (currentDetailRequest.editingRequestedAt || new Date().toISOString())
       : null,
-    // Always set to 'processing' after upload — requires explicit confirmation press.
-    // Even if status was 'done' (pending-edit flow or anomalous state), the QCAG
-    // must press "Đã chỉnh sửa" / "Hoàn thành" to confirm.
     status: 'processing',
     updatedAt: new Date().toISOString()
   };
 
-  const ok = await qcagDesktopPersistRequest(updated, 'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận và lưu lên cloud', true);
-  if (ok) qcagDesktopRefreshMQInPlace(updated);
+  const ok = await qcagDesktopPersistRequest(updated, 'Đã tải MQ lên — nhấn "' + (isPendingEdit ? 'Đã chỉnh sửa' : 'Hoàn thành') + '" để xác nhận', true);
+  if (ok) {
+    qcagDesktopRefreshMQInPlace(updated);
+  }
   input.value = '';
 }
 
@@ -4205,179 +4238,163 @@ async function qcagDesktopMarkProcessed() {
   if (_completeBtnEl) { _completeBtnEl.disabled = true; _completeBtnEl.classList.add('qcag-complete-btn--disabled'); }
 
   try {
-  const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
-  // Must have MQ before marking done
-  const designImgs = qcagDesktopParseJson(currentDetailRequest.designImages, []);
-  if (!designImgs || designImgs.length === 0) {
-    showToast(isPendingEdit
-      ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
-      : 'Vui lòng upload MQ thiết kế trước khi hoàn thành');
-    qcagDesktopRefreshMQInPlace(currentDetailRequest);
-    return;
-  }
-  const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
-  if (isSurveySizeIncomplete) {
-    showToast('Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành');
-    qcagDesktopRefreshMQInPlace(currentDetailRequest);
-    return;
-  }
+    const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+    // Must have MQ before marking done
+    const designImgs = qcagDesktopParseJson(currentDetailRequest.designImages, []);
+    if (!designImgs || designImgs.length === 0) {
+      showToast(isPendingEdit
+        ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
+        : 'Vui lòng upload MQ thiết kế trước khi hoàn thành');
+      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+      return;
+    }
+    const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
+    if (isSurveySizeIncomplete) {
+      showToast('Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành');
+      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+      return;
+    }
 
-  // ── Upload any still-base64 MQ images to GCS before finalizing ──────────
-  // qcagDesktopUploadMQ defers GCS storage to this point so the user sees the
-  // image under the "chờ xác nhận" (processing) state first.
-  // On "Hoàn thành", we upload to GCS, replace the base64 with a GCS URL,
-  // then persist status = 'done'.
-  const _confirmBackendId = currentDetailRequest.__backendId;
-  let finalDesignImages = designImgs.slice();
-  if (finalDesignImages.some(img => typeof img === 'string' && img.startsWith('data:'))
-      && window.dataSdk && window.dataSdk.uploadImage && _confirmBackendId) {
-    showToast('Đang lưu MQ lên cloud...');
-    const mqSubfolder = 'mq-' + String(currentDetailRequest.outletCode || 'OUTLET')
-      .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
-    const uploadedImgs = [];
-    for (const img of finalDesignImages) {
-      if (typeof img === 'string' && img.startsWith('data:')) {
-        try {
-          const uploaded = await window.dataSdk.uploadImage(img, 'mq.jpg', _confirmBackendId, mqSubfolder);
-          if (typeof uploaded === 'string' && uploaded.trim()) {
-            uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded));
-          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-            uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded.url));
-          } else {
-            uploadedImgs.push(img); // fallback: upload returned nothing useful
+    // ── Upload any remaining base64 MQ images to GCS if needed ──────────
+    const _confirmBackendId = currentDetailRequest.__backendId;
+    let finalDesignImages = designImgs.slice();
+    if (finalDesignImages.some(img => typeof img === 'string' && img.startsWith('data:'))
+        && window.dataSdk && window.dataSdk.uploadImage && _confirmBackendId) {
+      showToast('Đang lưu MQ lên cloud...');
+      const mqSubfolder = 'mq-' + String(currentDetailRequest.outletCode || 'OUTLET')
+        .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+      const uploadedImgs = [];
+      for (const img of finalDesignImages) {
+        if (typeof img === 'string' && img.startsWith('data:')) {
+          try {
+            const uploaded = await window.dataSdk.uploadImage(img, 'mq.jpg', _confirmBackendId, mqSubfolder);
+            if (typeof uploaded === 'string' && uploaded.trim()) {
+              uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded));
+            } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+              uploadedImgs.push(qcagDesktopNormalizeImageUrl(uploaded.url));
+            } else {
+              uploadedImgs.push(img);
+            }
+          } catch (e) {
+            console.warn('[qcagDesktopMarkProcessed] GCS upload failed, keeping base64:', e);
+            uploadedImgs.push(img);
           }
-        } catch (e) {
-          console.warn('[qcagDesktopMarkProcessed] GCS upload failed, keeping base64:', e);
+        } else {
           uploadedImgs.push(img);
         }
-      } else {
-        uploadedImgs.push(img); // already a GCS URL — keep as-is
+      }
+      finalDesignImages = uploadedImgs;
+      if (!currentDetailRequest || currentDetailRequest.__backendId !== _confirmBackendId) {
+        showToast('Đã hủy xác nhận: chuyển sang yêu cầu khác trong lúc đang lưu');
+        return;
       }
     }
-    finalDesignImages = uploadedImgs;
-    // Guard: if the user switched to a different request during GCS upload, abort.
-    if (!currentDetailRequest || currentDetailRequest.__backendId !== _confirmBackendId) {
-      showToast('Đã hủy xác nhận: chuyển sang yêu cầu khác trong lúc đang lưu');
-      return;
-    }
-  }
 
-  const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
-  if (isPendingEdit) {
-    comments.push({
-      authorRole: 'qcag',
-      authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
-      commentType: 'edit-resolved',
-      text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
-      readBy: [],
-      createdAt: new Date().toISOString()
-    });
-  }
-  const now = new Date().toISOString();
-  // If this is the first time a MQ is confirmed (complete), record the creator
-  const extraFields = {};
-  if (!currentDetailRequest.designCreatedBy) {
-    extraFields.designCreatedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
-    extraFields.designCreatedAt = now;
-  }
-  // If this was an edit flow, record the last editor and increment revision counter
-  if (isPendingEdit) {
-    extraFields.designLastEditedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
-    extraFields.designLastEditedAt = now;
-    extraFields.editRevisionCount = (currentDetailRequest.editRevisionCount || 0) + 1;
-  }
-
-  // Build PATCH payload with ONLY changed fields — avoid sending large image data
-  const patchPayload = {
-    __backendId: currentDetailRequest.__backendId,
-    status: 'done',
-    processedAt: now,
-    updatedAt: now,
-    editingRequestedAt: null,
-    comments: JSON.stringify(comments),
-    ...extraFields
-  };
-  // Include designImages in the patch only when they changed (base64 → GCS URL).
-  // If GCS upload failed and images are still base64, the DB already holds them
-  // from qcagDesktopUploadMQ, so no need to re-send the large payload.
-  const _finalDesignImgStr = JSON.stringify(finalDesignImages);
-  if (_finalDesignImgStr !== JSON.stringify(designImgs)) {
-    patchPayload.designImages = _finalDesignImgStr;
-  }
-  // Save pre-confirm snapshot for rollback
-  const _rollbackRequest = { ...currentDetailRequest };
-  // Local state gets full merge for UI — ensure finalDesignImages (GCS URLs) are used.
-  const updated = { ...currentDetailRequest, ...patchPayload, designImages: _finalDesignImgStr };
-
-  // Optimistically update local state BEFORE the await so that if an SSE event
-  // arrives during the network round-trip the statRank guard correctly sees 'done'
-  // and won't revert the UI to 'processing'.
-  const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
-  if (idxAll !== -1) allRequests[idxAll] = updated;
-  currentDetailRequest = updated;
-  qcagDesktopCacheRequest(updated);
-  qcagDesktopRefreshMQInPlace(updated);
-
-  // Persist: send only the slim PATCH payload to backend
-  if (window.dataSdk) {
-    const result = await window.dataSdk.update(patchPayload);
-    if (!result.isOk) {
-      showToast('Không thể cập nhật request');
-      // Rollback optimistic update on failure
-      const idxRb = allRequests.findIndex(r => r.__backendId === _rollbackRequest.__backendId);
-      if (idxRb !== -1) allRequests[idxRb] = _rollbackRequest;
-      currentDetailRequest = _rollbackRequest;
-      qcagDesktopCacheRequest(_rollbackRequest);
-      qcagDesktopRefreshMQInPlace(_rollbackRequest);
-      return;
-    }
-  }
-  _qcagRequestsVersion += 1;
-  _qcagRequestCodeCache.version = 0;
-
-  showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
-
-  // Push notification to Sale Heineken via Vercel function (same VAPID key as subscription)
-  // Fire-and-forget so UI is not blocked
-  try {
-    const reqObj = (() => { try { return JSON.parse(currentDetailRequest.requester || '{}'); } catch (_) { return {}; } })();
-    const requesterPhone = reqObj.phone || null;
-    const requesterSaleCode = reqObj.saleCode || null;
-    const outletLabel = currentDetailRequest.outletName || currentDetailRequest.outletCode || 'Outlet';
-    const pushTitle = isPendingEdit
-      ? 'QCAG — Đã hoàn thành chỉnh sửa'
-      : 'QCAG uploaded to MQ';
-    const pushBody = isPendingEdit
-      ? `Outlet "${outletLabel}" đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
-      : `Outlet "${outletLabel}" đã có MQ, vui lòng mở app để xem chi tiết`;
-    // Use absolute Vercel URL so push works even when QCAG desktop is accessed
-    // from localhost (relative URL would go to http://127.0.0.1/api/... which doesn't exist)
-    var pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-      ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
-      : '/api/ks/push/send';
-    showToast('⏳ Gửi push → ' + (requesterSaleCode || requesterPhone || 'N/A'), 2000);
-    fetch(pushEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: pushTitle,
-        body: pushBody,
-        data: { backendId: currentDetailRequest.__backendId },
-        phone: requesterPhone,
-        saleCode: requesterSaleCode,
-      })
-    }).then(function(r) {
-      return r.json().then(function(j) {
-        if (j && j.sent > 0) showToast('📲 Push đã gửi (sent:' + j.sent + ')', 3000);
-        else showToast('⚠️ Push: ' + JSON.stringify(j), 4000);
+    const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
+    if (isPendingEdit) {
+      comments.push({
+        authorRole: 'qcag',
+        authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
+        commentType: 'edit-resolved',
+        text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
+        readBy: [],
+        createdAt: new Date().toISOString()
       });
-    }).catch(function (e) { showToast('❌ Push error: ' + (e && e.message ? e.message : String(e)), 4000); console.warn('[push] confirm-done push error (non-fatal):', e); });
-  } catch (pushErr) {
-    console.warn('[push] confirm-done push error (non-fatal):', pushErr);
-  }
+    }
+    const now = new Date().toISOString();
+    // If this is the first time a MQ is confirmed (complete), record the creator
+    const extraFields = {};
+    if (!currentDetailRequest.designCreatedBy) {
+      extraFields.designCreatedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
+      extraFields.designCreatedAt = now;
+    }
+    // If this was an edit flow, record the last editor and increment revision counter
+    if (isPendingEdit) {
+      extraFields.designLastEditedBy = currentSession ? (currentSession.saleName || currentSession.name || currentSession.phone || 'QCAG') : 'QCAG';
+      extraFields.designLastEditedAt = now;
+      extraFields.editRevisionCount = (currentDetailRequest.editRevisionCount || 0) + 1;
+    }
+
+    // Build PATCH payload with ONLY changed fields
+    const _finalDesignImgStr = JSON.stringify(finalDesignImages);
+    const patchPayload = {
+      __backendId: currentDetailRequest.__backendId,
+      status: 'done',
+      processedAt: now,
+      updatedAt: now,
+      editingRequestedAt: null,
+      comments: JSON.stringify(comments),
+      designImages: _finalDesignImgStr,
+      ...extraFields
+    };
+
+    // Save pre-confirm snapshot for rollback
+    const _rollbackRequest = { ...currentDetailRequest };
+    const updated = { ...currentDetailRequest, ...patchPayload };
+
+    // Optimistically update local state & caches
+    const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
+    if (idxAll !== -1) allRequests[idxAll] = updated;
+    currentDetailRequest = updated;
+    _qcagDesktopFullRequestCache[updated.__backendId] = updated;
+    _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(updated));
+    qcagDesktopRefreshMQInPlace(updated);
+
+    // Persist: send slim PATCH payload to backend
+    if (window.dataSdk) {
+      const result = await window.dataSdk.update(patchPayload);
+      if (!result.isOk) {
+        showToast('Không thể cập nhật request');
+        // Rollback optimistic update on failure
+        const idxRb = allRequests.findIndex(r => r.__backendId === _rollbackRequest.__backendId);
+        if (idxRb !== -1) allRequests[idxRb] = _rollbackRequest;
+        currentDetailRequest = _rollbackRequest;
+        _qcagDesktopFullRequestCache[_rollbackRequest.__backendId] = _rollbackRequest;
+        _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(_rollbackRequest));
+        qcagDesktopRefreshMQInPlace(_rollbackRequest);
+        return;
+      }
+    }
+    _qcagRequestsVersion += 1;
+    _qcagRequestCodeCache.version = 0;
+
+    showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
+
+    // Push notification to Sale Heineken (fire and forget)
+    try {
+      const reqObj = (() => { try { return JSON.parse(currentDetailRequest.requester || '{}'); } catch (_) { return {}; } })();
+      const requesterPhone = reqObj.phone || null;
+      const requesterSaleCode = reqObj.saleCode || null;
+      const outletLabel = currentDetailRequest.outletName || currentDetailRequest.outletCode || 'Outlet';
+      const pushTitle = isPendingEdit
+        ? 'QCAG — Đã hoàn thành chỉnh sửa'
+        : 'QCAG uploaded to MQ';
+      const pushBody = isPendingEdit
+        ? `Outlet "${outletLabel}" đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
+        : `Outlet "${outletLabel}" đã có MQ, vui lòng mở app để xem chi tiết`;
+      var pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+        ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
+        : '/api/ks/push/send';
+      fetch(pushEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: pushTitle,
+          body: pushBody,
+          data: { backendId: currentDetailRequest.__backendId },
+          phone: requesterPhone,
+          saleCode: requesterSaleCode,
+        })
+      }).catch(function (e) { console.warn('[push] confirm push error (non-fatal):', e); });
+    } catch (pushErr) {
+      console.warn('[push] confirm-done push error (non-fatal):', pushErr);
+    }
 
   } finally {
     _qcagMarkProcessedInFlight = false;
+    if (typeof qcagDesktopRefreshMQInPlace === 'function' && currentDetailRequest) {
+      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+    }
   }
 }
 

@@ -113,8 +113,7 @@ if ('serviceWorker' in navigator) {
       const body  = event.data.body  || '';
       const msg   = title + (body ? '\n' + body : '');
       if (typeof showToast === 'function') {
-        // Use 8 seconds for push notifications so QCAG staff don't miss them
-        showToast(msg, 8000);
+        showToast(msg, 3000);
       } else {
         console.info('[push] in-app message:', msg);
       }

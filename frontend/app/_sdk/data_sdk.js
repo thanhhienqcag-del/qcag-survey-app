@@ -22,7 +22,7 @@
   // Tăng pageSize lên 300 để load đủ dữ liệu trong 1 lần fetch.
   // Backend đã cho phép tối đa 300 records/page. storeMaxRows = 2000
   // để chứa đủ khi data tiếp tục tăng.
-  var _requestsPageSize = 300;
+  var _requestsPageSize = 1000;
   var _storeMaxRows = 999999;
   var _storeTruncated = false;
   var _storeTotalHint = 0;
@@ -504,7 +504,8 @@
             if (_code) _saleExtra += '&sale_code=' + encodeURIComponent(String(_code).trim());
           }
         } catch (_) {}
-        var firstUrl = endpoint + '?limit=' + encodeURIComponent(String(_requestsPageSize)) + '&offset=0' + _saleExtra;
+        var isQcagOrAll = !_saleExtra;
+        var firstUrl = endpoint + (isQcagOrAll ? '?all=1' : ('?' + _saleExtra.slice(1)));
         var startTime = Date.now();
         var res = await _fetchWithDedup(firstUrl, { headers: headers });
         if (res.status === 304) {
@@ -525,6 +526,33 @@
         var totalHint = Number(paging && paging.total);
         if (!(totalHint >= 0)) totalHint = allRows.length;
         _storeTotalHint = totalHint;
+
+        // If server returned partial page with hasMore, continue fetching until complete
+        if (paging && paging.hasMore && allRows.length < totalHint) {
+          var offset = allRows.length;
+          var fetchGuard = 0;
+          while (offset < totalHint && fetchGuard < 50) {
+            fetchGuard++;
+            var nextUrl = endpoint + '?limit=' + encodeURIComponent(String(_requestsPageSize)) + '&offset=' + encodeURIComponent(String(offset)) + _saleExtra;
+            try {
+              var nextRes = await _fetchWithDedup(nextUrl, {});
+              if (!nextRes.ok) break;
+              var nextBody = await nextRes.json();
+              var nextRows = Array.isArray(nextBody.data) ? _normalizeRequestRows(nextBody.data) : [];
+              if (nextRows.length === 0) break;
+              allRows = allRows.concat(nextRows);
+              offset = allRows.length;
+              if (nextBody.paging && Number(nextBody.paging.total) >= 0) {
+                totalHint = Number(nextBody.paging.total);
+                _storeTotalHint = totalHint;
+              }
+              if (!nextBody.paging || !nextBody.paging.hasMore) break;
+            } catch (pageErr) {
+              console.warn('[dataSdk] _fetchStore pagination page failed:', pageErr);
+              break;
+            }
+          }
+        }
 
         if (allRows.length > _storeMaxRows) {
           allRows = allRows.slice(0, _storeMaxRows);

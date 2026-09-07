@@ -2486,10 +2486,11 @@ app.get('/api/ks/requests', async (req, res) => {
     try {
         const limitRaw = Number(req.query && req.query.limit);
         const offsetRaw = Number(req.query && req.query.offset);
-        const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 100;
+        const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(10000, Math.floor(limitRaw))) : 100;
         const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
         const outletCodeRaw = String(req.query && (req.query.outlet_code || req.query.outletCode) || '').trim();
         const { updatedSinceRaw, updatedSince } = resolveKsRequestsOptions(req.query || {});
+        const isAllRequested = Boolean(req.query && (req.query.all === '1' || req.query.all === 'true' || req.query.all === true));
 
         // Sale-specific query path (for Mobile Heineken): return all requests AND images for THAT Sale ONLY
         const salePhoneRaw = String(req.query && (req.query.sale_phone || req.query.phone || req.query.salePhone) || '').trim();
@@ -2566,7 +2567,7 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
-        if (req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
+        if (!isAllRequested && req.query && (typeof req.query.limit !== 'undefined' || typeof req.query.offset !== 'undefined')) {
             const [[countRow]] = await pool.query('SELECT COUNT(*) AS total FROM ks_requests_view');
             const total = Number(countRow && countRow.total ? countRow.total : 0);
             const [rows] = await pool.query(`${KS_REQUESTS_SELECT_SQL} ORDER BY created_at DESC, id DESC LIMIT ${limit} OFFSET ${offset}`);
