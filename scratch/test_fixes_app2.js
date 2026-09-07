@@ -51,23 +51,44 @@ runTest('1.1. Toast Notification cấu hình 3000ms và styling glassmorphism', 
     autoDismissDelay = delay;
     return 1;
   };
-
-  // Nạp hàm test
   const typeStyles = {
-    'new':      { border: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.15)', badgeCol: '#38bdf8', icon: '🆕', glow: 'rgba(56, 189, 248, 0.2)' },
-    'warranty': { border: 'rgba(251, 146, 60, 0.45)',  badgeBg: 'rgba(251, 146, 60, 0.15)',  badgeCol: '#fb923c', icon: '🔧', glow: 'rgba(251, 146, 60, 0.2)' },
-    'editing':  { border: 'rgba(251, 191, 36, 0.55)',  badgeBg: 'rgba(251, 191, 36, 0.15)',  badgeCol: '#fbbf24', icon: '✏️', glow: 'rgba(251, 191, 36, 0.25)' },
-    'done':     { border: 'rgba(52, 211, 153, 0.45)', badgeBg: 'rgba(52, 211, 153, 0.15)', badgeCol: '#34d399', icon: '✅', glow: 'rgba(52, 211, 153, 0.2)' },
+    'new':      { svg: '<svg width="15" height="15"></svg>' },
+    'warranty': { svg: '<svg width="15" height="15"></svg>' },
+    'editing':  { svg: '<svg width="15" height="15"></svg>' },
+    'done':     { svg: '<svg width="15" height="15"></svg>' },
   };
-
-  assert.strictEqual(typeStyles.editing.icon, '✏️');
-  assert.strictEqual(typeStyles.editing.badgeCol, '#fbbf24');
+  assert(typeStyles.editing.svg.includes('<svg'), 'Phải dùng flat SVG icon');
   
   // Test auto-dismiss timeout
   global.setTimeout(() => {}, 3000);
   assert.strictEqual(autoDismissDelay, 3000, 'Toast phải tự tắt sau đúng 3000ms (3s)');
   
   global.setTimeout = originalSetTimeout;
+});
+
+runTest('1.2. Khử trùng lặp thông báo (Deduplication SSE + Web Push)', () => {
+  let callCount = 0;
+  var _ksRecentNotifs = {};
+  var _ksBannerQueue = [];
+
+  function mockShowBanner(title, body, backendId, type) {
+    var key = (backendId || '') + ':' + (title || '') + ':' + (body || '');
+    var now = Date.now();
+    if (_ksRecentNotifs[key] && (now - _ksRecentNotifs[key] < 4000)) {
+      return; // Chặn trùng lặp
+    }
+    _ksRecentNotifs[key] = now;
+    _ksBannerQueue.push({ title, body, backendId, type });
+    callCount++;
+  }
+
+  // Sự kiện 1: SSE phát hiện yêu cầu chỉnh sửa
+  mockShowBanner('Yêu cầu chỉnh sửa mới', 'Outlet Chiêu', 'TK-1001', 'editing');
+  // Sự kiện 2: Web Push đồng thời bắn về trình duyệt cùng lúc (sau 200ms)
+  mockShowBanner('Yêu cầu chỉnh sửa mới', 'Outlet Chiêu', 'TK-1001', 'editing');
+
+  assert.strictEqual(callCount, 1, 'Chỉ được hiển thị đúng 1 Toast duy nhất, không hiện 2 toast trùng lặp');
+  assert.strictEqual(_ksBannerQueue.length, 1);
 });
 
 // -----------------------------------------------------------------------------

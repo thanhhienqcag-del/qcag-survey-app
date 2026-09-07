@@ -1164,7 +1164,7 @@ async function submitQuoteEditRequest(backendId) {
       const outletLabel = req.outletName || req.outletCode || 'Outlet';
       if (typeof sendPushNotification === 'function') {
         sendPushNotification({
-          title: '⚠️ Yêu cầu chỉnh sửa báo giá',
+          title: 'Yêu cầu chỉnh sửa báo giá',
           body: `${myName} vừa yêu cầu chỉnh sửa báo giá cho ${outletLabel}: ${text.slice(0, 100)}`,
           role: 'qcag',
           data: { backendId: backendId }
@@ -3269,7 +3269,7 @@ async function submitEditRequest() {
         if (typeof sendPushNotification === 'function') {
           if (String(authorRole).toLowerCase() === 'heineken') {
             sendPushNotification({
-              title: '⚠️ Yêu cầu chỉnh sửa mới',
+              title: 'Yêu cầu chỉnh sửa mới',
               body: `${authorName} vừa gửi yêu cầu chỉnh sửa cho ${outletLabel}: ${text.slice(0, 100)}`,
               role: 'qcag',
               data: { backendId: backendId }
@@ -3277,7 +3277,7 @@ async function submitEditRequest() {
           } else {
             const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
             sendPushNotification({
-              title: '⚠️ Yêu cầu chỉnh sửa từ QCAG',
+              title: 'Yêu cầu chỉnh sửa từ QCAG',
               body: `${authorName} vừa gửi yêu cầu chỉnh sửa cho ${outletLabel}: ${text.slice(0, 100)}`,
               phone: reqObj.phone,
               saleCode: reqObj.saleCode,

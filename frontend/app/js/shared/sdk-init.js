@@ -38,8 +38,20 @@ function loadAllRequestsFromStorage() {
 // Auto-dismisses after 3 seconds; clicking navigates to the request.
 var _ksBannerQueue = [];
 var _ksBannerVisible = false;
+var _ksRecentNotifs = {};
 
 function _ksShowDesktopBanner(title, body, backendId, type) {
+  // Deduplicate notifications arriving within 4 seconds (e.g. SSE + Web Push concurrent events)
+  var key = (backendId || '') + ':' + (title || '') + ':' + (body || '');
+  var now = Date.now();
+  if (_ksRecentNotifs[key] && (now - _ksRecentNotifs[key] < 4000)) {
+    return; // Suppress duplicate toast
+  }
+  _ksRecentNotifs[key] = now;
+  for (var k in _ksRecentNotifs) {
+    if (now - _ksRecentNotifs[k] > 10000) delete _ksRecentNotifs[k];
+  }
+
   _ksBannerQueue.push({ title: title, body: body, backendId: backendId, type: type || 'new' });
   if (!_ksBannerVisible) _ksProcessBannerQueue();
 }
@@ -54,10 +66,30 @@ function _ksProcessBannerQueue() {
   if (old) old.remove();
 
   var typeStyles = {
-    'new':      { border: 'rgba(56, 189, 248, 0.45)', badgeBg: 'rgba(56, 189, 248, 0.15)', badgeCol: '#38bdf8', icon: '🆕', glow: 'rgba(56, 189, 248, 0.2)' },
-    'warranty': { border: 'rgba(251, 146, 60, 0.45)',  badgeBg: 'rgba(251, 146, 60, 0.15)',  badgeCol: '#fb923c', icon: '🔧', glow: 'rgba(251, 146, 60, 0.2)' },
-    'editing':  { border: 'rgba(251, 191, 36, 0.55)',  badgeBg: 'rgba(251, 191, 36, 0.15)',  badgeCol: '#fbbf24', icon: '✏️', glow: 'rgba(251, 191, 36, 0.25)' },
-    'done':     { border: 'rgba(52, 211, 153, 0.45)', badgeBg: 'rgba(52, 211, 153, 0.15)', badgeCol: '#34d399', icon: '✅', glow: 'rgba(52, 211, 153, 0.2)' },
+    'new': {
+      border: 'rgba(56, 189, 248, 0.45)',
+      badgeBg: 'rgba(56, 189, 248, 0.15)',
+      glow: 'rgba(56, 189, 248, 0.2)',
+      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>'
+    },
+    'warranty': {
+      border: 'rgba(251, 146, 60, 0.45)',
+      badgeBg: 'rgba(251, 146, 60, 0.15)',
+      glow: 'rgba(251, 146, 60, 0.2)',
+      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>'
+    },
+    'editing': {
+      border: 'rgba(251, 191, 36, 0.55)',
+      badgeBg: 'rgba(251, 191, 36, 0.15)',
+      glow: 'rgba(251, 191, 36, 0.25)',
+      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'
+    },
+    'done': {
+      border: 'rgba(52, 211, 153, 0.45)',
+      badgeBg: 'rgba(52, 211, 153, 0.15)',
+      glow: 'rgba(52, 211, 153, 0.2)',
+      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
+    },
   };
   var style = typeStyles[item.type] || typeStyles['new'];
 
@@ -66,7 +98,7 @@ function _ksProcessBannerQueue() {
   banner.style.cssText = 'position: fixed; top: 16px; left: 50%; transform: translate(-50%, -24px) scale(0.95); opacity: 0; z-index: 99999; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 440px); width: max-content; padding: 9px 14px; border-radius: 9999px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1.5px solid ' + style.border + '; box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 16px ' + style.glow + '; cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; user-select: none; font-family: inherit;';
   
   banner.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9999px;background:' + style.badgeBg + ';flex-shrink:0;font-size:14px;">' + style.icon + '</div>' +
+    '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9999px;background:' + style.badgeBg + ';flex-shrink:0;">' + style.svg + '</div>' +
     '<div style="min-width:0;flex:1;line-height:1.25;">' +
       '<div style="font-size:13px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.title || '').replace(/</g, '&lt;') + '</div>' +
       '<div style="font-size:11.5px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">' + (item.body || '').replace(/</g, '&lt;') + '</div>' +

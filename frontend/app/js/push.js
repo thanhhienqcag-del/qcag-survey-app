@@ -111,11 +111,19 @@ if ('serviceWorker' in navigator) {
     try {
       const title = event.data.title || 'QCAG';
       const body  = event.data.body  || '';
-      const msg   = title + (body ? '\n' + body : '');
-      if (typeof showToast === 'function') {
-        showToast(msg, 3000);
-      } else {
-        console.info('[push] in-app message:', msg);
+      const data  = event.data.data  || {};
+      const backendId = data.backendId || null;
+      let type = 'new';
+      const lowTitle = (title + ' ' + body).toLowerCase();
+      if (lowTitle.includes('sửa') || lowTitle.includes('chỉnh')) type = 'editing';
+      else if (lowTitle.includes('bảo hành')) type = 'warranty';
+      else if (lowTitle.includes('hoàn thành') || lowTitle.includes('xong')) type = 'done';
+
+      // Route to unified floating toast with automatic deduplication
+      if (typeof _ksShowDesktopBanner === 'function') {
+        _ksShowDesktopBanner(title, body, backendId, type);
+      } else if (typeof showToast === 'function') {
+        showToast(title + (body ? '\n' + body : ''), 3000);
       }
     } catch (e) {}
   });
