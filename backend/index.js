@@ -2762,7 +2762,7 @@ app.post("/api/ks/requests", async (req, res) => {
 // Output: Same array with base64 replaced by GCS public URLs.
 // Folder structure: ks-surveys/{mqFolder}/{subfolder}/{ts}_{rand}.{ext}
 async function ksAutoUploadImages(jsonStr, mqFolder, subfolder) {
-    const ksBucket = process.env.KS_GCS_BUCKET;
+    const ksBucket = process.env.KS_GCS_BUCKET || process.env.GCS_BUCKET || 'qcag-483014-qcag-images';
     if (!ksBucket) {
         console.warn('[ksAutoUpload] KS_GCS_BUCKET not set — images kept as-is');
         return jsonStr;
@@ -2858,7 +2858,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             fields.push('outlet_code = ?');
             vals.push(newOutletCode);
 
-            const ksBucket = process.env.KS_GCS_BUCKET;
+            const ksBucket = process.env.KS_GCS_BUCKET || process.env.GCS_BUCKET || 'qcag-483014-qcag-images';
             const oldMqFolder = current.mq_folder;
             const outletCodeChanged = newOutletCode && newOutletCode !== oldOutletCode;
             const isStillTemp = oldMqFolder && oldMqFolder.startsWith('mq-NEWOUTLET-');
@@ -3010,7 +3010,7 @@ app.post('/api/ks/upload', async (req, res) => {
         if (!dataUrl) return res.status(400).json({ ok: false, error: 'missing_dataUrl' });
         const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
         if (!m) return res.status(400).json({ ok: false, error: 'invalid_dataUrl' });
-        const ksBucketName = process.env.KS_GCS_BUCKET;
+        const ksBucketName = process.env.KS_GCS_BUCKET || process.env.GCS_BUCKET || 'qcag-483014-qcag-images';
         if (!ksBucketName) return res.status(500).json({ ok: false, error: 'KS_GCS_BUCKET not configured' });
         const mimetype = m[1];
         const buffer = Buffer.from(m[2], 'base64');
@@ -3058,7 +3058,7 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
         const rowId = current.id;
         const oldMqFolder = current.mq_folder;
         const newMqFolder = ksSafeMqFolder(newOutletCode);
-        const ksBucket = process.env.KS_GCS_BUCKET;
+        const ksBucket = process.env.KS_GCS_BUCKET || process.env.GCS_BUCKET || 'qcag-483014-qcag-images';
 
         let remap = {};
         if (oldMqFolder && ksBucket && oldMqFolder !== newMqFolder) {
@@ -3672,7 +3672,7 @@ async function streamImageFromBucket(res, bucketName, objectName) {
 
 app.get('/images/v/:b64', async (req, res) => {
     try {
-        const bucketName = process.env.GCS_BUCKET;
+        const bucketName = process.env.GCS_BUCKET || process.env.KS_GCS_BUCKET || 'qcag-483014-qcag-images';
         if (!bucketName) return res.status(500).send('GCS_BUCKET is not set');
         const b64 = req.params && req.params.b64 != null ? String(req.params.b64) : '';
         if (!b64) return res.status(400).send('missing b64');
@@ -3686,7 +3686,7 @@ app.get('/images/v/:b64', async (req, res) => {
 
 app.get('/images/view', async (req, res) => {
     try {
-        const bucketName = process.env.GCS_BUCKET;
+        const bucketName = process.env.GCS_BUCKET || process.env.KS_GCS_BUCKET || 'qcag-483014-qcag-images';
         if (!bucketName) return res.status(500).send('GCS_BUCKET is not set');
 
         const rawName = req.query && req.query.name != null ? String(req.query.name) : '';
