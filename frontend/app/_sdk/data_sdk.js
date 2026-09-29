@@ -14,11 +14,16 @@
   var _esRetryMs = 1000;
   var _esRetryTimer = null;
   var _esEverConnected = false;
+  var _esDisconnectedAt = 0;
+  var _isUserIdle = false;
+  var _lastUserActivityAt = Date.now();
+  var IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes idle threshold
   var _refreshTimer = null;
   var _refreshInFlight = null;
   var _refreshCooldownMs = 2000;
   var _lastRefreshIssuedAt = 0;
   var _rtVisibilityBound = false;
+  var _userIdleBound = false;
   // Tăng pageSize lên 300 để load đủ dữ liệu trong 1 lần fetch.
   // Backend đã cho phép tối đa 300 records/page. storeMaxRows = 2000
   // để chứa đủ khi data tiếp tục tăng.
@@ -47,6 +52,35 @@
         if (Number.isFinite(maxRowsOverride) && maxRowsOverride > 0) {
           _storeMaxRows = Math.max(100, Math.floor(maxRowsOverride));
         }
+      }
+    } catch (_) {}
+
+    // Initialize user idle / activity tracking to pause realtime while idle
+    try {
+      if (typeof window !== 'undefined' && !_userIdleBound) {
+        _userIdleBound = true;
+        function _onUserActive() {
+          _lastUserActivityAt = Date.now();
+          if (_isUserIdle) {
+            _isUserIdle = false;
+            // User returned after idle: resume SSE and catch up once
+            if (!_es || _es.readyState === 2 /* CLOSED */) {
+              _openSse();
+              _scheduleRefresh(120);
+            }
+          }
+        }
+        ['mousemove', 'keydown', 'touchstart', 'scroll', 'click'].forEach(function (evt) {
+          window.addEventListener(evt, _onUserActive, { passive: true });
+        });
+        setInterval(function () {
+          if (!_isUserIdle && (Date.now() - _lastUserActivityAt > IDLE_TIMEOUT_MS)) {
+            _isUserIdle = true;
+            // Sleep SSE while user is idle to save cloud quota
+            _closeEs();
+            _clearEsRetry();
+          }
+        }, 60000);
       }
     } catch (_) {}
   })();
@@ -107,8 +141,11 @@
       _es.onopen = function () {
         _esRetryMs = 1000; // reset backoff
         _clearEsRetry();
-        if (_esEverConnected) {
-          // Reconnect after a gap — fetch fresh data to catch any missed events
+        var now = Date.now();
+        var wasDisconnectedLong = _esDisconnectedAt && (now - _esDisconnectedAt > 30000);
+        _esDisconnectedAt = 0;
+        if (_esEverConnected && wasDisconnectedLong) {
+          // Reconnect after an actual gap (>30s) — fetch fresh data to catch missed events
           _scheduleRefresh(200, true);
         }
         _esEverConnected = true;
@@ -194,7 +231,10 @@
               }
             }
 
-            _scheduleRefresh(150, true);
+            // Only perform a full refresh if the data was not patched directly from the event payload
+            if (!patched) {
+              _scheduleRefresh(150, true);
+            }
           } else {
             // For all other resources (quotations, pending_orders, production-orders, etc.)
             _scheduleRefresh(150, true);
@@ -203,9 +243,11 @@
       });
 
       _es.onerror = function () {
+        if (!_esDisconnectedAt) _esDisconnectedAt = Date.now();
         _closeEs();
         _clearEsRetry();
         if (typeof document !== 'undefined' && document.hidden) return;
+        if (_isUserIdle) return;
         var ms = _withJitter(_esRetryMs, 0.3);
         _esRetryMs = Math.min(30000, Math.floor(_esRetryMs * 1.7));
         _esRetryTimer = setTimeout(function () {
@@ -231,7 +273,9 @@
               _closeEs();
               return;
             }
-            // Re-open SSE and fetch fresh data on tab focus.
+            // Tab is visible again: reset idle state and re-open SSE if needed
+            _lastUserActivityAt = Date.now();
+            _isUserIdle = false;
             if (!_es || _es.readyState === 2 /* CLOSED */) _openSse();
             _scheduleRefresh(120);
           });
@@ -600,18 +644,23 @@
       clearInterval(_pollTimer);
       _pollTimer = null;
     }
-    // Backup heartbeat polling every 30s in case SSE drops or is blocked
+    // Gentle fallback polling every 5 minutes ONLY IF SSE is dead and user is active
     _pollTimer = setInterval(function () {
       try {
         if (typeof document !== 'undefined' && document.hidden) return;
-        if (!_es || _es.readyState === 2 /* CLOSED */) {
-          _openSse();
-        }
-        if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
-          window.dataSdk.refresh().catch(function () {});
+        if (_isUserIdle) return;
+        // If SSE is connected and healthy, do NOT poll — event-driven realtime handles updates
+        if (_es && _es.readyState === 1 /* OPEN */) return;
+        // SSE is closed: try to reconnect
+        _openSse();
+        // Only refresh if SSE was disconnected for a significant period
+        if (!_esEverConnected || (_esDisconnectedAt && (Date.now() - _esDisconnectedAt > 60000))) {
+          if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+            window.dataSdk.refresh().catch(function () {});
+          }
         }
       } catch (_) {}
-    }, 30000);
+    }, 5 * 60 * 1000); // 5 minutes instead of 30 seconds
     if (_pollTimer && _pollTimer.unref) _pollTimer.unref();
   }
 
