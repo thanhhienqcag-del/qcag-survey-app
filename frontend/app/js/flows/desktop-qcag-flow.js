@@ -863,8 +863,15 @@ async function qcagDesktopConfirmEditOutletModal() {
   const newLngStr = (document.getElementById('qcagEditOutletLng').value || '').trim();
   const note = (document.getElementById('qcagEditOutletNote').value || '').trim();
 
-  if (!newCode || !newName) {
-    showToast('Outlet Code và Tên Outlet không được để trống');
+  const curCode = currentDetailRequest.outletCode || '';
+  const effectiveCode = newCode || (isPlaceholderOutletCode(curCode) ? curCode : '');
+
+  if (!newName) {
+    showToast('Tên Outlet không được để trống');
+    return;
+  }
+  if (!effectiveCode) {
+    showToast('Outlet Code không được để trống');
     return;
   }
 
@@ -875,7 +882,7 @@ async function qcagDesktopConfirmEditOutletModal() {
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
 
   const changes = [];
-  if (newCode !== (currentDetailRequest.outletCode || '')) changes.push(`Outlet Code: ${currentDetailRequest.outletCode || '-'} → ${newCode}`);
+  if (effectiveCode !== (currentDetailRequest.outletCode || '')) changes.push(`Outlet Code: ${currentDetailRequest.outletCode || '-'} → ${effectiveCode}`);
   if (newName !== (currentDetailRequest.outletName || '')) changes.push(`Tên Outlet: ${currentDetailRequest.outletName || '-'} → ${newName}`);
   if (newPhone !== (currentDetailRequest.phone || '')) changes.push(`SĐT: ${currentDetailRequest.phone || '-'} → ${newPhone}`);
   if (newAddress !== (currentDetailRequest.address || '')) changes.push(`Địa chỉ: ${currentDetailRequest.address || '-'} → ${newAddress}`);
@@ -898,7 +905,7 @@ async function qcagDesktopConfirmEditOutletModal() {
 
   const updated = {
     ...currentDetailRequest,
-    outletCode: newCode,
+    outletCode: effectiveCode,
     outletName: newName,
     phone: newPhone,
     address: newAddress,
