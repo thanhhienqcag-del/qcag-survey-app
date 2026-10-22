@@ -3305,6 +3305,10 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
     const patchToSend = Object.assign({}, updated);
     for (const field of IMAGE_FIELDS) {
       if (!(field in patchToSend)) continue;
+      // Luôn bảo vệ và gửi designImages nếu người dùng cố ý upload hoặc thay MQ
+      if (field === 'designImages' && (updated._mqReplacedDuringEdit || updated._hasNewDesignUploaded)) {
+        continue;
+      }
       const v = String(patchToSend[field] == null ? '' : patchToSend[field]);
       // Strip if it's a placeholder sentinel
       if (PLACEHOLDER_RE.test(v)) { delete patchToSend[field]; continue; }
@@ -5575,7 +5579,7 @@ async function qcagDesktopUploadStatusImage(input) {
   if (ok) {
     // Only update the UI section for the request that was active when upload started.
     // If the user has navigated to a different request, skip the DOM update entirely.
-    if (_qcagDesktopCurrentId !== targetId) return;
+    if (!qcagDesktopIsSameRequest(targetRequest, _qcagDesktopCurrentId)) return;
     const thumbGrid = document.getElementById('qcagStatusThumbGrid');
     if (thumbGrid) {
       const newImgs = qcagDesktopPrepareRenderImageList(currentImgs);
@@ -5596,6 +5600,19 @@ async function qcagDesktopUploadStatusImage(input) {
   }
 }
 
+function qcagDesktopIsSameRequest(target, curId) {
+  if (!target) return false;
+  if (!curId) return true;
+  const targetBk = target.__backendId;
+  const targetTk = target.tkCode;
+  const targetId = target.id;
+  const curStr = String(curId).trim();
+  return (targetBk && curStr === String(targetBk)) ||
+         (targetTk && curStr.toUpperCase() === String(targetTk).toUpperCase()) ||
+         (targetId != null && curStr === String(targetId)) ||
+         (targetId != null && curStr === ('db_' + targetId));
+}
+
 async function qcagDesktopUploadMQ(input) {
   if (!currentDetailRequest || !input) return;
   const files = Array.from(input.files || []);
@@ -5606,184 +5623,208 @@ async function qcagDesktopUploadMQ(input) {
 
   // Ghi nhận targetRequest ngay trước async — bảo vệ đúng TK request
   const targetRequest = currentDetailRequest;
-  const targetId = targetRequest.__backendId;
+  const targetId = targetRequest.__backendId || (targetRequest.id ? ('db_' + targetRequest.id) : targetRequest.tkCode);
   const uploadToken = ++_qcagCurrentMqUploadToken;
 
   const isWarrantyReq = String((targetRequest.type || '')).toLowerCase() === 'warranty';
 
-  // Nén ảnh nhanh (WebP/Canvas 2048px chất lượng 0.88, cực nhanh ~60ms, đọc rõ số đo MQ)
-  let dataUrl;
-  try {
-    dataUrl = await _compressImageFile(file, 2048, 0.88);
-  } catch (_) {
-    dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
-  }
-
-  // Guard: Nếu user chuyển sang TK khác trong lúc nén thì hủy
-  if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
-
-  if (isWarrantyReq) {
-    // Luồng bảo hành: upload nghiệm thu
-    let imageUrl = dataUrl;
-    if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
-      showToast('Đang upload ảnh nghiệm thu...');
-      try {
-        const uploaded = await window.dataSdk.uploadImage(
-          dataUrl, file.name || 'accept.jpg', targetId, 'nghiem-thu'
-        );
-        if (typeof uploaded === 'string' && uploaded.trim()) {
-          imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
-        } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-          imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
-        }
-      } catch (e) {
-        console.warn('[qcagDesktopUploadMQ] GCS upload failed for acceptance, keeping base64:', e);
-      }
+  const isStillOnSameRequest = () => {
+    if (!currentDetailRequest) return false;
+    const sameReq = (targetRequest.tkCode && currentDetailRequest.tkCode && targetRequest.tkCode === currentDetailRequest.tkCode) ||
+                    (targetRequest.__backendId && currentDetailRequest.__backendId && targetRequest.__backendId === currentDetailRequest.__backendId) ||
+                    (targetRequest.id && currentDetailRequest.id && String(targetRequest.id) === String(currentDetailRequest.id));
+    if (!sameReq) return false;
+    if (_qcagDesktopCurrentId && !qcagDesktopIsSameRequest(targetRequest, _qcagDesktopCurrentId)) {
+      return false;
     }
-    if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
-    const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
-    existingAccept.push(imageUrl);
-    const updated = {
-      ...currentDetailRequest,
-      acceptanceImages: JSON.stringify(existingAccept),
-      updatedAt: new Date().toISOString()
-    };
-    const ok = await qcagDesktopPersistRequest(updated, 'Đã upload ảnh nghiệm thu', true);
-    if (ok && uploadToken === _qcagCurrentMqUploadToken) qcagDesktopRefreshMQInPlace(updated);
-    if (input && input.value !== undefined) input.value = '';
-    return;
-  }
-
-  // ── Luồng MQ thiết kế chuẩn Production (tham khảo G:\10. Code) ──
-  const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
-
-  // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' (Chờ xác nhận) ngay lập tức
-  // và hiển thị preview tại chỗ bằng Base64 đã nén để mở khóa nút "Hoàn thành" ngay 0ms
-  currentDetailRequest.status = 'processing';
-  currentDetailRequest.designImages = JSON.stringify([dataUrl]);
-  currentDetailRequest.designFilename = file.name;
-  currentDetailRequest._mqReplacedDuringEdit = true;
-
-  const idxPreview = allRequests.findIndex(r => r.__backendId === targetId);
-  if (idxPreview !== -1) {
-    allRequests[idxPreview].status = 'processing';
-    allRequests[idxPreview].designImages = currentDetailRequest.designImages;
-    allRequests[idxPreview].designFilename = file.name;
-    allRequests[idxPreview]._mqReplacedDuringEdit = true;
-  }
-  if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[targetId]) {
-    _qcagDesktopFullRequestCache[targetId].status = 'processing';
-    _qcagDesktopFullRequestCache[targetId].designImages = currentDetailRequest.designImages;
-    _qcagDesktopFullRequestCache[targetId].designFilename = file.name;
-    _qcagDesktopFullRequestCache[targetId]._mqReplacedDuringEdit = true;
-  }
-
-  // Cập nhật giao diện in-place: preview MQ, mở khóa nút Hoàn thành và cập nhật badge thẻ bên trái
-  // Tuyệt đối không gọi renderQCAGDesktopList() ở đây để giữ nguyên vị trí cuộn danh sách (không bị nhảy về top)
-  qcagDesktopRefreshMQInPlace(currentDetailRequest);
-
-  // 2. Upload GCS nền: Tạo promise tải nền để qcagDesktopMarkProcessed có thể tái sử dụng ngay lập tức
-  let finalImageUrl = dataUrl;
-  if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
-    showToast('Đang tải MQ lên cloud...', 2000);
-    const mqSubfolder = 'mq-' + String(targetRequest.outletCode || 'OUTLET')
-      .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
-    _qcagActiveMqUploadPromise = (async () => {
-      try {
-        const uploaded = await window.dataSdk.uploadImage(
-          dataUrl, file.name || 'mq.webp', targetId, mqSubfolder
-        );
-        if (typeof uploaded === 'string' && uploaded.trim()) {
-          return qcagDesktopNormalizeImageUrl(uploaded);
-        } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-          return qcagDesktopNormalizeImageUrl(uploaded.url);
-        }
-      } catch (e) {
-        console.warn('[qcagDesktopUploadMQ] GCS upload failed, fallback to base64:', e);
-      }
-      return dataUrl;
-    })();
-
-    finalImageUrl = await _qcagActiveMqUploadPromise;
-    _qcagActiveMqUploadPromise = null;
-  }
-
-  // Guard sau async upload: user chuyển sang yêu cầu khác thì dừng
-  if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
-
-  // Nếu người dùng đã bấm "Hoàn thành" trong lúc upload GCS đang chạy, tuyệt đối không ghi đè lại status 'processing'
-  const curSt = String((currentDetailRequest && currentDetailRequest.status) || '').toLowerCase();
-  if (_qcagMarkProcessedInFlight || curSt === 'done' || curSt === 'processed') {
-    if (input && input.value !== undefined) input.value = '';
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const updated = {
-    ...currentDetailRequest,
-    designImages: JSON.stringify([finalImageUrl]),
-    designFilename: file.name,
-    designUpdatedAt: now,
-    _mqReplacedDuringEdit: true,
-    designLastEditedBy: currentSession ? (currentSession.fullname || currentSession.name || currentSession.saleName || currentSession.phone || 'QCAG') : 'QCAG',
-    designLastEditedAt: now,
-    editingRequestedAt: isPendingEdit
-      ? (currentDetailRequest.editingRequestedAt || now)
-      : null,
-    status: 'processing',
-    updatedAt: now
+    return true;
   };
 
-  // Ghi nhận mốc thời gian để chặn vòng lặp giật lag từ websocket realtime
-  window._qcagLastOptimisticSaveTs = Date.now();
-  window._qcagLastOptimisticSaveId = targetId;
-
-  // Luồng chỉnh sửa: chỉ preview draft in-memory để Designer xem trước,
-  // TUYỆT ĐỐI không persist đè lên database cho đến khi người dùng bấm xác nhận "Đã chỉnh sửa"
-  if (isPendingEdit) {
-    currentDetailRequest.designImages = JSON.stringify([finalImageUrl]);
-    currentDetailRequest.designFilename = file.name;
-    currentDetailRequest.designUpdatedAt = now;
-    currentDetailRequest._mqReplacedDuringEdit = true;
-    currentDetailRequest._pendingNewMqUrl = finalImageUrl;
-
-    if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[targetId]) {
-      _qcagDesktopFullRequestCache[targetId].designImages = currentDetailRequest.designImages;
-      _qcagDesktopFullRequestCache[targetId].designFilename = file.name;
-      _qcagDesktopFullRequestCache[targetId]._mqReplacedDuringEdit = true;
-      _qcagDesktopFullRequestCache[targetId]._pendingNewMqUrl = finalImageUrl;
-      _qcagDesktopFullRequestCache[targetId]._originalDesignImagesBeforeEdit = currentDetailRequest._originalDesignImagesBeforeEdit;
+  try {
+    // Nén ảnh nhanh (WebP/Canvas 2048px chất lượng 0.88, cực nhanh ~60ms, đọc rõ số đo MQ)
+    let dataUrl;
+    try {
+      dataUrl = await _compressImageFile(file, 2048, 0.88);
+    } catch (_) {
+      dataUrl = await new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
     }
-    if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
-      const idxAll = allRequests.findIndex(r => r.__backendId === targetId);
-      if (idxAll !== -1) {
-        allRequests[idxAll].designImages = currentDetailRequest.designImages;
-        allRequests[idxAll].designFilename = file.name;
-        allRequests[idxAll]._mqReplacedDuringEdit = true;
+
+    // Guard: Nếu user chuyển sang TK khác trong lúc nén thì hủy
+    if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
+
+    if (isWarrantyReq) {
+      // Luồng bảo hành: upload nghiệm thu
+      let imageUrl = dataUrl;
+      if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
+        showToast('Đang upload ảnh nghiệm thu...');
+        try {
+          const uploaded = await window.dataSdk.uploadImage(
+            dataUrl, file.name || 'accept.jpg', targetId, 'nghiem-thu'
+          );
+          if (typeof uploaded === 'string' && uploaded.trim()) {
+            imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
+          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+            imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
+          }
+        } catch (e) {
+          console.warn('[qcagDesktopUploadMQ] GCS upload failed for acceptance, keeping base64:', e);
+        }
+      }
+      if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
+      const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
+      existingAccept.push(imageUrl);
+      const updated = {
+        ...currentDetailRequest,
+        acceptanceImages: JSON.stringify(existingAccept),
+        updatedAt: new Date().toISOString()
+      };
+      const ok = await qcagDesktopPersistRequest(updated, 'Đã upload ảnh nghiệm thu', true);
+      if (ok && uploadToken === _qcagCurrentMqUploadToken) qcagDesktopRefreshMQInPlace(updated);
+      return;
+    }
+
+    // ── Luồng MQ thiết kế chuẩn Production ──
+    const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+
+    // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' và hiển thị preview tại chỗ
+    currentDetailRequest.status = 'processing';
+    currentDetailRequest.designImages = JSON.stringify([dataUrl]);
+    currentDetailRequest.designFilename = file.name;
+    currentDetailRequest._mqReplacedDuringEdit = true;
+    currentDetailRequest._hasNewDesignUploaded = true;
+
+    const idxPreview = allRequests.findIndex(r => (r.__backendId && r.__backendId === targetId) || (r.tkCode && r.tkCode === targetRequest.tkCode));
+    if (idxPreview !== -1) {
+      allRequests[idxPreview].status = 'processing';
+      allRequests[idxPreview].designImages = currentDetailRequest.designImages;
+      allRequests[idxPreview].designFilename = file.name;
+      allRequests[idxPreview]._mqReplacedDuringEdit = true;
+      allRequests[idxPreview]._hasNewDesignUploaded = true;
+    }
+    if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
+      const cacheKey = targetId || targetRequest.tkCode;
+      if (_qcagDesktopFullRequestCache[cacheKey]) {
+        _qcagDesktopFullRequestCache[cacheKey].status = 'processing';
+        _qcagDesktopFullRequestCache[cacheKey].designImages = currentDetailRequest.designImages;
+        _qcagDesktopFullRequestCache[cacheKey].designFilename = file.name;
+        _qcagDesktopFullRequestCache[cacheKey]._mqReplacedDuringEdit = true;
+        _qcagDesktopFullRequestCache[cacheKey]._hasNewDesignUploaded = true;
       }
     }
 
+    // Cập nhật giao diện in-place: preview MQ, mở khóa nút Hoàn thành và cập nhật badge thẻ bên trái
     qcagDesktopRefreshMQInPlace(currentDetailRequest);
-    showToast('Đã tải preview ảnh mới — nhấn "Đã chỉnh sửa" để thay thế vĩnh viễn', 3000);
+
+    // 2. Upload GCS nền: Tạo promise tải nền để qcagDesktopMarkProcessed có thể tái sử dụng ngay lập tức
+    let finalImageUrl = dataUrl;
+    if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
+      showToast('Đang tải MQ lên cloud...', 2000);
+      const mqSubfolder = 'mq-' + String(targetRequest.outletCode || 'OUTLET')
+        .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+      _qcagActiveMqUploadPromise = (async () => {
+        try {
+          const uploaded = await window.dataSdk.uploadImage(
+            dataUrl, file.name || 'mq.webp', targetId, mqSubfolder
+          );
+          if (typeof uploaded === 'string' && uploaded.trim()) {
+            return qcagDesktopNormalizeImageUrl(uploaded);
+          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+            return qcagDesktopNormalizeImageUrl(uploaded.url);
+          }
+        } catch (e) {
+          console.warn('[qcagDesktopUploadMQ] GCS upload failed, fallback to base64:', e);
+        }
+        return dataUrl;
+      })();
+
+      finalImageUrl = await _qcagActiveMqUploadPromise;
+      _qcagActiveMqUploadPromise = null;
+    }
+
+    // Guard sau async upload: user chuyển sang yêu cầu khác thì dừng
+    if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
+
+    // Nếu người dùng đã bấm "Hoàn thành" trong lúc upload GCS đang chạy, không ghi đè lại status 'processing'
+    const curSt = String((currentDetailRequest && currentDetailRequest.status) || '').toLowerCase();
+    if (_qcagMarkProcessedInFlight || curSt === 'done' || curSt === 'processed') {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const updated = {
+      ...currentDetailRequest,
+      designImages: JSON.stringify([finalImageUrl]),
+      designFilename: file.name,
+      designUpdatedAt: now,
+      _mqReplacedDuringEdit: true,
+      _hasNewDesignUploaded: true,
+      designLastEditedBy: currentSession ? (currentSession.fullname || currentSession.name || currentSession.saleName || currentSession.phone || 'QCAG') : 'QCAG',
+      designLastEditedAt: now,
+      editingRequestedAt: isPendingEdit
+        ? (currentDetailRequest.editingRequestedAt || now)
+        : null,
+      status: 'processing',
+      updatedAt: now
+    };
+
+    // Ghi nhận mốc thời gian để chặn vòng lặp giật lag từ websocket realtime
+    window._qcagLastOptimisticSaveTs = Date.now();
+    window._qcagLastOptimisticSaveId = targetId;
+
+    // Luồng chỉnh sửa: chỉ preview draft in-memory để Designer xem trước,
+    // TUYỆT ĐỐI không persist đè lên database cho đến khi người dùng bấm xác nhận "Đã chỉnh sửa"
+    if (isPendingEdit) {
+      currentDetailRequest.designImages = JSON.stringify([finalImageUrl]);
+      currentDetailRequest.designFilename = file.name;
+      currentDetailRequest.designUpdatedAt = now;
+      currentDetailRequest._mqReplacedDuringEdit = true;
+      currentDetailRequest._hasNewDesignUploaded = true;
+      currentDetailRequest._pendingNewMqUrl = finalImageUrl;
+
+      const cacheKey = targetId || targetRequest.tkCode;
+      if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[cacheKey]) {
+        _qcagDesktopFullRequestCache[cacheKey].designImages = currentDetailRequest.designImages;
+        _qcagDesktopFullRequestCache[cacheKey].designFilename = file.name;
+        _qcagDesktopFullRequestCache[cacheKey]._mqReplacedDuringEdit = true;
+        _qcagDesktopFullRequestCache[cacheKey]._hasNewDesignUploaded = true;
+        _qcagDesktopFullRequestCache[cacheKey]._pendingNewMqUrl = finalImageUrl;
+        _qcagDesktopFullRequestCache[cacheKey]._originalDesignImagesBeforeEdit = currentDetailRequest._originalDesignImagesBeforeEdit;
+      }
+      if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+        const idxAll = allRequests.findIndex(r => (r.__backendId && r.__backendId === targetId) || (r.tkCode && r.tkCode === targetRequest.tkCode));
+        if (idxAll !== -1) {
+          allRequests[idxAll].designImages = currentDetailRequest.designImages;
+          allRequests[idxAll].designFilename = file.name;
+          allRequests[idxAll]._mqReplacedDuringEdit = true;
+          allRequests[idxAll]._hasNewDesignUploaded = true;
+        }
+      }
+
+      qcagDesktopRefreshMQInPlace(currentDetailRequest);
+      showToast('Đã tải preview ảnh mới — nhấn "Đã chỉnh sửa" để thay thế vĩnh viễn', 3000);
+      return;
+    }
+
+    // Persist chuẩn qua qcagDesktopPersistRequest (skipRerender: true để tránh re-render giật lag)
+    const ok = await qcagDesktopPersistRequest(
+      updated,
+      'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận',
+      true
+    );
+
+    if (ok && uploadToken === _qcagCurrentMqUploadToken) {
+      qcagDesktopRefreshMQInPlace(updated);
+    }
+  } catch (err) {
+    console.error('[qcagDesktopUploadMQ] Lỗi upload MQ:', err);
+    showToast('Lỗi khi tải MQ: ' + (err && err.message ? err.message : 'Vui lòng thử lại'));
+  } finally {
     if (input && input.value !== undefined) input.value = '';
-    return;
   }
-
-  // Persist chuẩn qua qcagDesktopPersistRequest (skipRerender: true để tránh re-render giật lag)
-  const ok = await qcagDesktopPersistRequest(
-    updated,
-    'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận',
-    true
-  );
-
-  if (ok && uploadToken === _qcagCurrentMqUploadToken) {
-    qcagDesktopRefreshMQInPlace(updated);
-  }
-  if (input && input.value !== undefined) input.value = '';
 }
 
 async function qcagDesktopUpdateStatus(status) {
@@ -5925,6 +5966,7 @@ async function qcagDesktopMarkProcessed() {
     const _finalDesignImgStr = JSON.stringify(finalDesignImages);
     const patchPayload = {
       __backendId: currentDetailRequest.__backendId,
+      tkCode: currentDetailRequest.tkCode || '',
       status: 'done',
       processedAt: now,
       updatedAt: now,
