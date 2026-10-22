@@ -3395,9 +3395,9 @@ app.get('/api/ks/requests', async (req, res) => {
             const qTerm = `%${searchQRaw.toLowerCase()}%`;
             const [rows] = await pool.query(
                 `${KS_REQUESTS_SELECT_SQL}
-                 WHERE (r.tk_code ILIKE ? OR r.outlet_code ILIKE ? OR r.outlet_name ILIKE ? OR r.sale_name ILIKE ? OR r.phone ILIKE ? OR r.sale_code ILIKE ?)
+                 WHERE (r.tk_code ILIKE ? OR r.outlet_code ILIKE ? OR r.outlet_name ILIKE ? OR r.sale_name ILIKE ? OR r.sale_phone ILIKE ? OR o.phone ILIKE ? OR r.sale_code ILIKE ?)
                  ORDER BY r.created_at DESC LIMIT ${limit}`,
-                [qTerm, qTerm, qTerm, qTerm, qTerm, qTerm]
+                [qTerm, qTerm, qTerm, qTerm, qTerm, qTerm, qTerm]
             );
             const mapped = rows.map(r => ksRowToApp(r, true));
             const nextCursor = rows.length > 0 ? rows[rows.length - 1].created_at : null;
