@@ -4960,7 +4960,6 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
     <div class="qcag-detail-layout${_qcagCommentsCollapsed ? ' qcag-chat-collapsed' : ''}" id="qcagDetailLayout">
       <div class="qcag-detail-left">
         ${qcagDesktopBuildDeleteRequestBannerHtml(request)}
-        ${qcagDesktopBuildEditRequestAlertBannerHtml(request)}
         ${isTaskMode ? '' : `
         <div class="qcag-card">
           <div class="qcag-card-header">

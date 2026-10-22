@@ -981,6 +981,19 @@ function qcagGetTaskOrderRequests(order) {
             if (tkCodeNorm) usedTkCodes.add(tkCodeNorm);
 
             const isPointEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
+            let matchedComments = Array.isArray(matched.comments) ? matched.comments.slice() : (typeof matched.comments === 'string' ? (() => { try { return JSON.parse(matched.comments); } catch(_) { return []; } })() : []);
+            if (isPointEdit && qRejectReason) {
+                const hasComment = matchedComments.some(c => (c.text && c.text.includes(qRejectReason)) || c.commentType === 'edit-request');
+                if (!hasComment) {
+                    matchedComments.push({
+                        authorRole: 'sale',
+                        authorName: q.sale_name || q.saleName || 'Sale Heineken',
+                        commentType: 'edit-request',
+                        text: qRejectReason,
+                        createdAt: matched.editingRequestedAt || new Date().toISOString()
+                    });
+                }
+            }
 
             // Clone và bổ sung thuộc tính quote - CHỈ PUSH ĐÚNG 1 LẦN
             const combined = {
@@ -997,6 +1010,7 @@ function qcagGetTaskOrderRequests(order) {
                 isPendingEdit: isPointEdit || Boolean(matched.isPendingEdit),
                 editReason: qRejectReason || matched.editReason || null,
                 editingRequestedAt: isPointEdit ? (matched.editingRequestedAt || new Date().toISOString()) : matched.editingRequestedAt,
+                comments: JSON.stringify(matchedComments),
                 quote_items: rawQuoteItems.length > 0 ? rawQuoteItems : (matched.quote_items || [])
             };
             result.push(combined);
@@ -1041,6 +1055,17 @@ function qcagGetTaskOrderRequests(order) {
             if (!fallbackOutletName) fallbackOutletName = q.outlet_code || 'Outlet';
 
             const isSynthEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
+            let synthComments = typeof q.comments === 'string' ? (() => { try { return JSON.parse(q.comments); } catch(_) { return []; } })() : (Array.isArray(q.comments) ? q.comments.slice() : []);
+            if (isSynthEdit && qRejectReason && !synthComments.some(c => c.commentType === 'edit-request')) {
+                synthComments.push({
+                    authorRole: 'sale',
+                    authorName: q.sale_name || q.saleName || 'Sale Heineken',
+                    commentType: 'edit-request',
+                    text: qRejectReason,
+                    createdAt: q.createdAt || order.createdAt || new Date().toISOString()
+                });
+            }
+
             const synthReq = {
                 __backendId: synthId,
                 id: synthId,
@@ -1074,7 +1099,7 @@ function qcagGetTaskOrderRequests(order) {
                 statusImages: typeof q.statusImages === 'string' ? q.statusImages : JSON.stringify(q.statusImages || []),
                 acceptanceImages: JSON.stringify([]),
                 oldContentImages: JSON.stringify([]),
-                comments: typeof q.comments === 'string' ? q.comments : JSON.stringify(q.comments || []),
+                comments: JSON.stringify(synthComments),
                 createdAt: q.createdAt || order.createdAt || order.created_at || new Date().toISOString()
             };
             result.push(synthReq);
