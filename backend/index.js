@@ -4018,22 +4018,49 @@ app.post("/api/ks/requests", async (req, res) => {
             }
         }
         if (!outletId) {
+            // Quy tắc sợi chỉ đỏ tk_code: Outlet tạm cho New Outlet phải có ID = 'OUT_' + tkCode
             const cleanCode = (!isPlaceholderOutlet && outletCode) ? outletCode : ('TEMP_' + tkCode);
-            outletId = 'OUT_' + cleanCode;
-            const outletName = toNullableString(b.outletName) || cleanCode;
-            const addr = toNullableString(b.address);
-            const phone = toNullableString(b.phone);
+            outletId = (!isPlaceholderOutlet && outletCode) ? ('OUT_' + cleanCode) : ('OUT_' + tkCode);
+
+            let outletName = toNullableString(b.outletName);
+            let addr = toNullableString(b.address);
+            let phone = toNullableString(b.phone);
+
+            // Tự động phân tích tên quán, địa chỉ, sđt từ content nếu form để placeholder hoặc rỗng
+            if (isPlaceholderOutlet && b.content) {
+                const lines = String(b.content).split('\n').map(l => l.trim()).filter(Boolean);
+                if (!outletName || /^(new\s*outlet|điểm\s*bán\s*mới|chưa\s*có\s*code|chuacocode|tba)$/i.test(outletName)) {
+                    const nonMetaLines = lines.filter(l => !/^(đc|địa\s*chỉ|đt|sđt|tel|phone|lh)[:\s]/i.test(l));
+                    if (nonMetaLines.length > 0) {
+                        outletName = nonMetaLines.slice(0, 2).join(' ');
+                    }
+                }
+                if (!addr) {
+                    const dcLine = lines.find(l => /^(đc|địa\s*chỉ)[:\s]/i.test(l));
+                    if (dcLine) addr = dcLine.replace(/^(đc|địa\s*chỉ)[:\s]+/i, '').trim();
+                }
+                if (!phone) {
+                    const dtLine = lines.find(l => /^(đt|sđt|tel|phone|lh)[:\s]/i.test(l));
+                    if (dtLine) phone = dtLine.replace(/^(đt|sđt|tel|phone|lh)[:\s]+/i, '').trim();
+                }
+            }
+            if (!outletName) outletName = cleanCode;
+
             const lat = b.outletLat && !isNaN(Number(b.outletLat)) ? Number(b.outletLat) : null;
             const lng = b.outletLng && !isNaN(Number(b.outletLng)) ? Number(b.outletLng) : null;
             const isNewOutlet = true;
-            const outletArea = toNullableString(b.region) || userRegion || null;
+            // Bảo vệ khu vực: Ưu tiên tuyệt đối khu vực thật của Sale (userRegion)
+            const outletArea = userRegion || toNullableString(b.region) || null;
+
             const [insRes] = await pool.query(`
                 INSERT INTO outlets (id, code, name, phone, address, street, latitude, longitude, area, is_new_outlet, is_deleted, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, false, ?, ?)
-                ON CONFLICT (code) DO UPDATE SET
-                    name = COALESCE(EXCLUDED.name, outlets.name),
-                    phone = COALESCE(EXCLUDED.phone, outlets.phone),
-                    address = COALESCE(EXCLUDED.address, outlets.address),
+                ON CONFLICT (id) DO UPDATE SET
+                    code = EXCLUDED.code,
+                    name = COALESCE(NULLIF(EXCLUDED.name, ''), outlets.name),
+                    phone = COALESCE(NULLIF(EXCLUDED.phone, ''), outlets.phone),
+                    address = COALESCE(NULLIF(EXCLUDED.address, ''), outlets.address),
+                    street = COALESCE(NULLIF(EXCLUDED.street, ''), outlets.street),
                     latitude = COALESCE(EXCLUDED.latitude, outlets.latitude),
                     longitude = COALESCE(EXCLUDED.longitude, outlets.longitude),
                     area = COALESCE(EXCLUDED.area, outlets.area),
@@ -4049,6 +4076,7 @@ app.post("/api/ks/requests", async (req, res) => {
                 outletId = insRes[0].id;
             }
         }
+
 
         // Parse itemsArr first to accurately determine type if not explicitly supplied
         let itemsArr = [];
