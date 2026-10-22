@@ -2775,6 +2775,7 @@ function renderQCAGDesktopList(forceRebuild = false) {
     const requestCode = req.tkCode || '-'; // Sử dụng tkCode từ server trả về
 
     let isTaskDone = false;
+    let isTaskEdit = false;
     let chkBadgeHtml = '';
     let saleApprBadgeHtml = '';
 
@@ -2793,6 +2794,11 @@ function renderQCAGDesktopList(forceRebuild = false) {
       const saleAppr = saleApprFn
         ? saleApprFn(req)
         : { key: 'pending', label: 'Chờ Sale', cls: 'status-pending' };
+
+      if (saleAppr.key === 'pending-edit' || saleAppr.key === 'rejected' || req.hasEditRequest || req.isPendingEdit || qcagDesktopIsPendingEditRequest(req)) {
+        isTaskEdit = true;
+        isTaskDone = false;
+      }
 
       // Badge duy nhất trên thẻ trong Task Mode là trạng thái duyệt từ Sale: Chờ Sale - Yêu cầu sửa - Từ chối - Đã duyệt
       // Trạng thái "Đã kiểm tra" được thể hiện trực quan bằng viền xanh lá của cả khối thẻ (is-task-complete)
@@ -2845,7 +2851,7 @@ function renderQCAGDesktopList(forceRebuild = false) {
       deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${escapeHtml(reqId)}'))" title="Xóa yêu cầu"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
     }
     return `
-      <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
+      <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskEdit ? 'is-task-edit qcag-task-card-edit' : (isTaskDone ? 'is-task-complete qcag-task-card-done' : '')}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
         <div class="qcag-request-item-top">
           <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}</div>
           <div class="flex flex-col items-end gap-1">
@@ -3444,7 +3450,7 @@ function qcagCheckCompletionConditions(req) {
       // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải có bản vẽ MQ mới upload sau thời điểm yêu cầu sửa
       const editTime = req.editingRequestedAt || req.editing_requested_at;
       const designTime = req.designUpdatedAt || req.design_updated_at;
-      let hasNewMq = Boolean(req._mqReplacedDuringEdit);
+      let hasNewMq = Boolean(req._mqReplacedDuringEdit || req._hasNewDesignUploaded);
       if (!hasNewMq && editTime && designTime) {
         try {
           hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
@@ -4707,7 +4713,7 @@ function qcagDesktopBuildEditRequestAlertBannerHtml(req) {
     author = reqObj.saleName || reqObj.name || req.createdByName || reqObj.phone || 'Sale Heineken';
   }
 
-  let text = (latestEditComment && latestEditComment.text) ? latestEditComment.text.trim() : (req.editReason || req.productionRejectReason || 'Yêu cầu điều chỉnh lại thiết kế.');
+  let text = (latestEditComment && latestEditComment.text) ? latestEditComment.text.trim() : (req.editReason || req.rejectReason || req.productionRejectReason || req.production_reject_reason || 'Yêu cầu điều chỉnh lại thiết kế.');
   if (text.startsWith('Yêu cầu chỉnh sửa: ')) text = text.slice('Yêu cầu chỉnh sửa: '.length).trim();
 
   const imgs = (latestEditComment && Array.isArray(latestEditComment.images)) ? latestEditComment.images : [];
@@ -4954,6 +4960,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
     <div class="qcag-detail-layout${_qcagCommentsCollapsed ? ' qcag-chat-collapsed' : ''}" id="qcagDetailLayout">
       <div class="qcag-detail-left">
         ${qcagDesktopBuildDeleteRequestBannerHtml(request)}
+        ${qcagDesktopBuildEditRequestAlertBannerHtml(request)}
         ${isTaskMode ? '' : `
         <div class="qcag-card">
           <div class="qcag-card-header">

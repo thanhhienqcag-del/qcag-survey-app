@@ -879,6 +879,7 @@ function qcagGetTaskOrderRequests(order) {
             existing = result.find(r => String(r.__backendId || r.id || '').trim().toLowerCase() === backendIdNorm);
         }
 
+        let qRejectReason = q.rejectReason || q.production_reject_reason || null;
         let qStatus = String(q.productionApprovalStatus || q.production_approval_status || q.approval_status || q.status || '').toLowerCase().trim();
         if (typeof window !== 'undefined' && window._qcagProductionApprovalStatusMap) {
             const map = window._qcagProductionApprovalStatusMap;
@@ -894,7 +895,6 @@ function qcagGetTaskOrderRequests(order) {
         } else if (!qStatus) {
             qStatus = 'pending';
         }
-        const qRejectReason = q.rejectReason || q.production_reject_reason || null;
         const rawQuoteItems = Array.isArray(q.items) ? q.items : (Array.isArray(q.quote_items) ? q.quote_items : (typeof q.items === 'string' ? (() => { try { return JSON.parse(q.items); } catch(_) { return []; } })() : []));
 
         if (existing) {
@@ -906,6 +906,12 @@ function qcagGetTaskOrderRequests(order) {
             if (qStatus) {
                 existing.productionApprovalStatus = qStatus;
                 if (qRejectReason) existing.rejectReason = qRejectReason;
+                if (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected') {
+                    existing.hasEditRequest = true;
+                    existing.isPendingEdit = true;
+                    if (qRejectReason) existing.editReason = qRejectReason;
+                    if (!existing.editingRequestedAt) existing.editingRequestedAt = new Date().toISOString();
+                }
             }
             return;
         }
@@ -957,9 +963,15 @@ function qcagGetTaskOrderRequests(order) {
                     if (rawQuoteItems.length > 0 && (!existingPoint.quote_items || existingPoint.quote_items.length === 0)) {
                         existingPoint.quote_items = rawQuoteItems;
                     }
-                    if (qStatus === 'rejected') {
-                        existingPoint.productionApprovalStatus = 'rejected';
+                    if (qStatus) {
+                        existingPoint.productionApprovalStatus = qStatus;
                         if (qRejectReason) existingPoint.rejectReason = qRejectReason;
+                        if (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected') {
+                            existingPoint.hasEditRequest = true;
+                            existingPoint.isPendingEdit = true;
+                            if (qRejectReason) existingPoint.editReason = qRejectReason;
+                            if (!existingPoint.editingRequestedAt) existingPoint.editingRequestedAt = new Date().toISOString();
+                        }
                     }
                 }
                 return;
@@ -968,17 +980,23 @@ function qcagGetTaskOrderRequests(order) {
             if (rId) usedMatchedIds.add(rId);
             if (tkCodeNorm) usedTkCodes.add(tkCodeNorm);
 
+            const isPointEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
+
             // Clone và bổ sung thuộc tính quote - CHỈ PUSH ĐÚNG 1 LẦN
             const combined = {
                 ...matched,
                 __taskQuoteIdx: idx,
-                status: 'approved',
+                status: isPointEdit ? 'pending' : (order.isProductionOrder ? 'done' : (matched.status || 'approved')),
                 quoteCode: q.quote_code || q.quoteCode || matched.quoteCode || '',
                 tkCode: q.tk_code || q.tkCode || matched.tkCode || '',
                 outletName: matched.outletName || q.outlet_name || q.outletName || 'Outlet',
                 outletCode: matched.outletCode || q.outlet_code || q.outletCode || '',
                 productionApprovalStatus: qStatus,
                 rejectReason: qRejectReason,
+                hasEditRequest: isPointEdit || Boolean(matched.hasEditRequest),
+                isPendingEdit: isPointEdit || Boolean(matched.isPendingEdit),
+                editReason: qRejectReason || matched.editReason || null,
+                editingRequestedAt: isPointEdit ? (matched.editingRequestedAt || new Date().toISOString()) : matched.editingRequestedAt,
                 quote_items: rawQuoteItems.length > 0 ? rawQuoteItems : (matched.quote_items || [])
             };
             result.push(combined);
@@ -1022,6 +1040,7 @@ function qcagGetTaskOrderRequests(order) {
             }
             if (!fallbackOutletName) fallbackOutletName = q.outlet_code || 'Outlet';
 
+            const isSynthEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
             const synthReq = {
                 __backendId: synthId,
                 id: synthId,
@@ -1036,9 +1055,13 @@ function qcagGetTaskOrderRequests(order) {
                 outletLat: q.lat || q.outlet_lat || q.outletLat || q.latitude || null,
                 outletLng: q.lng || q.outlet_lng || q.outletLng || q.longitude || null,
                 type: 'new',
-                status: order.isProductionOrder ? 'done' : ((qStatus === 'pending-edit' || qStatus === 'edit_requested') ? 'pending' : qStatus),
+                status: isSynthEdit ? 'pending' : (order.isProductionOrder ? 'done' : qStatus),
                 productionApprovalStatus: qStatus,
                 rejectReason: qRejectReason,
+                hasEditRequest: isSynthEdit,
+                isPendingEdit: isSynthEdit,
+                editReason: qRejectReason,
+                editingRequestedAt: isSynthEdit ? new Date().toISOString() : null,
                 requester: JSON.stringify({
                     saleName: q.sale_name || q.saleName || '',
                     phone: q.phone || q.sale_phone || q.salePhone || '',
@@ -1204,17 +1227,25 @@ function qcagDesktopStartTaskMode(orderId) {
         renderQCAGDesktopList(true);
     }
 
-    // Auto-select first request in task
+    // Auto-select request in task (Ưu tiên điểm đang có yêu cầu chỉnh sửa)
     const taskReqs = qcagGetTaskOrderRequests(order);
     if (taskReqs.length > 0 && typeof openQCAGDesktopRequest === 'function') {
-        openQCAGDesktopRequest(taskReqs[0].__backendId);
-    }
+        const editReq = taskReqs.find(r => {
+            const appr = (typeof qcagGetSaleProductionApprovalStatus === 'function') ? qcagGetSaleProductionApprovalStatus(r) : null;
+            return (appr && (appr.key === 'pending-edit' || appr.key === 'rejected')) ||
+                   r.hasEditRequest ||
+                   r.isPendingEdit ||
+                   (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(r));
+        });
+        const targetReq = editReq || taskReqs[0];
+        openQCAGDesktopRequest(targetReq.__backendId || targetReq.id);
 
-    // Lazy Load: Chỉ nạp trước chi tiết Báo giá cho điểm đầu tiên đang active, các điểm khác nạp theo yêu cầu (Rule 9)
-    if (Array.isArray(taskReqs) && taskReqs.length > 0 && typeof qcagFetchTaskQuoteDetail === 'function') {
-        const firstFetchId = taskReqs[0].quoteCode || taskReqs[0].tkCode;
-        if (firstFetchId) {
-            qcagFetchTaskQuoteDetail(firstFetchId);
+        // Lazy Load: Chỉ nạp trước chi tiết Báo giá cho điểm đang active, các điểm khác nạp theo yêu cầu (Rule 9)
+        if (typeof qcagFetchTaskQuoteDetail === 'function') {
+            const firstFetchId = targetReq.quoteCode || targetReq.tkCode;
+            if (firstFetchId) {
+                qcagFetchTaskQuoteDetail(firstFetchId);
+            }
         }
     }
 
