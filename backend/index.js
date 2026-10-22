@@ -1010,7 +1010,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(o.name, '') AS outlet_name,
             COALESCE(o.address, '') AS address,
             COALESCE(o.phone, '') AS outlet_phone,
-            COALESCE(u.fullname, u.name, '') AS sale_name,
+            COALESCE(u.fullname, '') AS sale_name,
             COALESCE(u.username, '') AS sale_code,
             COALESCE(u.username, '') AS sale_phone,
             COALESCE(q_lat.quote_code, '') AS quote_code,
@@ -3442,7 +3442,7 @@ app.get('/api/ks/requests', async (req, res) => {
                     conds.push("(u.phone = ? OR REPLACE(COALESCE(u.phone, ''), ' ', '') = ? OR o.phone = ?)");
                 } else {
                     params.push(salePhoneRaw, cleanPhone, cleanPhone);
-                    conds.push("(r.sale_phone = ? OR REPLACE(COALESCE(r.sale_phone, ''), ' ', '') = ? OR r.phone = ?)");
+                    conds.push("(u.phone = ? OR REPLACE(COALESCE(u.phone, ''), ' ', '') = ? OR o.phone = ?)");
                 }
             }
             if (saleCodeRaw) {
@@ -4296,7 +4296,7 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
         if (typeof cImg !== 'string' || !cImg.trim() || cImg.startsWith('data:image')) cImg = null;
 
         const [existing] = await pool.query(
-            `SELECT id FROM notes WHERE ref_type = 'request' AND ref_id = ? AND content = ? AND created_at > NOW() - INTERVAL '2 minutes' LIMIT 1`,
+            `SELECT id FROM notes WHERE ref_type = 'request' AND ref_id = ? AND content = ? LIMIT 1`,
             [tkCode, cText]
         );
         if (!existing || existing.length === 0) {
@@ -4340,21 +4340,21 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         const tkCode = currentReq.tk_code || id;
         const folderForUpload = tkCode || currentReq.id;
 
-        // Helper chuẩn hóa định danh Designer 100% không bao giờ để trống
+        // Helper chuẩn hóa định danh Designer khớp 100% với bảng users (FK constraint)
         const resolveDesignerIdHelper = (rawInput, area, region) => {
             const s = String(rawInput || '').trim();
             if (s) {
                 const lower = s.toLowerCase();
-                if (lower.includes('thái') || lower === 'usr_staff__o_n_minh_th_i') return 'USR_STAFF__o_n_minh_th_i';
-                if (lower.includes('thảo') || lower === 'usr_staff_th_o') return 'USR_STAFF_th_o';
-                if (lower.includes('hiển') || lower === 'usr_sale_88000255' || lower === 'usr_phone_0966767731') return 'USR_SALE_88000255';
-                if (lower === 'admin' || lower === 'usr_adminqcag') return 'USR_ADMINQCAG';
-                if (s.startsWith('USR_')) return s;
+                if (lower.includes('thái') || lower === 'usr_doanminhthai' || lower.includes('minh_th_i')) return 'USR_doanminhthai';
+                if (lower.includes('thảo') || lower === 'usr_thao_designer' || lower.includes('th_o')) return 'USR_thao_designer';
+                if (lower.includes('hiển') || lower === 'usr_0966767731' || lower.includes('88000255') || lower.includes('0966767731')) return 'USR_0966767731';
+                if (lower.includes('admin') || lower === 'usr_adminqcag') return 'USR_adminqcag';
+                if (s === 'USR_doanminhthai' || s === 'USR_thao_designer' || s === 'USR_0966767731' || s === 'USR_adminqcag') return s;
             }
             const a = String(area || region || '').toUpperCase().trim();
-            if (a === 'S16' || a === 'S4') return 'USR_SALE_88000255';
-            if (['S17', 'S24', 'MOT8'].includes(a)) return 'USR_STAFF_th_o';
-            return 'USR_STAFF__o_n_minh_th_i';
+            if (a === 'S16' || a === 'S4') return 'USR_0966767731';
+            if (['S17', 'S24', 'MOT8'].includes(a)) return 'USR_thao_designer';
+            return 'USR_doanminhthai';
         };
 
         // Auto-upload any base64 images to GCS before persisting

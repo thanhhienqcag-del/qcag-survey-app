@@ -5928,14 +5928,18 @@ async function qcagDesktopMarkProcessed() {
 
     const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
     if (isPendingEdit) {
-      comments.push({
-        authorRole: 'qcag',
-        authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
-        commentType: 'edit-resolved',
-        text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
-        readBy: [],
-        createdAt: new Date().toISOString()
-      });
+      const lastC = comments.length > 0 ? comments[comments.length - 1] : null;
+      const lastText = lastC ? String(lastC.text || lastC.content || '').trim() : '';
+      if (!lastText.includes('QCAG đã chỉnh sửa xong')) {
+        comments.push({
+          authorRole: 'qcag',
+          authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
+          commentType: 'edit-resolved',
+          text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
+          readBy: [],
+          createdAt: new Date().toISOString()
+        });
+      }
     }
     const now = new Date().toISOString();
     // If this is the first time a MQ is confirmed (complete), record the creator
