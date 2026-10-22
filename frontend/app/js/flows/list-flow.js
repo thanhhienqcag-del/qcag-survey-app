@@ -5,11 +5,109 @@
 
 // ── Design-state helper ──────────────────────────────────────────────────
 let currentDesignFilter = 'all'; // 'all'|'waiting'|'has_mq'|'editing'
+let currentListFilter = 'all';   // 'all'|'has_mq'|'no_mq'|'has_quote'|'no_quote'
 let currentListSearchQuery = '';  // free-text search
 let currentListSearchDebounce = null;
 let currentMobileViewMode = 'gallery'; // 'list' | 'gallery'
 let currentPage = 1;
 const PAGE_SIZE = 12;
+
+const HK_FILTER_LABELS = {
+  all:       'Tất cả',
+  has_mq:    'Đã có MQ',
+  no_mq:     'Chưa có MQ',
+  has_quote: 'Có Báo Giá',
+  no_quote:  'Chưa Báo Giá'
+};
+
+function selectHkFilter(filterKey) {
+  currentListFilter = filterKey || 'all';
+  currentDesignFilter = 'all';
+  currentPage = 1;
+  const labelEl = document.getElementById('hkFilterTriggerLabel');
+  if (labelEl) labelEl.textContent = HK_FILTER_LABELS[currentListFilter] || 'Tất cả';
+
+  document.querySelectorAll('#hkFilterMenu .hk-dropdown-opt').forEach(opt => {
+    opt.classList.toggle('active', opt.getAttribute('data-val') === currentListFilter);
+  });
+
+  updateHkDesktopFilterChipsUI();
+  closeHkFilterDropdown();
+  renderRequestList();
+}
+
+function toggleHkFilterDropdown(e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  closeHkPgDropdown();
+  const wrap = document.getElementById('hkFilterDropdownWrap');
+  const menu = document.getElementById('hkFilterMenu');
+  const arrow = document.getElementById('hkFilterArrowIcon');
+  if (!wrap || !menu) return;
+
+  const isOpen = !menu.classList.contains('hidden');
+  if (isOpen) {
+    closeHkFilterDropdown();
+  } else {
+    menu.classList.remove('hidden');
+    wrap.classList.add('open');
+    if (arrow) arrow.style.transform = 'rotate(180deg)';
+  }
+}
+
+function closeHkFilterDropdown() {
+  const wrap = document.getElementById('hkFilterDropdownWrap');
+  const menu = document.getElementById('hkFilterMenu');
+  const arrow = document.getElementById('hkFilterArrowIcon');
+  if (menu) menu.classList.add('hidden');
+  if (wrap) wrap.classList.remove('open');
+  if (arrow) arrow.style.transform = 'rotate(0deg)';
+}
+
+function toggleHkPgDropdown(e) {
+  if (e) {
+    e.stopPropagation();
+    e.preventDefault();
+  }
+  closeHkFilterDropdown();
+  const wrap = document.getElementById('hkPgDropdownWrap');
+  const menu = document.getElementById('hkPgMenu');
+  const arrow = document.getElementById('hkPgArrowIcon');
+  if (!wrap || !menu) return;
+
+  const isOpen = !menu.classList.contains('hidden');
+  if (isOpen) {
+    closeHkPgDropdown();
+  } else {
+    menu.classList.remove('hidden');
+    wrap.classList.add('open');
+    if (arrow) arrow.style.transform = 'rotate(180deg)';
+  }
+}
+
+function closeHkPgDropdown() {
+  const wrap = document.getElementById('hkPgDropdownWrap');
+  const menu = document.getElementById('hkPgMenu');
+  const arrow = document.getElementById('hkPgArrowIcon');
+  if (menu) menu.classList.add('hidden');
+  if (wrap) wrap.classList.remove('open');
+  if (arrow) arrow.style.transform = 'rotate(0deg)';
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', function(e) {
+    const fWrap = document.getElementById('hkFilterDropdownWrap');
+    if (fWrap && !fWrap.contains(e.target)) {
+      closeHkFilterDropdown();
+    }
+    const pWrap = document.getElementById('hkPgDropdownWrap');
+    if (pWrap && !pWrap.contains(e.target)) {
+      closeHkPgDropdown();
+    }
+  });
+}
 
 const DESIGN_FILTER_LABELS = {
   all:              'Tất cả',
@@ -63,10 +161,10 @@ function showWarrantyListWithFilter(filter) {
   const t2 = document.getElementById('listTab2Btn');
   const nc = document.getElementById('newCount');
   const wc = document.getElementById('warrantyCount');
-  if (t1) t1.className = 'flex-1 py-3 text-sm font-medium tab-inactive';
-  if (t2) t2.className = 'flex-1 py-3 text-sm font-medium tab-active';
-  if (nc) nc.className = 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
-  if (wc) wc.className = 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full';
+  if (t1) t1.className = 'flex-1 py-2 text-xs sm:text-sm font-medium tab-inactive flex items-center justify-center gap-1.5';
+  if (t2) t2.className = 'flex-1 py-2 text-xs sm:text-sm font-semibold tab-active flex items-center justify-center gap-1.5';
+  if (nc) nc.className = 'bg-gray-200 text-gray-700 text-[11px] px-1.5 py-0.5 rounded-full font-normal';
+  if (wc) wc.className = 'bg-gray-900 text-white text-[11px] px-1.5 py-0.5 rounded-full font-bold';
   showRequestList();
 }
 
@@ -85,19 +183,24 @@ function onListSearch(val) {
     renderRequestList();
   }, 300);
 }
+function _hasValidMq(req) {
+  if (!req) return false;
+  let designImgs = [];
+  try {
+    designImgs = Array.isArray(req.designImages) ? req.designImages : JSON.parse(req.designImages || '[]');
+  } catch (e) {}
+  return Array.isArray(designImgs) && designImgs.length > 0 && designImgs[0] && designImgs[0] !== '...';
+}
+
 // Returns: 'waiting' | 'has_mq' | 'editing'
 // Logic:
-//   • editingRequestedAt set (images cleared by HK comment) → editing
 //   • No design images → waiting
+//   • Has design images + editingRequestedAt → editing
 //   • Has design images → has_mq
 function getRequestDesignState(req) {
-  // Heineken đã comment yêu cầu sửa → ảnh đã bị xóa, cờ đã đặt
+  const hasMq = _hasValidMq(req);
+  if (!hasMq) return 'waiting';
   if (req.editingRequestedAt) return 'editing';
-
-  let designImgs = [];
-  try { designImgs = JSON.parse(req.designImages || '[]'); } catch (e) {}
-  if (!designImgs || designImgs.length === 0) return 'waiting';
-
   return 'has_mq';
 }
 
@@ -143,8 +246,9 @@ function updateHomeStats() {
   editingEl.textContent = editing;
   if (wPendEl) wPendEl.textContent = warrantyPending;
   if (wDoneEl) wDoneEl.textContent = warrantyDone;
-  // When initial data is loading, show subtle placeholders instead of zeros.
-  if (window._homeStatsLoading) {
+  // When initial data is loading, show subtle placeholders instead of zeros (chỉ khi chưa có request nào).
+  const reqs = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests : [];
+  if (window._homeStatsLoading && reqs.length === 0) {
     const ph = '…';
     if (allEl) allEl.textContent = ph;
     if (waitEl) waitEl.textContent = ph;
@@ -153,6 +257,14 @@ function updateHomeStats() {
     if (wPendEl) wPendEl.textContent = ph;
     if (wDoneEl) wDoneEl.textContent = ph;
   }
+  // Ẩn thông báo homeLoadNote ngay khi đã có dữ liệu hoặc không còn trạng thái loading
+  try {
+    const note = document.getElementById('homeLoadNote');
+    if (note && (!window._homeStatsLoading || reqs.length > 0)) {
+      note.style.display = 'none';
+      note.classList.add('hidden');
+    }
+  } catch (e) {}
 }
 
 function updateRequestCount() {
@@ -177,6 +289,7 @@ function updateRequestCount() {
     console.warn('Failed to update request counters', e);
   }
   try { updateHomeStats(); } catch (e) { console.warn('updateHomeStats error', e); }
+  try { updateHkDesktopFilterChipsUI(); } catch (e) {}
 }
 
 function _normalizeForMatch(str) {
@@ -190,77 +303,532 @@ function _normalizeForMatch(str) {
 }
 
 function getCardQuoteBadge(req) {
-  if (!req) return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' };
+  if (!req) return { hasQuote: false, label: '', cls: '' };
 
   if (req.type === 'warranty') {
     const dsState = getWarrantyState(req);
-    return DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.warranty_pending;
+    const b = DESIGN_STATE_BADGE[dsState] || DESIGN_STATE_BADGE.warranty_pending;
+    return { hasQuote: false, isWarranty: true, label: b.label, cls: b.cls };
+  }
+
+  // Hàm tìm quote matching và resolve status
+  function _resolveStatusFromQuote(matchedQ) {
+    const resolver = (typeof window !== 'undefined' && typeof window._resolveQcagStatus === 'function')
+      ? window._resolveQcagStatus
+      : (typeof _resolveQcagStatus === 'function' ? _resolveQcagStatus : null);
+
+    if (resolver) {
+      const resolved = resolver(matchedQ);
+      // Thêm border vào cls nếu chưa có
+      const cls = resolved.cls.includes('border') ? resolved.cls : resolved.cls + ' border';
+      return { hasQuote: true, label: resolved.label, cls: cls + ' font-bold' };
+    }
+    return { hasQuote: true, label: 'Chưa có SPO', cls: 'bg-slate-600/30 text-slate-300 border border-slate-500/50 font-bold' };
   }
 
   // 1. Direct check: embedded quote data
-  if (req.quoteCode || req.quote_code || req.quoteTotal || req.quote_total) {
-    return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
+  let directQuote = null;
+  if (req.bridge && (req.bridge.quote_code || (Array.isArray(req.bridge.items) && req.bridge.items.length > 0) || req.bridge.total_amount)) {
+    directQuote = req.bridge;
+  } else if (req.quoteCode || req.quote_code) {
+    const qCodeTarget = String(req.quoteCode || req.quote_code || '').trim();
+    if (qCodeTarget && qCodeTarget !== '---' && qCodeTarget !== 'null' && qCodeTarget !== 'undefined' && qCodeTarget !== 'Chưa có code') {
+      if (Array.isArray(window.__qcagQuoteListCache)) {
+        directQuote = window.__qcagQuoteListCache.find(q =>
+          q && String(q.quote_code || q.quoteCode || '').trim() === qCodeTarget
+        ) || null;
+      }
+      if (!directQuote && qCodeTarget) {
+        directQuote = { quote_code: qCodeTarget };
+      }
+    }
   }
-  if (req.bridge && (req.bridge.quote_code || req.bridge.items || req.bridge.total_amount)) {
-    return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
-  }
+  if (directQuote) return _resolveStatusFromQuote(directQuote);
 
-  // 2. Check cached quotes using multi-layered criteria
+  // 2. Check cached quotes using official tk_code only (Sợi chỉ đỏ tk_code)
   const cached = window.__qcagQuoteListCache;
   if (Array.isArray(cached) && cached.length > 0) {
-    const rOutlet = String(req.outletCode || req.outlet_code || '').trim();
-    const rTkRaw = String(req.tkCode || req.tk_code || '').trim().toLowerCase();
-    const rTkDigits = rTkRaw.replace(/\D/g, '');
     const rQCode = String(req.quoteCode || req.quote_code || '').trim();
-    const rNameNorm = _normalizeForMatch(req.outletName);
+    const rTkRaw = String(req.tkCode || req.tk_code || '').trim();
+    const isOfficialTk = /^TK/i.test(rTkRaw);
+    const rTkDigits = isOfficialTk ? rTkRaw.replace(/\D/g, '') : '';
 
-    const hasMatch = cached.some(q => {
-      if (!q) return false;
-      const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
-      const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
-      const qTkRaw = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
-      const qTkDigits = qTkRaw.replace(/\D/g, '');
-      const qNameNorm = _normalizeForMatch(q.outlet_name || q.outletName);
+    let matchedQ = null;
 
-      // Match 1: Quote Code
-      if (rQCode && qCode && rQCode === qCode) return true;
+    // Match 1: Quote Code (cao nhất)
+    if (rQCode) {
+      matchedQ = cached.find(q => q && String(q.quote_code || q.quoteCode || q.id || '').trim() === rQCode) || null;
+    }
 
-      // Match 2: Outlet Code (if valid code and not "Chưa có code" / "---")
-      if (rOutlet && qOutlet && rOutlet !== '---' && qOutlet !== 'Chưa có code' && rOutlet === qOutlet) return true;
+    // Match 2: TK Code (Sợi chỉ đỏ liên kết App 1 - App 2)
+    if (!matchedQ && isOfficialTk && rTkDigits && rTkDigits.length >= 4) {
+      matchedQ = cached.find(q => {
+        if (!q) return false;
+        const qTkRaw = String(q.tk_code || q.tkCode || '').trim();
+        const qTkDigits = qTkRaw.replace(/\D/g, '');
+        return (qTkRaw.toLowerCase() === rTkRaw.toLowerCase()) || (qTkDigits.length >= 4 && qTkDigits === rTkDigits);
+      }) || null;
+    }
 
-      // Match 3: TK Code digits
-      if (rTkDigits && qTkDigits && rTkDigits.length >= 4 && qTkDigits.length >= 4 && rTkDigits === qTkDigits) return true;
-
-      // Match 4: Name containment
-      if (rNameNorm && qNameNorm && rNameNorm.length >= 4 && qNameNorm.length >= 4) {
-        if (rNameNorm.includes(qNameNorm) || qNameNorm.includes(rNameNorm)) return true;
+    // Match 3: Outlet Code fallback (đồng bộ 100% với detail-flow.js)
+    if (!matchedQ) {
+      const rOutlet = String(req.outletCode || req.outlet_code || '').trim();
+      if (rOutlet && rOutlet !== '---' && rOutlet !== 'Chưa có code' && rOutlet !== 'null') {
+        matchedQ = cached.find(q => {
+          if (!q) return false;
+          const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
+          return qOutlet && qOutlet === rOutlet;
+        }) || null;
       }
+    }
 
-      return false;
-    });
-
-    if (hasMatch) {
-      return { label: 'Đã có báo giá', cls: 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50 font-bold' };
+    if (matchedQ) {
+      return _resolveStatusFromQuote(matchedQ);
     } else {
-      return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
+      return { isLoading: false, hasQuote: false, label: '', cls: '' };
     }
   }
 
-  // 3. If quotes list is NOT loaded yet (đang chờ load báo giá)
+  // 3. If quotes list is NOT loaded yet (đang chờ load báo giá từ App 1)
   if (!window.__qcagQuoteListLoaded) {
     if (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag') {
-      return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
+      return { isLoading: false, hasQuote: false, label: '', cls: '' };
     }
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache().then(() => {
-        if (typeof renderRequestList === 'function') renderRequestList();
+        const listScreen = document.getElementById('listScreen');
+        if (listScreen && !listScreen.classList.contains('hidden')) {
+          if (typeof renderRequestList === 'function') renderRequestList();
+        }
       }).catch(() => {});
     }
-    return { label: '...', cls: 'bg-gray-700/40 text-gray-400 font-mono tracking-widest animate-pulse px-2' };
+    return {
+      isLoading: true,
+      hasQuote: false,
+      label: '...',
+      cls: 'bg-slate-700/40 text-slate-400 font-mono tracking-widest animate-pulse px-2 border border-slate-600/30'
+    };
   }
 
   // 4. Quote list finished loading and no quote found
-  return { label: 'Chờ Báo Giá', cls: 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium' };
+  return { isLoading: false, hasQuote: false, label: '', cls: '' };
+}
+
+// Lắng nghe sự kiện nạp xong báo giá để tự động cập nhật nếu đang live ở màn hình danh sách
+if (typeof window !== 'undefined') {
+  window.addEventListener('qcag:quotes-loaded', () => {
+    const listScreen = document.getElementById('listScreen');
+    if (listScreen && !listScreen.classList.contains('hidden')) {
+      if (typeof renderRequestList === 'function') {
+        renderRequestList();
+      }
+    }
+  });
+}
+
+// ── Desktop Heineken Workspace Controls & Helpers ───────────────────────────
+let currentHkDesktopViewMode = 'grid'; // 'grid' | 'table'
+
+function setHkDesktopViewMode(mode) {
+  currentHkDesktopViewMode = mode === 'table' ? 'table' : 'grid';
+  const gridBtn = document.getElementById('hkViewGridBtn');
+  const tableBtn = document.getElementById('hkViewTableBtn');
+  if (gridBtn) gridBtn.classList.toggle('active', currentHkDesktopViewMode === 'grid');
+  if (tableBtn) tableBtn.classList.toggle('active', currentHkDesktopViewMode === 'table');
+  renderRequestList();
+}
+
+function setHkDesktopFilter(filter) {
+  if (currentListTab === 'warranty') {
+    currentDesignFilter = filter || 'all';
+    currentListFilter = 'all';
+  } else {
+    currentListFilter = filter || 'all';
+    currentDesignFilter = 'all';
+  }
+  currentPage = 1;
+
+  // Sync mobile filter trigger label & dropdown
+  const labelEl = document.getElementById('hkFilterTriggerLabel');
+  if (labelEl) {
+    if (currentListTab === 'warranty') {
+      labelEl.textContent = filter === 'warranty_pending' ? 'Chờ BH' : (filter === 'warranty_done' ? 'Đã BH' : 'Tất cả');
+    } else {
+      labelEl.textContent = HK_FILTER_LABELS[currentListFilter] || 'Tất cả';
+    }
+  }
+  document.querySelectorAll('#hkFilterMenu .hk-dropdown-opt').forEach(opt => {
+    opt.classList.toggle('active', opt.getAttribute('data-val') === currentListFilter);
+  });
+
+  updateHkDesktopFilterChipsUI();
+  renderRequestList();
+}
+
+function onHkDesktopSearch(val) {
+  currentListSearchQuery = (val || '').trim().toLowerCase();
+  currentPage = 1;
+  const clearBtn = document.getElementById('hkDesktopSearchClear');
+  if (clearBtn) clearBtn.classList.toggle('hidden', !currentListSearchQuery);
+  const mobileInput = document.getElementById('listSearchInput');
+  if (mobileInput && mobileInput.value !== val) mobileInput.value = val;
+  renderRequestList();
+}
+
+function clearHkDesktopSearch() {
+  const dsi = document.getElementById('hkDesktopSearchInput');
+  if (dsi) dsi.value = '';
+  const clearBtn = document.getElementById('hkDesktopSearchClear');
+  if (clearBtn) clearBtn.classList.add('hidden');
+  const mobileInput = document.getElementById('listSearchInput');
+  if (mobileInput) mobileInput.value = '';
+  currentListSearchQuery = '';
+  currentPage = 1;
+  renderRequestList();
+}
+
+function _renderHkDesktopCardHtml(req, preview, hasDesignPlaceholder, isEditing, dateStr, tkName, lastUpdated, badge) {
+  let thumbHtml = '';
+  if (preview) {
+    thumbHtml = '<div class="hk-card-thumb mq-thumb-editing-wrap cursor-pointer" onclick="event.stopPropagation(); viewDesign(\'' + req.__backendId + '\')" title="' + (isEditing ? 'Đang chỉnh sửa - Bấm xem ảnh tham chiếu' : 'Xem Maquette lớn') + '">' +
+      '<img src="' + preview + '" class="' + (isEditing ? 'mq-img-editing' : '') + '" alt="Maquette" loading="lazy">' +
+      (isEditing ? '<span class="mq-editing-badge-overlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Đang chỉnh sửa</span>' : '') +
+    '</div>';
+  } else if (hasDesignPlaceholder) {
+    thumbHtml = '<div id="thumb-' + req.__backendId + '" class="hk-card-thumb hk-card-thumb-empty" style="animation:pulse 1.5s ease-in-out infinite">' +
+      '<svg class="w-7 h-7 text-gray-500 mb-1" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+      '<span class="text-[11px] text-gray-500 font-medium">Đang tải...</span>' +
+    '</div>';
+  } else if (isEditing) {
+    thumbHtml = '<div onclick="event.stopPropagation(); showToast(\'Yêu cầu này đang chờ QCAG chỉnh sửa thiết kế\')" title="Chờ chỉnh sửa thiết kế" class="hk-card-thumb hk-card-thumb-editing cursor-pointer">' +
+      '<svg class="w-7 h-7 mx-auto mb-1 text-amber-400" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+      '<span class="text-[11px] text-amber-400 font-semibold">Chờ Chỉnh sửa</span>' +
+    '</div>';
+  } else {
+    thumbHtml = '<div onclick="event.stopPropagation(); showToast(\'Yêu cầu này chưa có MQ\')" title="Không có MQ" class="hk-card-thumb hk-card-thumb-empty cursor-pointer">' +
+      '<svg class="w-7 h-7 text-gray-400 mb-1" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+      '<span class="text-[11px] text-gray-400 font-medium">Chưa có MQ</span>' +
+    '</div>';
+  }
+
+  const displayTk = (tkName && String(tkName).trim() !== '-' && String(tkName).trim() !== 'Chưa nhận') ? tkName : 'Chưa có';
+  const displayTime = lastUpdated || 'Chưa có';
+
+  return '<div onclick="showRequestDetail(\'' + req.__backendId + '\')" class="hk-desktop-card" title="Bấm để xem chi tiết">' +
+    thumbHtml +
+    '<div class="hk-card-body">' +
+      '<div class="hk-card-top-row">' +
+        '<div class="hk-outlet-name" title="' + (req.outletName || '') + '">' + (req.outletName || 'Chưa có tên') + '</div>' +
+        '<div class="hk-code-group">' +
+          '<span class="hk-outlet-code"><span class="hk-code-label">Outlet Code:</span>' + (req.outletCode || '---') + '</span>' +
+          (req.type === 'warranty' ? '<span class="hk-warranty-tag">Bảo hành</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="hk-card-meta-grid">' +
+        '<div class="hk-meta-col">' +
+          '<div class="hk-meta-item" title="Ngày gửi: ' + dateStr + '">' +
+            '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>' +
+            '<span>Gửi: ' + dateStr + '</span>' +
+          '</div>' +
+          '<div class="hk-meta-item ' + (lastUpdated ? 'text-sky-400' : 'opacity-60') + '" title="' + (lastUpdated ? ('Cập nhật: ' + lastUpdated) : 'Thời gian thiết kế: Chưa có') + '">' +
+            '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
+            '<span class="truncate">' + displayTime + '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div class="hk-meta-col">' +
+          '<div class="hk-meta-item ' + (displayTk === 'Chưa có' ? 'opacity-60' : '') + '" title="Người thiết kế: ' + displayTk + '">' +
+            '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>' +
+            '<span class="truncate">TK: ' + displayTk + '</span>' +
+          '</div>' +
+          (badge.label ? ('<div class="hk-meta-item" title="Trạng thái: ' + badge.label + '">' +
+            '<span class="hk-card-status-badge ' + badge.cls + '">' + badge.label + '</span>' +
+          '</div>') : '') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="hk-card-footer' + (!badge.hasQuote ? ' hk-card-footer-disabled' : '') + '"' +
+      (badge.hasQuote ? ' onclick="event.stopPropagation(); openFullMobileQuoteModal(\'' + req.__backendId + '\')" title="Bấm để xem chi tiết báo giá"' : ' onclick="event.stopPropagation();" title="Yêu cầu này chưa có báo giá"') + '>' +
+      ((req.delete_requested || req.deleteRequested) ? ('<span class="hk-delete-warn">' +
+        '<span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span> Chờ xóa' +
+      '</span>') : '') +
+      (badge.isLoading ?
+        '<button type="button" disabled class="hk-card-quote-btn hk-card-quote-btn-disabled animate-pulse" title="Đang kiểm tra báo giá...">' +
+          '<span class="font-mono tracking-widest">...</span>' +
+        '</button>'
+      : badge.hasQuote ?
+        '<button type="button" class="hk-card-quote-btn" title="Bấm để xem chi tiết báo giá">' +
+          '<span>Xem chi tiết báo giá</span>' +
+          '<svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>' +
+        '</button>'
+      :
+        '<button type="button" disabled class="hk-card-quote-btn hk-card-quote-btn-disabled" title="Chưa có báo giá">' +
+          '<span>Chưa có báo giá</span>' +
+        '</button>'
+      ) +
+    '</div>' +
+  '</div>';
+}
+
+function _renderHkDesktopTableHtml(pageSlice) {
+  const rows = pageSlice.map(req => {
+    const date = new Date(req.createdAt);
+    const dateStr = date.toLocaleDateString('vi-VN');
+    const badge = getCardQuoteBadge(req);
+    const isEditing = !!(req.editingRequestedAt || getRequestDesignState(req) === 'editing');
+    const tkName = (req.designCreatedBy || req.designLastEditedBy) ? (req.designCreatedBy || req.designLastEditedBy) : 'Chưa có';
+    let preview = '';
+    try {
+      const imgs = JSON.parse(req.designImages || '[]');
+      if (imgs && imgs.length > 0 && imgs[0] !== '...') preview = imgs[0];
+      if (!preview && req.type === 'warranty') {
+        const aImgs = JSON.parse(req.acceptanceImages || '[]');
+        if (aImgs && aImgs.length > 0 && aImgs[0] !== '...') preview = aImgs[0];
+      }
+    } catch (_) {}
+
+    return '<tr onclick="showRequestDetail(\'' + req.__backendId + '\')" class="cursor-pointer">' +
+      '<td class="w-14 text-center">' +
+        (preview ? ('<div class="relative inline-block mq-thumb-editing-wrap"><img src="' + preview + '" onclick="event.stopPropagation(); viewDesign(\'' + req.__backendId + '\')" class="w-10 h-10 object-contain rounded bg-slate-900 border border-slate-700 mx-auto ' + (isEditing ? 'mq-img-editing' : '') + '" title="' + (isEditing ? 'Đang chỉnh sửa - Bấm xem Maquette' : 'Xem Maquette') + '">' +
+        (isEditing ? '<span class="mq-editing-badge-overlay mq-editing-badge-overlay--mini" title="Đang chỉnh sửa">Sửa</span>' : '') + '</div>') :
+        ('<div class="w-10 h-10 rounded bg-slate-800 border border-slate-700 flex items-center justify-center mx-auto text-gray-500">' +
+          '<svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>' +
+        '</div>')) +
+      '</td>' +
+      '<td><span class="hk-outlet-code">' + (req.outletCode || '---') + '</span></td>' +
+      '<td>' +
+        '<div class="font-bold text-sm">' + (req.outletName || '-') + '</div>' +
+        '<div class="text-[11px] text-gray-400 truncate max-w-xs">' + (req.address || '') + '</div>' +
+      '</td>' +
+      '<td><span class="text-xs ' + (req.type === 'warranty' ? 'text-amber-400' : 'text-sky-400') + ' font-medium">' + (req.type === 'warranty' ? 'Bảo hành' : 'Yêu cầu mới') + '</span></td>' +
+      '<td><span class="text-xs text-gray-400">' + dateStr + '</span></td>' +
+      '<td><span class="text-xs font-medium">' + tkName + '</span></td>' +
+      '<td>' + (badge.label ? ('<span class="hk-card-status-badge ' + badge.cls + '">' + badge.label + '</span>') : '-') + '</td>' +
+      '<td class="text-right">' +
+        (badge.isLoading ?
+          '<button type="button" disabled class="hk-card-quote-btn hk-card-quote-btn-disabled animate-pulse" title="Đang kiểm tra...">' +
+            '<span class="font-mono tracking-widest">...</span>' +
+          '</button>'
+        : badge.hasQuote ?
+          '<button onclick="event.stopPropagation(); openFullMobileQuoteModal(\'' + req.__backendId + '\')" class="hk-card-quote-btn" title="Xem chi tiết báo giá">' +
+            '<span>Xem báo giá</span>' +
+            '<svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>' +
+          '</button>'
+        :
+          '<button type="button" disabled class="hk-card-quote-btn hk-card-quote-btn-disabled" title="Chưa có báo giá">' +
+            '<span>Chưa có báo giá</span>' +
+          '</button>'
+        ) +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  return '<div class="hk-desktop-table-container">' +
+    '<table class="hk-desktop-table-view">' +
+      '<thead>' +
+        '<tr>' +
+          '<th class="w-14 text-center">MQ</th>' +
+          '<th>Mã Outlet</th>' +
+          '<th>Tên Điểm Bán / Địa chỉ</th>' +
+          '<th>Loại</th>' +
+          '<th>Ngày gửi</th>' +
+          '<th>Thiết kế</th>' +
+          '<th>Trạng thái</th>' +
+          '<th class="text-right">Thao tác</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' + rows + '</tbody>' +
+    '</table>' +
+  '</div>';
+}
+
+function updateHkDesktopMiniPagination(page, total, totalItems) {
+  const container = document.getElementById('hkDesktopMiniPagination');
+  if (!container) return;
+
+  const prevBtn = document.getElementById('hkMiniPrevBtn');
+  const nextBtn = document.getElementById('hkMiniNextBtn');
+  const input   = document.getElementById('hkMiniPageInput');
+  const totalEl = document.getElementById('hkMiniPageTotal');
+
+  if (total <= 1) {
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    if (input) {
+      input.disabled = true;
+      input.value = 1;
+      input.max = 1;
+      input.style.width = '24px';
+    }
+    if (totalEl) totalEl.textContent = '1';
+    return;
+  }
+
+  if (prevBtn) prevBtn.disabled = (page <= 1);
+  if (nextBtn) nextBtn.disabled = (page >= total);
+  if (input) {
+    input.disabled = false;
+    input.value = page;
+    input.max = total;
+    input.style.width = (String(page).length > 2 ? '34px' : (String(page).length > 1 ? '28px' : '24px'));
+  }
+  if (totalEl) totalEl.textContent = total;
+}
+
+window.onHkMiniPageChange = function(val) {
+  let page = parseInt(val, 10);
+  if (isNaN(page) || page < 1) page = 1;
+  const total = parseInt(document.getElementById('hkMiniPageTotal')?.textContent || '1', 10);
+  if (page > total) page = total;
+  const input = document.getElementById('hkMiniPageInput');
+  if (input) input.value = page;
+  if (typeof goToPage === 'function') goToPage(page);
+};
+
+function renderHkDesktopPagination(page, total, totalItems) {
+  updateHkDesktopMiniPagination(page, total, totalItems);
+  const container = document.getElementById('hkDesktopPagination');
+  if (container) container.innerHTML = '';
+}
+
+
+function _isRequestOwnedBySession(r) {
+  try {
+    if (!r) return false;
+    const role = (currentSession && currentSession.role) ? String(currentSession.role).toLowerCase() : '';
+    if (role === 'qcag' || role === 'admin') return true;
+    const reqOwner = typeof r.requester === 'object' && r.requester !== null
+      ? r.requester
+      : JSON.parse(r.requester || '{}');
+    if (!currentSession) return false;
+    const curCode = String(currentSession.saleCode || currentSession.userCode || '').trim().toLowerCase();
+    const ownerCode = String(reqOwner.saleCode || reqOwner.userCode || '').trim().toLowerCase();
+    if (curCode && ownerCode && curCode === ownerCode) return true;
+    const curPhone = String(currentSession.phone || '').replace(/\D/g, '');
+    const ownerPhone = String(reqOwner.phone || r.phone || '').replace(/\D/g, '');
+    if (curPhone && ownerPhone && curPhone.length >= 9 && ownerPhone.length >= 9 && curPhone === ownerPhone) return true;
+    return false;
+  } catch (e) { return false; }
+}
+
+function updateHkDesktopFilterChipsUI() {
+  const chipsWrap = document.getElementById('hkDesktopFilterChips');
+  if (!chipsWrap) return;
+
+  const isWarranty = currentListTab === 'warranty';
+
+  // 1. Calculate owned requests for live chip badges
+  const owned = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
+    ? allRequests.filter(_isRequestOwnedBySession)
+    : [];
+
+  const ownedNew = owned.filter(r => r.type === 'new');
+  const ownedWarranty = owned.filter(r => r.type === 'warranty');
+
+  // Count badges for New
+  const countAllNew = ownedNew.length;
+  const countHasMq = ownedNew.filter(r => _hasValidMq(r)).length;
+  const countNoMq = ownedNew.filter(r => !_hasValidMq(r)).length;
+  const countHasQuote = ownedNew.filter(r => {
+    const b = getCardQuoteBadge(r);
+    return b && b.hasQuote;
+  }).length;
+  const countNoQuote = ownedNew.filter(r => {
+    const b = getCardQuoteBadge(r);
+    return !b || (!b.hasQuote && !b.isWarranty);
+  }).length;
+
+  // Count badges for Warranty
+  const countAllWarranty = ownedWarranty.length;
+  const countWarPending = ownedWarranty.filter(r => getWarrantyState(r) === 'warranty_pending').length;
+  const countWarDone = ownedWarranty.filter(r => getWarrantyState(r) === 'warranty_done').length;
+
+  // Set badge text
+  const elAll = document.getElementById('hkChipCountAll');
+  if (elAll) elAll.textContent = isWarranty ? countAllWarranty : countAllNew;
+
+  const elHasMq = document.getElementById('hkChipCountHasMq');
+  if (elHasMq) elHasMq.textContent = countHasMq;
+
+  const elNoMq = document.getElementById('hkChipCountNoMq');
+  if (elNoMq) elNoMq.textContent = countNoMq;
+
+  const elHasQuote = document.getElementById('hkChipCountHasQuote');
+  if (elHasQuote) elHasQuote.textContent = countHasQuote;
+
+  const elNoQuote = document.getElementById('hkChipCountNoQuote');
+  if (elNoQuote) elNoQuote.textContent = countNoQuote;
+
+  const elWarPending = document.getElementById('hkChipCountWarPending');
+  if (elWarPending) elWarPending.textContent = countWarPending;
+
+  const elWarDone = document.getElementById('hkChipCountWarDone');
+  if (elWarDone) elWarDone.textContent = countWarDone;
+
+  // 2. Update active & visibility states of chips
+  const chips = chipsWrap.querySelectorAll('.hk-filter-chip');
+  chips.forEach(c => {
+    const f = c.getAttribute('data-filter');
+
+    if (isWarranty) {
+      if (f === 'warranty_pending' || f === 'warranty_done' || f === 'all') {
+        c.classList.remove('hidden');
+      } else {
+        c.classList.add('hidden');
+      }
+
+      if (f === 'all') {
+        c.classList.toggle('active', currentDesignFilter === 'all');
+      } else {
+        c.classList.toggle('active', currentDesignFilter === f);
+      }
+    } else {
+      if (f === 'has_mq' || f === 'no_mq' || f === 'has_quote' || f === 'no_quote' || f === 'all') {
+        c.classList.remove('hidden');
+      } else {
+        c.classList.add('hidden');
+      }
+
+      if (f === 'all') {
+        c.classList.toggle('active', currentListFilter === 'all' && currentDesignFilter === 'all');
+      } else if (f === 'no_mq') {
+        c.classList.toggle('active', currentListFilter === 'no_mq' || currentDesignFilter === 'waiting');
+      } else {
+        c.classList.toggle('active', currentListFilter === f);
+      }
+    }
+  });
+}
+
+function updateHkDesktopToolbarUI(filteredCount, newTotal, warrantyTotal) {
+  const totalBadge = document.getElementById('hkDesktopTotalBadge');
+  if (totalBadge) totalBadge.textContent = (filteredCount || 0) + ' yêu cầu';
+
+  const newCountEl = document.getElementById('hkDesktopNewCount');
+  if (newCountEl) newCountEl.textContent = newTotal || 0;
+
+  const warCountEl = document.getElementById('hkDesktopWarrantyCount');
+  if (warCountEl) warCountEl.textContent = warrantyTotal || 0;
+
+  const tabNew = document.getElementById('hkDesktopTabNew');
+  const tabWar = document.getElementById('hkDesktopTabWarranty');
+  if (tabNew && tabWar) {
+    if (currentListTab === 'new') {
+      tabNew.classList.add('active');
+      tabWar.classList.remove('active');
+    } else {
+      tabWar.classList.add('active');
+      tabNew.classList.remove('active');
+    }
+  }
+
+  const userEl = document.getElementById('hkDesktopUserText');
+  if (userEl && typeof currentSession !== 'undefined' && currentSession) {
+    const name = currentSession.saleName || currentSession.name || 'Sale Heineken';
+    const region = currentSession.region ? ' (' + currentSession.region + ')' : '';
+    userEl.textContent = name + region;
+  }
+
+  updateHkDesktopFilterChipsUI();
 }
 
 function renderRequestList() {
@@ -268,15 +836,7 @@ function renderRequestList() {
   let filtered = hasSearch ? allRequests.slice() : allRequests.filter(r => r.type === currentListTab);
 
   // Restrict visibility: users only see requests they created
-  filtered = filtered.filter(r => {
-    try {
-      if (currentSession && currentSession.role === 'qcag') return true;
-
-      const reqOwner = JSON.parse(r.requester || '{}');
-      if (!currentSession || !currentSession.saleCode) return false;
-      return (reqOwner.saleCode && reqOwner.saleCode === currentSession.saleCode);
-    } catch (e) { return false; }
-  });
+  filtered = filtered.filter(_isRequestOwnedBySession);
 
   // Apply design-state / warranty-status filter
   if (!hasSearch && currentDesignFilter === 'warranty_pending') {
@@ -297,7 +857,25 @@ function renderRequestList() {
     filtered = filtered.filter(r => getRequestDesignState(r) === currentDesignFilter);
   }
 
-  // Apply text search (outlet name / code / address)
+  // Apply dropdown filter (Đã có MQ | Chưa có MQ | Đã có Báo Giá | Chưa có Báo Giá)
+  if (currentListFilter === 'has_mq') {
+    filtered = filtered.filter(r => _hasValidMq(r));
+  } else if (currentListFilter === 'no_mq') {
+    // Chưa có MQ: chỉ các yêu cầu chưa có bản vẽ Maquette nào
+    filtered = filtered.filter(r => !_hasValidMq(r));
+  } else if (currentListFilter === 'has_quote') {
+    filtered = filtered.filter(r => {
+      const b = getCardQuoteBadge(r);
+      return b && b.hasQuote;
+    });
+  } else if (currentListFilter === 'no_quote') {
+    filtered = filtered.filter(r => {
+      const b = getCardQuoteBadge(r);
+      return !b || (!b.hasQuote && !b.isWarranty);
+    });
+  }
+
+  // Apply text search (outlet name / code / address / designer / requester)
   if (currentListSearchQuery) {
     const q = currentListSearchQuery;
     filtered = filtered.filter(r => {
@@ -306,11 +884,20 @@ function renderRequestList() {
       return (r.tkCode || '').toLowerCase().includes(q) ||
         (requester.saleName || requester.saleCode || requester.phone || '').toLowerCase().includes(q) ||
         (requester.ssName || '').toLowerCase().includes(q) ||
-        (r.outletName  || '').toLowerCase().includes(q) ||
-        (r.outletCode  || '').toLowerCase().includes(q) ||
+        (r.outletName || '').toLowerCase().includes(q) ||
+        (r.outletCode || '').toLowerCase().includes(q) ||
+        (r.designCreatedBy || '').toLowerCase().includes(q) ||
+        (r.designLastEditedBy || '').toLowerCase().includes(q) ||
+        (r.address || '').toLowerCase().includes(q) ||
         (r.designFilename || '').toLowerCase().includes(q);
     });
   }
+
+  // Calculate stats for Desktop Toolbar & counters
+  const ownedAll = (allRequests || []).filter(_isRequestOwnedBySession);
+  const newTotalCount = ownedAll.filter(r => r.type === 'new').length;
+  const warTotalCount = ownedAll.filter(r => r.type === 'warranty').length;
+  updateHkDesktopToolbarUI(filtered.length, newTotalCount, warTotalCount);
 
   // Update filter banner
   const banner   = document.getElementById('designFilterBanner');
@@ -325,36 +912,105 @@ function renderRequestList() {
   }
   const container = document.getElementById('requestList');
   const emptyState = document.getElementById('emptyState');
+  const pgEl = document.getElementById('requestListPagination');
+  const dpgEl = document.getElementById('hkDesktopPagination');
+  const bpgEl = document.getElementById('requestListBottomPagination');
+
+  // Update filtered count badge inside filter trigger button
+  const countEl = document.getElementById('hkFilterBadgeCount') || document.getElementById('hkFilteredCountNum');
+  if (countEl) {
+    countEl.textContent = filtered.length;
+    countEl.classList.toggle('active', currentListFilter !== 'all');
+  }
 
   if (filtered.length === 0) {
     emptyState.classList.remove('hidden');
     container.innerHTML = '';
+    if (pgEl) pgEl.innerHTML = renderPaginationHTML(1, 1);
+    if (bpgEl) bpgEl.innerHTML = '';
+    if (dpgEl) dpgEl.innerHTML = '';
+    updateHkDesktopMiniPagination(1, 1, 0);
+    const totalBadge = document.getElementById('hkDesktopTotalBadge');
+    if (totalBadge) totalBadge.textContent = '0 yêu cầu';
     return;
   }
 
   emptyState.classList.add('hidden');
 
+  const isDesktop = window.innerWidth >= 1024;
+  const effectivePageSize = isDesktop ? 16 : PAGE_SIZE;
+
   // Pagination: slice to current page
   const totalItems = filtered.length;
-  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const totalPages = Math.ceil(totalItems / effectivePageSize);
   if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
-  const pageSlice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageSlice = filtered.slice((currentPage - 1) * effectivePageSize, currentPage * effectivePageSize);
 
   // Track which entries need lazy image load (have placeholder ["..."])
   const lazyLoadIds = [];
 
-  // Update container class for grid view if needed
-  if (currentMobileViewMode === 'gallery') {
-    container.className = 'grid grid-cols-2 gap-3';
-  } else {
-    container.className = 'space-y-3';
-  }
+  if (isDesktop) {
+    if (currentHkDesktopViewMode === 'table') {
+      container.className = 'w-full';
+      container.innerHTML = _renderHkDesktopTableHtml(pageSlice);
+    } else {
+      container.className = 'hk-desktop-grid-view';
+      container.innerHTML = pageSlice.map(req => {
+        const date = new Date(req.createdAt);
+        const dateStr = date.toLocaleDateString('vi-VN');
+        const badge = getCardQuoteBadge(req);
+        const tkName = req.designCreatedBy || req.designLastEditedBy || null;
+        const isEditing = !!(req.editingRequestedAt || getRequestDesignState(req) === 'editing');
+        const lastUpdated = req.designLastEditedAt ? (() => {
+          const d = new Date(req.designLastEditedAt);
+          return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' + d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        })() : null;
+        let preview = '';
+        let hasDesignPlaceholder = false;
+        try {
+          const imgs = JSON.parse(req.designImages || '[]');
+          if (imgs && imgs.length > 0) {
+            if (imgs[0] === '...') {
+              hasDesignPlaceholder = true;
+              lazyLoadIds.push(req.__backendId);
+            } else {
+              preview = imgs[0];
+            }
+          }
+          if (!preview && !hasDesignPlaceholder && req.type === 'warranty') {
+            const aImgs = JSON.parse(req.acceptanceImages || '[]');
+            if (aImgs && aImgs.length > 0) {
+              if (aImgs[0] === '...') {
+                hasDesignPlaceholder = true;
+                lazyLoadIds.push(req.__backendId);
+              } else {
+                preview = aImgs[0];
+              }
+            }
+          }
+        } catch (e) { preview = ''; }
 
-  container.innerHTML = pageSlice.map(req => {
+        return _renderHkDesktopCardHtml(req, preview, hasDesignPlaceholder, isEditing, dateStr, tkName, lastUpdated, badge);
+      }).join('');
+    }
+    // Render desktop pagination
+    renderHkDesktopPagination(currentPage, Math.max(1, totalPages), totalItems);
+    if (pgEl) pgEl.innerHTML = '';
+    if (bpgEl) bpgEl.innerHTML = '';
+  } else {
+    // Mobile rendering (100% preserve existing mobile layout)
+    if (currentMobileViewMode === 'gallery') {
+      container.className = 'grid grid-cols-2 gap-2.5 items-stretch';
+    } else {
+      container.className = 'space-y-2.5';
+    }
+
+    container.innerHTML = pageSlice.map(req => {
     const date = new Date(req.createdAt);
     const dateStr = date.toLocaleDateString('vi-VN');
     const badge = getCardQuoteBadge(req);
     const tkName = req.designCreatedBy || req.designLastEditedBy || null;
+    const isEditing = !!(req.editingRequestedAt || getRequestDesignState(req) === 'editing');
     const lastUpdated = req.designLastEditedAt ? (() => {
       const d = new Date(req.designLastEditedAt);
       return d.toLocaleDateString('vi-VN', {day:'2-digit',month:'2-digit',year:'2-digit'}) + ' ' + d.toLocaleTimeString('vi-VN', {hour:'2-digit',minute:'2-digit'});
@@ -387,78 +1043,137 @@ function renderRequestList() {
     } catch (e) { preview = ''; }
 
     let thumbHtml;
-    let fallbackIconHtml = `<svg class="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>`;
+    let fallbackIconHtml = `<svg class="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
     
     // Check if gallery mode to determine thumb width/height
     if (currentMobileViewMode === 'gallery') {
        if (preview) {
-         thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-full h-32 object-cover rounded-t-xl cursor-pointer">`;
+         thumbHtml = `<div class="relative w-full h-20 mq-thumb-editing-wrap cursor-pointer" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="${isEditing ? 'Đang chỉnh sửa - Bấm xem ảnh tham chiếu' : 'Xem thiết kế'}">
+              <img src="${preview}" class="w-full h-20 object-contain rounded-t-xl ${isEditing ? 'mq-img-editing' : ''}">
+              ${isEditing ? `<span class="mq-editing-badge-overlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Đang chỉnh sửa</span>` : ''}
+             </div>`;
        } else if (hasDesignPlaceholder) {
-         thumbHtml = `<div id="thumb-${req.__backendId}" class="w-full h-32 bg-gray-700 rounded-t-xl flex items-center justify-center p-4 text-center" style="animation:pulse 1.5s ease-in-out infinite">
-              <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+         thumbHtml = `<div id="thumb-${req.__backendId}" class="hk-card-thumb w-full h-20 rounded-t-xl flex items-center justify-center p-2 text-center" style="animation:pulse 1.5s ease-in-out infinite">
+              <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+             </div>`;
+       } else if (isEditing) {
+         // Chờ chỉnh sửa: Đổi màu cho dễ nhận biết (Amber/Cam) + Icon chỉnh sửa
+         thumbHtml = `<div onclick="event.stopPropagation(); showToast('Yêu cầu này đang chờ QCAG chỉnh sửa thiết kế')" title="Chờ chỉnh sửa thiết kế" class="hk-card-thumb hk-card-thumb-editing w-full h-20 rounded-t-xl flex flex-col items-center justify-center p-1.5 text-center cursor-pointer">
+              <svg class="w-6 h-6 mx-auto mb-1" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span class="text-[11px] hk-card-thumb-text-editing">Chờ Chỉnh sửa</span>
              </div>`;
        } else {
-         thumbHtml = `<div onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-full h-32 bg-gray-100 rounded-t-xl flex flex-col items-center justify-center text-gray-400 p-2 text-center cursor-pointer">
+         // Chưa có MQ: Giữ nguyên như hiện tại
+         thumbHtml = `<div onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="hk-card-thumb w-full h-20 rounded-t-xl flex flex-col items-center justify-center p-1.5 text-center cursor-pointer">
               ${fallbackIconHtml}
-              <span class="text-xs">Chưa có MQ</span>
+              <span class="text-[11px] hk-card-thumb-text">Chưa có MQ</span>
              </div>`;
        }
 
        return `
-        <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl active:bg-gray-100 cursor-pointer flex flex-col shadow-sm border border-gray-100 overflow-hidden">
+        <div onclick="showRequestDetail('${req.__backendId}')" class="hk-list-card bg-gray-50 active:bg-gray-100 cursor-pointer flex flex-col shadow-sm border border-gray-100 overflow-hidden rounded-xl h-full">
           ${thumbHtml}
-          <div class="p-2.5 flex-1 flex flex-col gap-0.5">
-            <div class="font-semibold text-sm leading-tight line-clamp-2">${req.outletName}</div>
-            <div class="text-[11px] text-gray-500 font-medium truncate">${req.outletCode}</div>
-            <div class="text-[10px] text-gray-400">Gửi: ${dateStr}</div>
-            ${tkName ? `<div class="text-[10px] text-gray-400 truncate">TK: ${tkName}</div>` : ''}
-            ${lastUpdated ? `<div class="text-[10px] text-blue-500 truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
-            <div class="mt-auto pt-1.5">
-              <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm">${badge.label}</span>
+          <div class="px-2 pt-2 pb-1 flex-1 flex flex-col gap-[2px]">
+            <div class="hk-outlet-name line-clamp-2 leading-snug">${req.outletName}</div>
+            <div class="hk-outlet-code text-[11px] font-medium truncate">${req.outletCode}</div>
+            <div class="hk-card-date text-[10px]">Gửi: ${dateStr}</div>
+            ${tkName ? `<div class="hk-card-tk text-[10px] truncate">TK: ${tkName}</div>` : ''}
+            ${lastUpdated ? `<div class="hk-card-updated text-[10px] truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
+            <div class="mt-auto pt-1 flex flex-col gap-0.5 min-h-[16px]">
+              ${badge.isLoading ? `
+                <span class="text-[9.5px] px-2 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block leading-tight font-mono tracking-widest">...</span>
+              ` : (badge.hasQuote || badge.isWarranty) ? `
+                <span class="text-[9.5px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block max-w-full leading-tight" style="text-overflow:ellipsis">${badge.label}</span>
+              ` : ''}
+              ${req.deleteRequested ? `<div class="hk-delete-pending-tag text-[9px] py-0.5">Đang chờ QCAG xóa</div>` : ''}
             </div>
           </div>
+          ${badge.isLoading ? `
+            <button type="button" class="hk-quote-link-btn hk-quote-empty-btn animate-pulse" title="Đang kiểm tra báo giá...">
+              <span class="font-mono tracking-widest">...</span>
+            </button>
+          ` : badge.hasQuote ? `
+            <button onclick="event.stopPropagation(); openFullMobileQuoteModal('${req.__backendId}')" class="hk-quote-link-btn">
+              <span>Xem chi tiết báo giá</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+          ` : `
+            <button type="button" disabled class="hk-quote-link-btn hk-quote-empty-btn pointer-events-none opacity-60 cursor-not-allowed" title="Chưa có báo giá">
+              <span>Chưa có báo giá</span>
+            </button>
+          `}
         </div>
       `;
     } else {
        // List Mode HTML
        if (preview) {
-         thumbHtml = `<img src="${preview}" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="Xem thiết kế" class="w-16 h-16 object-cover rounded-lg cursor-pointer">`;
-       } else if (hasDesignPlaceholder) {
-         thumbHtml = `<div id="thumb-${req.__backendId}" class="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
-              <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+         thumbHtml = `<div class="relative w-20 h-14 mq-thumb-editing-wrap flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); viewDesign('${req.__backendId}')" title="${isEditing ? 'Đang chỉnh sửa - Bấm xem ảnh tham chiếu' : 'Xem thiết kế'}">
+              <img src="${preview}" class="w-20 h-14 object-contain rounded-lg ${isEditing ? 'mq-img-editing' : ''}">
+              ${isEditing ? `<span class="mq-editing-badge-overlay mq-editing-badge-overlay--mini">Sửa</span>` : ''}
              </div>`;
+       } else if (hasDesignPlaceholder) {
+         thumbHtml = `<div id="thumb-${req.__backendId}" class="hk-card-thumb w-20 h-14 rounded-lg flex items-center justify-center" style="animation:pulse 1.5s ease-in-out infinite">
+              <svg class="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+             </div>`;
+       } else if (isEditing) {
+         thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này đang chờ QCAG chỉnh sửa thiết kế')" title="Chờ chỉnh sửa thiết kế" class="hk-card-thumb hk-card-thumb-editing w-20 h-14 rounded-lg flex flex-col items-center justify-center p-1">
+              <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span class="text-[9px] hk-card-thumb-text-editing leading-none">Chờ sửa</span>
+             </button>`;
        } else {
-         thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
-              <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V7M3 7l9 6 9-6"/></svg>
+         thumbHtml = `<button onclick="event.stopPropagation(); showToast('Yêu cầu này chưa có MQ')" title="Không có MQ" class="hk-card-thumb w-20 h-14 rounded-lg flex items-center justify-center">
+              <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
              </button>`;
        }
 
        return `
-         <div onclick="showRequestDetail('${req.__backendId}')" class="bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer">
+         <div onclick="showRequestDetail('${req.__backendId}')" class="hk-list-card bg-gray-50 rounded-xl p-3 active:bg-gray-100 cursor-pointer flex flex-col">
            <div class="flex items-start gap-3">
              <div class="flex-shrink-0">${thumbHtml}</div>
              <div class="flex-1 min-w-0">
-               <div class="font-semibold text-sm leading-tight mb-0.5">${req.outletName}</div>
-               <div class="text-xs text-gray-500 font-medium truncate mb-0.5">${req.outletCode}</div>
-               <div class="text-xs text-gray-400">Gửi: ${dateStr}</div>
-               ${tkName ? `<div class="text-xs text-gray-400 truncate">TK: ${tkName}</div>` : ''}
-               ${lastUpdated ? `<div class="text-xs text-blue-500 truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
-               <div class="mt-1.5">
-                 <span class="text-xs px-1.5 py-0.5 rounded-full ${badge.cls}">${badge.label}</span>
+               <div class="hk-outlet-name leading-tight mb-0.5">${req.outletName}</div>
+               <div class="hk-outlet-code text-xs font-medium truncate mb-0.5">${req.outletCode}</div>
+               <div class="hk-card-date text-xs">Gửi: ${dateStr}</div>
+               ${tkName ? `<div class="hk-card-tk text-xs truncate">TK: ${tkName}</div>` : ''}
+               ${lastUpdated ? `<div class="hk-card-updated text-xs truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
+               <div class="mt-1.5 flex items-center gap-1.5 flex-wrap min-w-0">
+                 ${badge.isLoading ? `
+                   <span class="text-xs px-2 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block font-mono tracking-widest">...</span>
+                 ` : (badge.hasQuote || badge.isWarranty) ? `
+                   <span class="text-xs px-1.5 py-0.5 rounded-full ${badge.cls} whitespace-nowrap overflow-hidden inline-block" style="max-width:100%;text-overflow:ellipsis">${badge.label}</span>
+                 ` : ''}
+                 ${req.deleteRequested ? `<span class="hk-delete-pending-badge">Đang chờ QCAG xóa</span>` : ''}
                </div>
              </div>
              <svg class="w-4 h-4 text-gray-300 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
              </svg>
            </div>
+           ${badge.isLoading ? `
+             <button type="button" class="hk-quote-link-btn hk-quote-empty-btn mt-auto animate-pulse" title="Đang kiểm tra báo giá...">
+               <span class="font-mono tracking-widest">...</span>
+             </button>
+           ` : badge.hasQuote ? `
+             <button onclick="event.stopPropagation(); openFullMobileQuoteModal('${req.__backendId}')" class="hk-quote-link-btn mt-auto">
+               <span>Xem chi tiết báo giá</span>
+               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+             </button>
+           ` : `
+             <button type="button" disabled class="hk-quote-link-btn hk-quote-empty-btn mt-auto pointer-events-none opacity-60 cursor-not-allowed" title="Chưa có báo giá">
+               <span>Chưa có báo giá</span>
+             </button>
+           `}
          </div>
        `;
     }
-  }).join('');
+    }).join('');
 
-  // Update pagination controls
-  const pgEl = document.getElementById('requestListPagination');
-  if (pgEl) pgEl.innerHTML = totalPages > 1 ? renderPaginationHTML(currentPage, totalPages) : '';
+    // Update pagination controls in header and bottom (Mobile)
+    const pgHtml = renderPaginationHTML(currentPage, Math.max(1, totalPages));
+    if (pgEl) pgEl.innerHTML = pgHtml;
+    if (bpgEl) bpgEl.innerHTML = totalPages > 1 ? pgHtml : '';
+    if (dpgEl) dpgEl.innerHTML = '';
+  }
 
   // Store filtered list for gallery swipe-navigation between outlets
   window._dvOutletList = filtered.slice();
@@ -508,12 +1223,20 @@ function renderRequestList() {
           img.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
           img.onerror = () => { img.src = 'app/assets/broken-image.png'; };
 
-          if (currentMobileViewMode === 'gallery') {
-            img.className = 'w-full h-32 object-cover rounded-t-xl cursor-pointer';
+          if (window.innerWidth >= 1024) {
+            img.className = 'w-full h-full object-contain cursor-pointer';
+            thumbEl.innerHTML = '';
+            thumbEl.style.animation = '';
+            thumbEl.onclick = (e) => { e.stopPropagation(); viewDesign(backendId); };
+            thumbEl.title = 'Xem Maquette lớn';
+            thumbEl.appendChild(img);
+          } else if (currentMobileViewMode === 'gallery') {
+            img.className = 'w-full h-28 object-contain bg-slate-900 rounded-t-xl cursor-pointer';
+            thumbEl.replaceWith(img);
           } else {
-            img.className = 'w-16 h-16 object-cover rounded-lg cursor-pointer';
+            img.className = 'w-20 h-14 object-contain bg-slate-900 rounded-lg cursor-pointer';
+            thumbEl.replaceWith(img);
           }
-          thumbEl.replaceWith(img);
 
           // Cập nhật local store để lần sau không cần load lại
           const localIdx = allRequests.findIndex(x => x.__backendId === backendId);
@@ -618,20 +1341,33 @@ function closeMobileWhatsNewModal(versionStr) {
   const modal = document.getElementById('mobileWhatsNewModal');
   if (modal) modal.remove();
   try {
-    localStorage.setItem('ks_whats_new_version', versionStr || 'v2.8.1');
+    localStorage.setItem('ks_whats_new_version', versionStr || 'v3.0.0');
   } catch (_) {}
 }
 
 function switchListTab(tab) {
   currentListTab = tab;
   currentDesignFilter = 'all';        // reset design filter
+  currentListFilter = 'all';          // reset dropdown filter
   currentListSearchQuery = '';        // reset search
   const si = document.getElementById('listSearchInput');
   if (si) si.value = '';
-  document.getElementById('listTab1Btn').className = tab === 'new' ? 'flex-1 py-3 text-sm font-medium tab-active' : 'flex-1 py-3 text-sm font-medium tab-inactive';
-  document.getElementById('listTab2Btn').className = tab === 'warranty' ? 'flex-1 py-3 text-sm font-medium tab-active' : 'flex-1 py-3 text-sm font-medium tab-inactive';
-  document.getElementById('newCount').className = tab === 'new' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
-  document.getElementById('warrantyCount').className = tab === 'warranty' ? 'ml-1 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded-full' : 'ml-1 bg-gray-200 text-gray-700 text-xs px-1.5 py-0.5 rounded-full';
+  const dsi = document.getElementById('hkDesktopSearchInput');
+  if (dsi) dsi.value = '';
+  const dclr = document.getElementById('hkDesktopSearchClear');
+  if (dclr) dclr.classList.add('hidden');
+  updateHkDesktopFilterChipsUI();
+  const fl = document.getElementById('hkFilterTriggerLabel');
+  if (fl) fl.textContent = 'Tất cả';
+  document.querySelectorAll('#hkFilterMenu .hk-dropdown-opt').forEach(opt => {
+    opt.classList.toggle('active', opt.getAttribute('data-val') === 'all');
+  });
+  closeHkFilterDropdown();
+  closeHkPgDropdown();
+  document.getElementById('listTab1Btn').className = tab === 'new' ? 'flex-1 py-2 text-xs sm:text-sm font-semibold tab-active flex items-center justify-center gap-1.5' : 'flex-1 py-2 text-xs sm:text-sm font-medium tab-inactive flex items-center justify-center gap-1.5';
+  document.getElementById('listTab2Btn').className = tab === 'warranty' ? 'flex-1 py-2 text-xs sm:text-sm font-semibold tab-active flex items-center justify-center gap-1.5' : 'flex-1 py-2 text-xs sm:text-sm font-medium tab-inactive flex items-center justify-center gap-1.5';
+  document.getElementById('newCount').className = tab === 'new' ? 'bg-gray-900 text-white text-[11px] px-1.5 py-0.5 rounded-full font-bold' : 'bg-gray-200 text-gray-700 text-[11px] px-1.5 py-0.5 rounded-full font-normal';
+  document.getElementById('warrantyCount').className = tab === 'warranty' ? 'bg-gray-900 text-white text-[11px] px-1.5 py-0.5 rounded-full font-bold' : 'bg-gray-200 text-gray-700 text-[11px] px-1.5 py-0.5 rounded-full font-normal';
   currentPage = 1;
   renderRequestList();
 }
@@ -653,43 +1389,104 @@ function toggleMobileListViewMode() {
 
 function goToPage(page) {
   currentPage = page;
+  closeHkPgDropdown();
   renderRequestList();
   const c = document.getElementById('requestListContainer');
   if (c) c.scrollTop = 0;
 }
 
 function renderPaginationHTML(page, total) {
-  const btnBase = 'w-8 h-8 rounded-lg text-sm font-medium flex items-center justify-center';
-  const activeCls = 'bg-gray-900 text-white';
-  const inactiveCls = 'bg-gray-100 text-gray-600 active:bg-gray-200';
-  const disabledCls = 'bg-gray-50 text-gray-300';
-  let start = Math.max(1, page - 2);
-  let end = Math.min(total, page + 2);
-  if (end - start < 4) {
-    if (start === 1) end = Math.min(total, start + 4);
-    else start = Math.max(1, end - 4);
+  const isSinglePage = total <= 1;
+  let optionsHTML = '';
+  for (let i = 1; i <= total; i++) {
+    const isAct = i === page;
+    optionsHTML += `
+      <button 
+        type="button" 
+        onclick="goToPage(${i})" 
+        class="hk-dropdown-opt ${isAct ? 'active' : ''}" 
+        data-val="${i}"
+      >
+        <span>Trang ${i} / ${total}</span>
+      </button>
+    `;
   }
-  let html = `<div class="flex items-center gap-1.5 py-2">`;
-  html += page > 1
-    ? `<button onclick="goToPage(${page - 1})" class="${btnBase} ${inactiveCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></button>`
-    : `<div class="${btnBase} ${disabledCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg></div>`;
-  if (start > 1) {
-    html += `<button onclick="goToPage(1)" class="${btnBase} ${inactiveCls}">1</button>`;
-    if (start > 2) html += `<span class="text-gray-400 text-sm px-1">…</span>`;
-  }
-  for (let i = start; i <= end; i++) {
-    html += i === page
-      ? `<div class="${btnBase} ${activeCls}">${i}</div>`
-      : `<button onclick="goToPage(${i})" class="${btnBase} ${inactiveCls}">${i}</button>`;
-  }
-  if (end < total) {
-    if (end < total - 1) html += `<span class="text-gray-400 text-sm px-1">…</span>`;
-    html += `<button onclick="goToPage(${total})" class="${btnBase} ${inactiveCls}">${total}</button>`;
-  }
-  html += page < total
-    ? `<button onclick="goToPage(${page + 1})" class="${btnBase} ${inactiveCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></button>`
-    : `<div class="${btnBase} ${disabledCls}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg></div>`;
-  html += `<span class="text-xs text-gray-400 ml-1">${page}/${total}</span>`;
-  html += `</div>`;
-  return html;
+
+  const prevDisabled = page <= 1 || isSinglePage;
+  const nextDisabled = page >= total || isSinglePage;
+
+  return `
+    <div class="hk-pg-bar flex items-center">
+      <!-- Nút Trước -->
+      <button 
+        type="button" 
+        onclick="${prevDisabled ? '' : `goToPage(${page - 1})`}" 
+        ${prevDisabled ? 'disabled' : ''} 
+        class="hk-pg-btn ${prevDisabled ? 'disabled' : ''}" 
+        title="Trang trước" 
+        aria-label="Trang trước"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+
+      <!-- Dropdown Phân Trang Đồng Bộ: 1 / 2 (bỏ chữ Trang để tiết kiệm không gian) -->
+      <div class="hk-pg-dropdown-wrap relative" id="hkPgDropdownWrap">
+        <button 
+          type="button" 
+          id="hkPgTriggerBtn" 
+          ${isSinglePage ? 'disabled' : 'onclick="toggleHkPgDropdown(event)"'} 
+          class="hk-pg-pill flex items-center justify-center gap-0.5 px-2 py-1 text-xs font-semibold rounded-lg border border-gray-200 bg-gray-50 text-gray-700 ${isSinglePage ? 'cursor-default opacity-70' : 'active:bg-gray-100 cursor-pointer'} transition-all select-none"
+          title="${isSinglePage ? 'Chỉ có 1 trang' : 'Chạm để chọn trang'}"
+        >
+          <span class="font-bold text-xs">${page}</span>
+          <span class="opacity-40 text-[10px] mx-0.5">/</span>
+          <span class="opacity-75 text-[11px]">${total}</span>
+          ${!isSinglePage ? `
+          <svg class="w-2.5 h-2.5 text-gray-400 transition-transform duration-150 ml-0.5" id="hkPgArrowIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 9l-7 7-7-7"/>
+          </svg>
+          ` : ''}
+        </button>
+
+        ${!isSinglePage ? `
+        <!-- Menu Phân Trang Thả Xuống (Bo tròn 2 góc dưới) -->
+        <div 
+          id="hkPgMenu" 
+          class="hk-dropdown-menu hidden absolute right-0 top-full mt-0 w-32 bg-white shadow-xl z-50 py-1 max-h-56 overflow-y-auto"
+        >
+          ${optionsHTML}
+        </div>
+        ` : ''}
+      </div>
+
+      <!-- Nút Sau -->
+      <button 
+        type="button" 
+        onclick="${nextDisabled ? '' : `goToPage(${page + 1})`}" 
+        ${nextDisabled ? 'disabled' : ''} 
+        class="hk-pg-btn ${nextDisabled ? 'disabled' : ''}" 
+        title="Trang sau" 
+        aria-label="Trang sau"
+      >
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+  `;
 }
+
+// Responsive Desktop/Mobile re-render on resize
+let _hkResizeDebounce = null;
+window.addEventListener('resize', () => {
+  if (_hkResizeDebounce) clearTimeout(_hkResizeDebounce);
+  _hkResizeDebounce = setTimeout(() => {
+    _hkResizeDebounce = null;
+    const listScreen = document.getElementById('listScreen');
+    if (listScreen && !listScreen.classList.contains('hidden')) {
+      renderRequestList();
+    }
+  }, 200);
+});

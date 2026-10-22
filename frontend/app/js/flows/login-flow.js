@@ -18,6 +18,9 @@ function loginShowStep(showId) {
 }
 
 function loginSelectCompany(company) {
+  if (typeof window.updateAppTitle === 'function') {
+    window.updateAppTitle(company);
+  }
   if (company === 'heineken') {
     const saved = (() => {
       try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
@@ -25,13 +28,21 @@ function loginSelectCompany(company) {
     if (saved.phone) document.getElementById('hkPhone').value = saved.phone;
     if (saved.saleCode) document.getElementById('hkSaleCode').value = saved.saleCode;
     if (saved.saleName) document.getElementById('hkSaleName').value = saved.saleName;
-    loginShowStep('loginStepHK1');
+    if (saved.phone && saved.saleCode && saved.saleName) {
+      loginSelectSaleType(_loginSelectedSaleType || 'dsm_sr');
+      loginShowStep('loginStepHK2');
+    } else {
+      loginShowStep('loginStepHK1');
+    }
   } else {
     loginShowStep('loginStepQCAG');
   }
 }
 
 function loginBack(showId, hideId) {
+  if (showId === 'loginStepCompany' && typeof window.updateAppTitle === 'function') {
+    window.updateAppTitle('');
+  }
   loginShowStep(showId);
 }
 
@@ -43,57 +54,72 @@ function loginHK1Next() {
   // Require sale code to be exactly 8 digits
   if (saleCode.length !== 8) { showToast('Mã nhân viên phải đủ 8 chữ số'); return; }
   localStorage.setItem(HK_PROFILE_KEY, JSON.stringify({ phone, saleCode, saleName }));
-  // Preserve existing TBA state when moving between steps — reflect it in the UI
   _loginSelectedRegion = '';
-  const ssNameInit = document.getElementById('hkSSName');
-  const tbaNoteInit = document.getElementById('tbaNote');
-  // Make toggle visual match stored state
-  const tbToggleEl = document.getElementById('tbToggle');
-  if (tbToggleEl) tbToggleEl.classList.toggle('toggle-on', !!_loginTBAOn);
-  if (_loginTBAOn) {
-    if (ssNameInit) {
-      ssNameInit.disabled = true;
-      ssNameInit.classList.add('tba-disabled');
-      ssNameInit.placeholder = 'TBA không cần nhập thông tin SS/SE';
-      ssNameInit.value = '';
-    }
-    if (tbaNoteInit) tbaNoteInit.classList.remove('hidden');
-  } else {
-    if (ssNameInit) {
-      ssNameInit.disabled = false;
-      ssNameInit.classList.remove('tba-disabled');
-      ssNameInit.placeholder = 'Nhập tên SS';
-    }
-    if (tbaNoteInit) tbaNoteInit.classList.add('hidden');
-  }
   document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('selected'));
+  loginSelectSaleType(_loginSelectedSaleType || '');
   loginShowStep('loginStepHK2');
 }
 
-function loginToggleTBA() {
-  _loginTBAOn = !_loginTBAOn;
-  document.getElementById('tbToggle').classList.toggle('toggle-on', _loginTBAOn);
-  const ssName = document.getElementById('hkSSName');
-  // When TBA is on, keep inputs visible but disabled and styled with dark bg + gray text,
-  // and show the note inside the input as placeholder.
-  if (_loginTBAOn) {
-    if (ssName) {
-      ssName.disabled = true;
-      ssName.classList.add('tba-disabled');
-      ssName.placeholder = 'TBA không cần nhập thông tin SS/SE';
-      ssName.value = '';
-    }
-    const tbaNote = document.getElementById('tbaNote');
-    if (tbaNote) tbaNote.classList.remove('hidden');
-  } else {
+function loginSelectSaleType(type) {
+  _loginSelectedSaleType = type || '';
+  _loginTBAOn = (_loginSelectedSaleType === 'tba');
+
+  const btnDSM = document.getElementById('btnSaleTypeDSM');
+  const btnTBA = document.getElementById('btnSaleTypeTBA');
+  const btnNPP = document.getElementById('btnSaleTypeNPP');
+
+  if (btnDSM) btnDSM.classList.toggle('selected', _loginSelectedSaleType === 'dsm_sr');
+  if (btnTBA) btnTBA.classList.toggle('selected', _loginSelectedSaleType === 'tba');
+  if (btnNPP) btnNPP.classList.toggle('selected', _loginSelectedSaleType === 'npp');
+
+  const regBlock = document.getElementById('loginRegionBlock');
+  const ssBlock = document.getElementById('ssInfoBlock');
+  const mrNote = document.getElementById('loginMultiRegionNote');
+  const mrTitle = document.getElementById('loginMultiRegionTitle');
+  const mrDesc = document.getElementById('loginMultiRegionDesc');
+
+  const applySmoothAnimation = (el) => {
+    if (!el) return;
+    el.classList.remove('hidden', 'animate-smooth-in');
+    void el.offsetWidth; // trigger reflow
+    el.classList.add('animate-smooth-in');
+  };
+
+  if (!_loginSelectedSaleType) {
+    if (regBlock) regBlock.classList.add('hidden');
+    if (ssBlock) ssBlock.classList.add('hidden');
+    if (mrNote) mrNote.classList.add('hidden');
+    return;
+  }
+
+  if (_loginSelectedSaleType === 'dsm_sr') {
+    if (mrNote) mrNote.classList.add('hidden');
+    applySmoothAnimation(regBlock);
+    applySmoothAnimation(ssBlock);
+    const ssName = document.getElementById('hkSSName');
     if (ssName) {
       ssName.disabled = false;
       ssName.classList.remove('tba-disabled');
-      ssName.placeholder = 'Nhập tên SS';
+      ssName.placeholder = 'Nhập tên SS/SE';
     }
-    const tbaNote = document.getElementById('tbaNote');
-    if (tbaNote) tbaNote.classList.add('hidden');
+  } else if (_loginSelectedSaleType === 'tba') {
+    if (regBlock) regBlock.classList.add('hidden');
+    if (ssBlock) ssBlock.classList.add('hidden');
+    if (mrTitle) mrTitle.textContent = 'TBA hoạt động đa khu vực';
+    if (mrDesc) mrDesc.textContent = 'Bạn không cần chọn khu vực trước. Khi tạo từng yêu cầu khảo sát, bạn sẽ chọn khu vực trực tiếp cho từng điểm bán tương ứng.';
+    applySmoothAnimation(mrNote);
+  } else if (_loginSelectedSaleType === 'npp') {
+    if (regBlock) regBlock.classList.add('hidden');
+    if (ssBlock) ssBlock.classList.add('hidden');
+    if (mrTitle) mrTitle.textContent = 'NPP hoạt động đa khu vực';
+    if (mrDesc) mrDesc.textContent = 'Kênh Nhà phân phối hoạt động linh hoạt. Bạn sẽ chọn khu vực trực tiếp khi tạo từng yêu cầu khảo sát.';
+    applySmoothAnimation(mrNote);
   }
+}
+
+// Backward-compatibility alias
+function loginToggleTBA() {
+  loginSelectSaleType(_loginTBAOn ? 'dsm_sr' : 'tba');
 }
 
 function loginSelectRegion(btn, region) {
@@ -103,19 +129,58 @@ function loginSelectRegion(btn, region) {
 }
 
 function loginHK2Submit() {
-  if (!_loginSelectedRegion) { showToast('Vui lòng chọn khu vực'); return; }
   const saved = (() => {
     try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
   })();
-  if (!_loginTBAOn) {
+
+  if (!_loginSelectedSaleType) {
+    showToast('Vui lòng chọn loại hình Sale');
+    return;
+  }
+
+  const saleType = _loginSelectedSaleType;
+
+  if (saleType === 'dsm_sr') {
+    if (!_loginSelectedRegion) { showToast('Vui lòng chọn khu vực'); return; }
     const ssName = document.getElementById('hkSSName').value.trim();
     if (!ssName) { showToast('Vui lòng điền tên SS/SE'); return; }
-    currentSession = { role: 'heineken', ...saved, region: _loginSelectedRegion, isTBA: false, ssCode: '', ssName };
-  } else {
-    currentSession = { role: 'heineken', ...saved, region: _loginSelectedRegion, isTBA: true, ssCode: '', ssName: '' };
+    currentSession = {
+      role: 'heineken',
+      ...saved,
+      saleType: 'dsm_sr',
+      region: _loginSelectedRegion,
+      isTBA: false,
+      isNPP: false,
+      ssCode: '',
+      ssName
+    };
+  } else if (saleType === 'tba') {
+    currentSession = {
+      role: 'heineken',
+      ...saved,
+      saleType: 'tba',
+      region: '',
+      isTBA: true,
+      isNPP: false,
+      ssCode: '',
+      ssName: ''
+    };
+  } else if (saleType === 'npp') {
+    currentSession = {
+      role: 'heineken',
+      ...saved,
+      saleType: 'npp',
+      region: '',
+      isTBA: false,
+      isNPP: true,
+      ssCode: '',
+      ssName: ''
+    };
   }
+
   _justLoggedIn = true;
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+  if (typeof window.updateAppTitle === 'function') window.updateAppTitle('heineken');
   launchApp();
 }
 
@@ -125,9 +190,10 @@ function loginQCAGSubmit() {
   const pwd = document.getElementById('qcPassword').value;
   if (!phone) { showToast('Vui lòng nhập số điện thoại'); return; }
   if (pwd !== loginGetQCAGPassword()) { showToast('Mật khẩu không đúng'); return; }
-  currentSession = { role: 'qcag', phone, name: qcName };
+  currentSession = { role: 'qcag', phone, name: qcName, fullname: qcName };
   _justLoggedIn = true;
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
+  if (typeof window.updateAppTitle === 'function') window.updateAppTitle('qcag');
   // Only show blocking loading on QCAG desktop login; mobile flow stays unchanged.
   if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
     showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
@@ -160,8 +226,19 @@ function closeLogoutModal() {
 
 function executeLogout() {
   closeLogoutModal();
+  const prevRole = currentSession && currentSession.role;
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem('pending_orders_v1');
+  localStorage.removeItem('pendingOrders');
+  try {
+    if (typeof _productionApprovalItems !== 'undefined') _productionApprovalItems = [];
+    if (typeof _productionApprovalBadgeCount !== 'undefined') _productionApprovalBadgeCount = 0;
+    const badge = document.getElementById('productionApprovalBadge');
+    if (badge) { badge.textContent = '0'; badge.classList.add('hidden'); }
+  } catch (_) {}
   currentSession = null;
+  if (typeof window.updateAppTitle === 'function') window.updateAppTitle('');
+  try { if (typeof window.applyAppUIMode === 'function') window.applyAppUIMode(); } catch (e) { }
   const loginEl = document.getElementById('loginScreen');
   if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
   ['homeScreen', 'newRequestScreen', 'warrantyScreen', 'listScreen', 'notificationsScreen', 'accountScreen', 'detailScreen', 'qcagDesktopScreen'].forEach(id => {
@@ -171,10 +248,23 @@ function executeLogout() {
     el.classList.remove('flex');
   });
   if (typeof syncBottomNavVisibility === 'function') syncBottomNavVisibility('loginScreen');
-  loginShowStep('loginStepCompany');
+
+  const saved = (() => {
+    try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
+  })();
+  if (prevRole === 'heineken' && saved.phone && saved.saleCode && saved.saleName) {
+    if (saved.phone) document.getElementById('hkPhone').value = saved.phone;
+    if (saved.saleCode) document.getElementById('hkSaleCode').value = saved.saleCode;
+    if (saved.saleName) document.getElementById('hkSaleName').value = saved.saleName;
+    loginSelectSaleType(_loginSelectedSaleType || 'dsm_sr');
+    loginShowStep('loginStepHK2');
+  } else {
+    loginShowStep('loginStepCompany');
+  }
 }
 
 function launchApp() {
+  try { if (typeof window.applyAppUIMode === 'function') window.applyAppUIMode(); } catch (e) { }
   const loginEl = document.getElementById('loginScreen');
   if (loginEl) { loginEl.classList.add('hidden'); loginEl.classList.remove('flex'); }
   updateSessionBar();
@@ -214,19 +304,72 @@ function launchApp() {
   try { updateHomeInstallBtn(); } catch (_) { }
 }
 
+function getUserInitial(name) {
+  if (!name) return 'U';
+  const parts = String(name).trim().split(/\s+/);
+  const last = parts[parts.length - 1];
+  return (last ? last[0] : parts[0][0]).toUpperCase();
+}
+
 function updateSessionBar() {
   const bar = document.getElementById('sessionInfoBar');
   if (!bar || !currentSession) return;
+  const esc = (s) => (typeof escapeHtml === 'function' ? escapeHtml(s) : String(s || ''));
+
   if (currentSession.role === 'heineken') {
-    const pos = currentSession.isTBA ? 'TBA' : 'Sale';
-    const ss = currentSession.isTBA ? '' : ` &nbsp;·&nbsp; SS/SE: <strong>${currentSession.ssName}</strong>`;
+    const saleType = currentSession.saleType || (currentSession.isTBA ? 'tba' : (currentSession.isNPP ? 'npp' : 'dsm_sr'));
+    let pos = 'DSM / SR';
+    let badgeCls = 'user-badge-sale';
+
+    if (saleType === 'tba' || currentSession.isTBA) {
+      pos = 'TBA';
+      badgeCls = 'user-badge-tba';
+    } else if (saleType === 'npp' || currentSession.isNPP) {
+      pos = 'NPP';
+      badgeCls = 'user-badge-npp';
+    } else {
+      pos = 'DSM / SR';
+      badgeCls = 'user-badge-sale';
+    }
+
+    const rawName = currentSession.saleName || 'Sale Heineken';
+    const initial = getUserInitial(rawName);
+    const ssText = (currentSession.isTBA || currentSession.isNPP || saleType === 'tba' || saleType === 'npp') ? '' : (currentSession.ssName ? `SS: <strong>${esc(currentSession.ssName)}</strong>` : '');
+    const region = currentSession.region ? esc(currentSession.region) : '';
+    const regionLabel = region ? (region.toLowerCase().startsWith('khu vực') || region.toLowerCase().startsWith('kv') ? `<strong>${region}</strong>` : `Khu vực: <strong>${region}</strong>`) : '';
+
     bar.innerHTML = `
-      <div class="font-semibold text-gray-800 text-sm">${currentSession.saleName} <span class="font-normal text-gray-400">(${pos})</span></div>
-      <div class="text-gray-400 mt-0.5">${currentSession.region}${ss} &nbsp;·&nbsp; ${currentSession.phone}</div>`;
+      <div class="session-user-card">
+        <div class="user-avatar-circle" title="${esc(rawName)}">
+          <span>${initial}</span>
+        </div>
+        <div class="user-meta-block">
+          <div class="user-primary-line">
+            <span class="user-full-name font-bold truncate leading-tight">${esc(rawName)}</span>
+            <span class="user-role-badge ${badgeCls}">${pos}</span>
+          </div>
+          <div class="user-sub-line leading-tight">
+            ${ssText ? `<div class="user-sub-row user-ss-row">${ssText}</div>` : ''}
+            ${regionLabel ? `<div class="user-sub-row user-region-row">${regionLabel}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
   } else {
     bar.innerHTML = `
-      <div class="font-semibold text-gray-800 text-sm">QCAG Admin</div>
-      <div class="text-gray-400 mt-0.5">${currentSession.phone}</div>`;
+      <div class="session-user-card">
+        <div class="user-avatar-circle user-avatar-admin" title="QCAG Admin">
+          <span>QC</span>
+        </div>
+        <div class="user-meta-block">
+          <div class="user-primary-line">
+            <span class="user-full-name font-bold truncate leading-tight">QCAG Admin</span>
+            <span class="user-role-badge user-badge-admin">Admin</span>
+          </div>
+          <div class="user-sub-line leading-tight">
+            <div class="user-sub-row">Quản trị viên hệ thống</div>
+          </div>
+        </div>
+      </div>`;
   }
 }
 

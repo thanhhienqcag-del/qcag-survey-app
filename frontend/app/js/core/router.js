@@ -92,6 +92,14 @@ function showScreen(screenId) {
   if (typeof setActiveMainTabByScreen === 'function') {
     setActiveMainTabByScreen(screenId);
   }
+
+  // Cập nhật tiêu đề tab theo màn hình
+  if (screenId === 'qcagDesktopScreen') {
+    if (typeof window.updateAppTitle === 'function') window.updateAppTitle('qcag');
+    else document.title = 'QC An Giang Design';
+  } else if (screenId === 'homeScreen' || screenId === 'listScreen' || screenId === 'detailScreen') {
+    if (typeof window.updateAppTitle === 'function') window.updateAppTitle();
+  }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────
@@ -124,6 +132,9 @@ function startWarrantyCheck() {
 function showRequestList() {
   showScreen('listScreen');
   renderRequestList();
+  if (typeof _fetchApp1QuoteListWithCache === 'function') {
+    _fetchApp1QuoteListWithCache(true).catch(function () { });
+  }
 }
 
 function showNotifications() {

@@ -13,17 +13,23 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function getVapidPublicKey() {
-  // Always call the frontend-local push endpoint (same-origin serverless function)
-  const res = await fetch('/api/push');
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || 'No VAPID key');
-  return data.publicKey;
+  try {
+    const isLocal = typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    const pushUrl = isLocal ? 'https://qcag-survey-app.vercel.app/api/push' : '/api/push';
+    const res = await fetch(pushUrl).catch(() => null);
+    if (!res || !res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data && data.ok ? data.publicKey : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) throw new Error('Service workers not supported');
-  // Register at root scope so iOS 16.4+ PWA can show lock-screen push notifications
-  const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  // Register at root or relative scope
+  const swUrl = new URL('sw.js', window.location.href).pathname;
+  const reg = await navigator.serviceWorker.register(swUrl);
 
   // Force-update SW if a new version is waiting (especially important on iOS PWA)
   if (reg.waiting) {
@@ -47,6 +53,7 @@ async function subscribeForPush() {
   if (!('PushManager' in window)) throw new Error('Push not supported');
   const reg = await registerServiceWorker();
   const vapidKey = await getVapidPublicKey();
+  if (!vapidKey) return null;
   try {
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,

@@ -6,6 +6,7 @@
 // ── Session / Login ──────────────────────────────────────────────────
 let currentSession = null; // { role:'heineken'|'qcag', phone, ... }
 let _loginTBAOn = false;
+let _loginSelectedSaleType = ''; // '' | 'dsm_sr' | 'tba' | 'npp'
 let _loginSelectedRegion = '';
 
 // ── Request data ─────────────────────────────────────────────────────
@@ -47,6 +48,16 @@ const signTypes = [
   'Rèm Mái Che',
   'Logo indoor',
   'Logo Outdoor',
+  'Hạng mục khác'
+];
+
+// Danh sách hạng mục riêng cho Kênh NPP (Bảng Alu Nhà Phân Phối lên số 1, không có Mái che và Logo)
+const nppSignTypes = [
+  'Bảng Alu Nhà Phân Phối',
+  'Bảng hiflex 1 mặt',
+  'Bảng hiflex 2 mặt (KHÔNG ĐÈN)',
+  'Hộp đèn hiflex 1 mặt',
+  'Hộp đèn hiflex 2 mặt',
   'Hạng mục khác'
 ];
 

@@ -15,6 +15,13 @@ function getBrandsForType(type) {
   try {
     const t = String(type || '');
     const tl = t.toLowerCase();
+    // Bảng Alu Nhà Phân Phối hoặc khi đang ở kênh NPP: cố định brand Heineken
+    if (tl.includes('alu') || t === 'Bảng Alu Nhà Phân Phối' || t === 'Bảng Alu NPP') {
+      return ['Heineken'];
+    }
+    if (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleType === 'npp' || currentSession.isNPP)) {
+      return ['Heineken'];
+    }
     if (tl.includes('emlemd') || tl.includes('emblemd') || t === 'Logo indoor - Emlemd 2 mặt' || t === 'Logo indoor 2 mặt (Emblemd)') {
       return ['Tiger'];
     }
@@ -50,11 +57,15 @@ function getBrandsForType(type) {
 function getActionsForItem(type, item) {
   const tl = String(type || (item && item.type) || '').toLowerCase();
   const st = String((item && item.subType) || '').toLowerCase();
+  const isAluNPP = tl === 'bảng alu npp' || tl.includes('alu');
   const isTranhDen = tl.includes('tranh đèn') || tl.includes('tranh den') || tl.includes('light poster') || st.includes('tranh đèn') || st.includes('tranh den') || st.includes('light poster');
   const isLogo = tl.includes('logo') || tl.includes('emblemd') || tl.includes('emlemd');
   const isRem = tl.includes('rèm') || tl.includes('rem');
   const isMaiChe = !isRem && (tl.includes('mái che') || tl.includes('mai che') || tl.includes('mái hiên') || tl.includes('mai hien'));
 
+  if (isAluNPP) {
+    return ['Làm mới', 'Sửa chữa'];
+  }
   if (isMaiChe || isRem) {
     return ['Làm mới'];
   }
@@ -160,14 +171,56 @@ function getMatchingOutdoorLogoPair(brand, changedField, value) {
 
 function getItemDisplayName(item) {
   if (!item) return '-';
-  const t = item.type || '-';
+  const raw = String(item.type || item.product_name || item.name || '-').trim();
+  const sLower = raw.toLowerCase();
+
+  let formatted = raw;
+  if (sLower.includes('shopname') || sLower.includes('shop name') || sLower.includes('tên quán')) {
+    formatted = 'Shopname';
+  } else if (sLower.includes('hộp đèn') || sLower.includes('hop den')) {
+    if (sLower.includes('2 mặt') || sLower.includes('hai mặt') || sLower.includes('2 mat')) {
+      formatted = 'Hộp đèn hiflex 2 mặt';
+    } else {
+      formatted = 'Hộp đèn hiflex 1 mặt';
+    }
+  } else if (sLower.includes('giả hộp') || sLower.includes('gia hop')) {
+    if (sLower.includes('2 mặt') || sLower.includes('hai mặt') || sLower.includes('2 mat')) {
+      formatted = 'Bảng hiệu giả hộp hiflex 2 mặt';
+    } else {
+      formatted = 'Bảng hiệu giả hộp hiflex 1 mặt';
+    }
+  } else if (sLower.includes('bảng hiệu hiflex') || sLower.includes('bang hieu hiflex') || sLower.includes('bảng hiflex') || sLower.includes('bang hiflex')) {
+    if (sLower.includes('2 mặt') || sLower.includes('hai mặt') || sLower.includes('không đèn') || sLower.includes('khong den') || sLower.includes('2 mat')) {
+      formatted = 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)';
+    } else {
+      formatted = 'Bảng hiflex 1 mặt';
+    }
+  } else if (sLower.includes('alu')) {
+    formatted = 'Bảng Alu Nhà Phân Phối';
+  } else if (sLower.includes('mái che') || sLower.includes('mai che') || sLower.includes('mái hiên') || sLower.includes('mai hien')) {
+    formatted = 'Mái che di động';
+  } else if (sLower.includes('rèm') || sLower.includes('rem')) {
+    formatted = 'Rèm Mái Che';
+  } else if (sLower.includes('logo')) {
+    if (sLower.includes('outdoor') || sLower.includes('ngoài trời') || sLower.includes('icon')) {
+      formatted = 'Logo Outdoor';
+    } else {
+      formatted = 'Logo indoor';
+    }
+  } else {
+    formatted = raw
+      .replace(/^(thay bạt|làm mới|sản xuất mới|thi công|gia công)\s+/gi, '')
+      .replace(/\s*\((in 2 mặt|in 1 mặt|in hai mặt|in một mặt|in bạt.*?)\)/gi, '')
+      .trim() || raw;
+  }
+
   if (item.subType && item.subType !== 'Khác') {
-    const tl = t.toLowerCase();
-    if (tl.includes('logo indoor') && !t.includes('-')) {
-      return `${t} - ${getTigerSubTypeLabel(item.subType)}`;
+    const tl = formatted.toLowerCase();
+    if (tl.includes('logo indoor') && !formatted.includes('-') && typeof getTigerSubTypeLabel === 'function') {
+      return `${formatted} - ${getTigerSubTypeLabel(item.subType)}`;
     }
   }
-  return t;
+  return formatted;
 }
 
 function showDefaultFieldToast(e) {
@@ -366,3 +419,225 @@ function normalizeVietnameseAccents(str) {
 
   return text;
 }
+
+/**
+ * _resolveQcagStatus — Ánh xạ trạng thái QCAG theo đúng thuật toán computeQCAGStatus từ App 1.
+ * Vòng đời: Chưa có báo giá -> Chưa có SPO -> Chờ Admin/ASM duyệt -> Chờ ra đơn hàng -> Đã ra đơn hàng -> Đang sản xuất -> Hoàn thành.
+ */
+function _resolveQcagStatus(q) {
+  if (!q) return { label: 'Chưa có báo giá', cls: 'hk-status-badge hk-status-amber bg-amber-500/20 text-amber-300 border border-amber-500/40' };
+
+  // Priority 0: Cancellation status
+  const cancelSt = String(q.cancellation_status || q.cancellationStatus || '').toLowerCase().trim();
+  if (cancelSt === 'requested') return { label: 'Báo hủy', cls: 'hk-status-badge hk-status-red bg-red-600/30 text-red-300 border border-red-500/50' };
+  if (cancelSt === 'confirmed' || cancelSt === 'recreated') return { label: 'Chờ tạo đơn', cls: 'hk-status-badge hk-status-sky bg-sky-600/30 text-sky-300 border border-sky-500/50' };
+
+  // Priority 1: Production Approval
+  const prodAppr = String(q.production_approval_status || q.productionApprovalStatus || '').toLowerCase().trim();
+  if (prodAppr === 'approved') return { label: 'Đã duyệt sản xuất', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+  if (prodAppr === 'rejected') return { label: 'Từ chối sản xuất', cls: 'hk-status-badge hk-status-red bg-red-600/30 text-red-300 border border-red-500/50' };
+  if (prodAppr === 'pending' || prodAppr === 'pending_production') return { label: 'Chờ duyệt sản xuất', cls: 'hk-status-badge hk-status-sky bg-sky-600/30 text-sky-300 border border-sky-500/50' };
+
+  // Priority 2: Explicit QCAG status from DB / UI
+  const qcagStRaw = String(q.qcag_override_status || q.qcagOverrideStatus || q.qcag_status || q.qcagStatus || '').trim();
+  const qcagStLower = qcagStRaw.toLowerCase();
+  if (qcagStRaw) {
+    if (qcagStLower.includes('tạm hủy') || qcagStLower.includes('tam huy')) return { label: 'Tạm Hủy', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+    if (qcagStLower === 'hủy' || qcagStLower === 'huy' || qcagStLower.includes('báo hủy') || qcagStLower.includes('bao huy')) return { label: 'Báo hủy', cls: 'hk-status-badge hk-status-red bg-red-600/30 text-red-300 border border-red-500/50' };
+    if (qcagStLower.includes('chờ tạo đơn') || qcagStLower.includes('cho tao don') || qcagStLower.includes('chờ đh') || qcagStLower.includes('cho dh')) return { label: 'Chờ tạo đơn', cls: 'hk-status-badge hk-status-sky bg-sky-600/30 text-sky-300 border border-sky-500/50' };
+    if (qcagStLower.includes('thi công xong') || qcagStLower.includes('đã lắp đặt') || qcagStLower.includes('hoàn thành') || qcagStLower.includes('hoan thanh')) return { label: 'Hoàn thành', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+    if (qcagStLower.includes('đang sản xuất') || qcagStLower.includes('dang san xuat') || qcagStLower.includes('đang làm')) return { label: 'Đang sản xuất', cls: 'hk-status-badge hk-status-violet bg-violet-600/30 text-violet-300 border border-violet-500/50' };
+    if (qcagStLower.includes('đã ra đơn') || qcagStLower.includes('da ra don')) return { label: 'Đã ra đơn hàng', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+    return { label: qcagStRaw, cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+  }
+
+  // Priority 3: SPO Lifecycle (App 1 standard computeQCAGStatus)
+  const spoNumber = String(q.spo_number || q.spoNumber || q.spo_no || q.spoNo || '').trim();
+  const rawSpoStatus = String(q.spo_status || q.spoStatus || '').trim();
+  const rs = rawSpoStatus.toLowerCase();
+  const orderNumber = String(q.order_number || q.orderNumber || '').trim();
+  const hasSpo = !!spoNumber;
+  const hasOrder = !!orderNumber;
+
+  if (!hasSpo) {
+    return { label: 'Chưa có SPO', cls: 'hk-status-badge hk-status-slate bg-slate-600/30 text-slate-300 border border-slate-500/50' };
+  }
+
+  if (!rawSpoStatus) {
+    return { label: 'Chưa cập nhật trạng thái', cls: 'hk-status-badge hk-status-slate bg-slate-600/30 text-slate-300 border border-slate-500/50' };
+  }
+
+  const HUY_STATUSES = [
+    'sales rep rejected', 'sign maker rejected', 'sales admin rejected',
+    'area sales manager rejected', 'sales admin cancelled',
+    'sales supervisor cancelled', 'store keeper cancelled',
+    'area sales manager cancelled', 'sales rep cancelled'
+  ];
+  if (HUY_STATUSES.includes(rs) || rs.includes('cancel') || rs.includes('reject') || rs.includes('từ chối') || rs.includes('hủy')) {
+    if (hasOrder) return { label: 'Khẩn cấp', cls: 'hk-status-badge hk-status-red bg-red-600/30 text-red-300 border border-red-500/50' };
+    return { label: 'Hủy', cls: 'hk-status-badge hk-status-red bg-red-600/30 text-red-300 border border-red-500/50' };
+  }
+
+  if (rs.includes('revised') || rs.includes('rivised') || rs.includes('sửa')) {
+    if (!hasOrder) return { label: 'Chờ duyệt lại', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+    return { label: 'Đang sửa SPO', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+  }
+
+  if (rs.includes('finish') || rs.includes('hoàn thành')) return { label: 'Hoàn thành', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+  if (rs === 'sales rep accepted' || rs.includes('sale đã nghiệm thu')) return { label: 'Sale đã nghiệm thu', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+  if (rs === 'sign maker installed signage' || rs.includes('chờ sale nghiệm thu')) return { label: 'Chờ sale nghiệm thu', cls: 'hk-status-badge hk-status-sky bg-sky-600/30 text-sky-300 border border-sky-500/50' };
+
+  const isApprovedOrVariation = rs === 'area sales manager approved...' || rs.includes('checked variation') || rs.includes('approved') || rs.includes('duyệt');
+  if (isApprovedOrVariation) {
+    if (!hasOrder) return { label: 'Chờ ra đơn hàng', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+    return { label: 'Đã ra đơn hàng', cls: 'hk-status-badge hk-status-emerald bg-emerald-600/30 text-emerald-300 border border-emerald-500/50' };
+  }
+
+  if (rs === 'sales supervisor verified') return { label: 'Chờ QCAG up MQ', cls: 'hk-status-badge hk-status-sky bg-sky-600/30 text-sky-300 border border-sky-500/50' };
+  if (rs === 'sign maker checked marquette') return { label: 'Chờ Admin duyệt', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+  if (rs === 'sales admin full checked') return { label: 'Chờ ASM duyệt', cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+
+  // Fallback to Sale confirmation or raw SPO status
+  if (q.is_confirmed == 1 || q.isConfirmed == 1) return { label: 'Sale đã xác nhận', cls: 'hk-status-badge hk-status-blue bg-blue-600/30 text-blue-300 border border-blue-500/50' };
+  if (rawSpoStatus) return { label: rawSpoStatus, cls: 'hk-status-badge hk-status-amber bg-amber-600/30 text-amber-300 border border-amber-500/50' };
+
+  // Mặc định khi đã có báo giá nhưng chưa có SPO
+  return { label: 'Chưa có SPO', cls: 'hk-status-badge hk-status-slate bg-slate-600/30 text-slate-300 border border-slate-500/50' };
+}
+window._resolveQcagStatus = _resolveQcagStatus;
+
+/**
+ * Kiểm tra danh sách items có chứa ít nhất 1 hạng mục bảng hiệu/hộp đèn/mặt bạt hay không.
+ * Nếu có ít nhất 1 item loại này, chắc chắn yêu cầu phải có nội dung bảng hiệu (mới hoặc cũ).
+ */
+function qcagHasSignageItems(items) {
+  if (!items) return false;
+  let arr = items;
+  if (typeof arr === 'string') {
+    try { arr = JSON.parse(arr); } catch (_) { return false; }
+  }
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.some(it => {
+    if (!it) return false;
+    const txt = String(it.type || it.product_name || it.name || it.item_type || it.content || it.category || '').toLowerCase().trim();
+    // Loại trừ các mục thủ tục, hành chính, chi phí, hoặc thuần Logo
+    if (txt.includes('giấy phép') || txt.includes('xin phép') || txt.includes('hồ sơ') ||
+        txt.includes('phí') || txt.includes('vận chuyển') || txt.includes('tháo dỡ')) {
+      return false;
+    }
+    if (txt.includes('logo') && !txt.includes('bảng') && !txt.includes('hộp đèn') && !txt.includes('alu') && !txt.includes('bạt')) {
+      return false;
+    }
+    // Các hạng mục biển hiệu, hộp đèn, bạt in, alu, decal, mica, chữ nổi, mái che, rèm...
+    return txt.includes('bảng') || txt.includes('bang') ||
+           txt.includes('hộp đèn') || txt.includes('hop den') ||
+           txt.includes('mái che') || txt.includes('mai che') ||
+           txt.includes('mái hiên') || txt.includes('mai hien') ||
+           txt.includes('rèm') || txt.includes('rem') ||
+           txt.includes('alu') || txt.includes('hiflex') ||
+           txt.includes('bạt') || txt.includes('bat') ||
+           txt.includes('decal') || txt.includes('mica') ||
+           txt.includes('chữ nổi') || txt.includes('chu noi') ||
+           txt.includes('poster') || txt.includes('standee') ||
+           txt.includes('in ấn') || txt.includes('in ');
+  });
+}
+window.qcagHasSignageItems = qcagHasSignageItems;
+
+/**
+ * Phân giải chuẩn xác Nội dung bảng hiệu của một yêu cầu / báo giá.
+ * NGUYÊN TẮC: Nếu có ít nhất 1 item bảng hiệu thì CHẮC CHẮN PHẢI CÓ NỘI DUNG.
+ * - Nếu có text nội dung mới: hiển thị text đó (kèm badge Nội dung cũ nếu có cờ cũ).
+ * - Nếu không có text nội dung mới nhưng có ít nhất 1 item bảng hiệu:
+ *   Bắt buộc xem là "Nội dung cũ" (kèm yêu cầu thêm nếu có), tuyệt đối không để trống hay ghi "Không có nội dung".
+ * - Chỉ khi hoàn toàn không có item bảng hiệu và không có chữ thì mới ghi "Hạng mục này không có nội dung".
+ */
+function qcagResolveSignageContent(req) {
+  if (!req || typeof req !== 'object') {
+    return {
+      hasSignage: false,
+      hasSignageContent: false,
+      isOld: false,
+      rawContent: '',
+      oldExtra: '',
+      displayText: 'Hạng mục này không có nội dung',
+      oldImgs: []
+    };
+  }
+
+  const checkBool = val => val === true || val === 1 || String(val).toLowerCase() === 'true' || String(val) === '1';
+
+  // 1. Trích xuất items
+  let items = req.items || [];
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch (_) { items = []; }
+  }
+  const hasSignage = qcagHasSignageItems(items);
+
+  // 2. Trích xuất cờ old_content
+  let isOld = Boolean(
+    checkBool(req.oldContent) || checkBool(req.old_content) ||
+    checkBool(req.isOldContent) || checkBool(req.is_old_content) ||
+    checkBool(req.useOldContent) || checkBool(req.use_old_content)
+  );
+
+  // 3. Trích xuất text content sạch
+  let rawContent = (req.content || req.signContent || req.signboard_content || '').trim();
+  if (rawContent.startsWith('[{') || rawContent === '[]' || rawContent === '{}' ||
+      rawContent === 'null' || rawContent === 'undefined' || rawContent === '""') {
+    rawContent = '';
+  }
+
+  // 4. Trích xuất oldContentExtra
+  const oldExtra = String(req.oldContentExtra || req.old_content_extra || '').trim();
+
+  // 5. Trích xuất oldContentImages
+  let oldImgs = [];
+  const rawOldImgs = req.oldContentImages || req.old_content_images;
+  if (Array.isArray(rawOldImgs)) {
+    oldImgs = rawOldImgs;
+  } else if (typeof rawOldImgs === 'string') {
+    try {
+      const parsed = JSON.parse(rawOldImgs);
+      if (Array.isArray(parsed)) oldImgs = parsed;
+      else if (rawOldImgs.startsWith('http')) oldImgs = [rawOldImgs];
+    } catch (_) {
+      if (rawOldImgs.startsWith('http')) oldImgs = [rawOldImgs];
+    }
+  }
+
+  const hasActualText = rawContent.length > 0;
+
+  // QUY TẮC CỐT LÕI: Nếu có ít nhất 1 item bảng hiệu:
+  // - Nếu chưa có text mới: BẮT BUỘC coi là Nội dung cũ (isOld = true)!
+  if (hasSignage && !hasActualText) {
+    isOld = true;
+  }
+
+  const hasSignageContent = hasActualText || isOld || hasSignage;
+
+  let displayText = '';
+  if (hasActualText) {
+    if (isOld) {
+      displayText = oldExtra ? `Nội dung cũ (${oldExtra}): ${rawContent}` : `[Nội dung cũ] ${rawContent}`;
+    } else {
+      displayText = rawContent;
+    }
+  } else if (isOld || hasSignage) {
+    displayText = oldExtra ? `Nội dung cũ (${oldExtra})` : 'Nội dung cũ';
+  } else {
+    displayText = 'Hạng mục này không có nội dung';
+  }
+
+  return {
+    hasSignage,
+    hasSignageContent,
+    isOld,
+    rawContent,
+    oldExtra,
+    displayText,
+    oldImgs
+  };
+}
+window.qcagResolveSignageContent = qcagResolveSignageContent;
+

@@ -412,58 +412,118 @@
 
 
   /* Zoom bottom bar with two buttons (compact, theme-aware) */
+  /* Zoom bottom bar with two buttons (compact, theme-aware, elevated above bottom safe area) */
+  /* Zoom bottom bar with two buttons (styled like full-mqm-edit-btn in quote modal) */
   .dv-zoom-bottom {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 60;
+    z-index: 5005;
     display: flex;
     justify-content: center;
-    padding: 6px 10px calc(6px + env(safe-area-inset-bottom));
+    padding: 12px 16px calc(24px + env(safe-area-inset-bottom, 16px)) 16px !important;
+    background: rgba(11, 18, 32, 0.94) !important;
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(56, 189, 248, 0.18) !important;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45) !important;
     pointer-events: auto;
-    background: transparent; /* remove outer white background */
+  }
+  .dv-zoom-bottom::before {
+    display: none !important;
   }
   .dv-zoom-bottom-inner {
     width: 100%;
     max-width: 520px;
     display: flex;
-    gap: 8px;
-    background: transparent; /* ensure no container bg */
+    gap: 12px;
+    background: transparent;
     border-radius: 0;
     box-shadow: none;
     padding: 0;
+    pointer-events: auto;
   }
   .dv-zoom-btn {
     flex: 1;
-    padding: 10px 12px;
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: 13px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 14px;
     cursor: pointer;
-    min-height: 40px;
-    background: #ffffff; /* white button */
-    color: #111827; /* black text */
-    border: 1px solid rgba(0,0,0,0.08);
-    box-shadow: none;
+    min-height: 50px;
+    background: #0284c7;
+    color: #ffffff;
+    border: 1px solid #0369a1;
+    box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-decoration: none;
+    transition: all 0.15s ease;
   }
-  .dv-zoom-btn-edit {
-    background: #dc2626;
-    color: #fff;
-    border-color: transparent;
+  .dv-zoom-btn-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
   }
-  .dv-zoom-btn-edit:active { background: #b91c1c; }
-  .dv-zoom-btn-share {
-    background: #16a34a;
-    color: #fff;
-    border-color: transparent;
+  .dv-zoom-btn-edit:active,
+  .dv-zoom-btn-share:active {
+    background: #0369a1;
+    transform: scale(0.98);
   }
-  .dv-zoom-btn-share:active { background: #15803d; }
+  /* Dark Mode & Mặc định: Nền & viền tương tự button trong xem chi tiết báo giá (full-mqm-edit-btn) */
+  .dv-zoom-btn-edit,
+  .dv-zoom-btn-share,
+  .theme-dark .dv-zoom-btn-edit, [data-theme="dark"] .dv-zoom-btn-edit,
+  .theme-dark .dv-zoom-btn-share, [data-theme="dark"] .dv-zoom-btn-share {
+    background: rgba(14, 165, 233, 0.16) !important;
+    color: #38bdf8 !important;
+    border: 1.5px solid rgba(14, 165, 233, 0.55) !important;
+    box-shadow: 0 0 16px rgba(14, 165, 233, 0.28) !important;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .dv-zoom-btn-edit:hover,
+  .dv-zoom-btn-share:hover,
+  .theme-dark .dv-zoom-btn-edit:hover, [data-theme="dark"] .dv-zoom-btn-edit:hover,
+  .theme-dark .dv-zoom-btn-share:hover, [data-theme="dark"] .dv-zoom-btn-share:hover {
+    background: rgba(14, 165, 233, 0.28) !important;
+    border-color: #0ea5e9 !important;
+    box-shadow: 0 0 20px rgba(14, 165, 233, 0.45) !important;
+  }
+  .dv-zoom-btn-edit:active,
+  .dv-zoom-btn-share:active,
+  .theme-dark .dv-zoom-btn-edit:active, [data-theme="dark"] .dv-zoom-btn-edit:active,
+  .theme-dark .dv-zoom-btn-share:active, [data-theme="dark"] .dv-zoom-btn-share:active {
+    background: rgba(14, 165, 233, 0.38) !important;
+    transform: scale(0.98);
+  }
+  /* Light Theme cho Footer & Button */
+  html:not(.theme-dark):not([data-theme="dark"]) .dv-zoom-bottom {
+    background: rgba(241, 245, 249, 0.96) !important;
+    border-top: 1px solid #cbd5e1 !important;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08) !important;
+  }
+  html:not(.theme-dark):not([data-theme="dark"]) .dv-zoom-btn {
+    background: #0284c7 !important;
+    color: #ffffff !important;
+    border: 1px solid #0369a1 !important;
+    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.2) !important;
+  }
+  html:not(.theme-dark):not([data-theme="dark"]) .dv-zoom-btn:hover {
+    background: #0369a1 !important;
+  }
   .dv-zoom-btn-view { /* right button – default white */ }
 
-  @media (max-width: 420px) {
-    .dv-zoom-bottom-inner { gap: 6px; }
-    .dv-zoom-btn { padding: 9px 10px; font-size: 12px; min-height: 38px; }
+  @media (max-width: 380px) {
+    .dv-zoom-bottom { padding: 10px 10px calc(18px + env(safe-area-inset-bottom, 12px)) 10px !important; }
+    .dv-zoom-bottom-inner { gap: 8px; }
+    .dv-zoom-btn { padding: 10px 10px; font-size: 13px; min-height: 46px; gap: 6px; border-radius: 12px; }
+    .dv-zoom-btn-icon { width: 16px; height: 16px; }
   }
 
 /* make design wrapper a positioned container so overlays position correctly */
@@ -501,7 +561,7 @@
   border-top: 1px solid rgba(0,0,0,0.06);
   z-index: 6;
 }
-.theme-dark .design-comment-footer { background: linear-gradient(180deg, rgba(3,7,18,0.6), rgba(3,7,18,0.6)); border-top: 1px solid rgba(255,255,255,0.04); }
+.theme-dark .design-comment-footer { background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(11, 18, 32, 0.98)) !important; border-top: 1px solid rgba(56, 189, 248, 0.15) !important; }
 
 .design-comment-input { min-height: 40px; max-height: 96px; padding: 10px 12px; border-radius: 10px; }
 .design-comment-send { padding: 8px 12px; border-radius: 10px; }

@@ -18,9 +18,26 @@ let _currentNewRequestDraftId = null;
 // composing a new request and hasn't explicitly opened/edited an existing draft.
 let _sessionAutoDraftId = null;
 
+function isNPPSession() {
+  return !!(typeof currentSession !== 'undefined' && currentSession && (currentSession.saleType === 'npp' || currentSession.isNPP));
+}
+
 function addRequestItem() {
   const id = Date.now();
-  currentRequestItems.push({ id, type: '', brand: '', width: '', height: '', useOldSize: false, otherContent: '', poles: 0, action: '', note: '', survey: false });
+  const isNPP = isNPPSession();
+  currentRequestItems.push({
+    id,
+    type: '',
+    brand: isNPP ? 'Heineken' : '',
+    width: '',
+    height: '',
+    useOldSize: false,
+    otherContent: '',
+    poles: 0,
+    action: '',
+    note: '',
+    survey: false
+  });
   renderRequestItems();
   saveNewRequestDraft();
   setTimeout(() => {
@@ -84,6 +101,7 @@ function saveNewRequestDraft() {
       outletLng,
       locationPreview,
       signContent,
+      region: (document.getElementById('newReqSelectedRegion') && document.getElementById('newReqSelectedRegion').value) || '',
       isOldContent: !!isOldContent,
       oldContentExtra,
       currentRequestItems: draftItems,
@@ -233,6 +251,13 @@ function loadNewRequestDraft(id) {
     document.getElementById('outletLat').value = draft.outletLat || '';
     document.getElementById('outletLng').value = draft.outletLng || '';
     document.getElementById('signContent').value = draft.signContent || '';
+    if (draft.region) {
+      const regInput = document.getElementById('newReqSelectedRegion');
+      if (regInput) regInput.value = draft.region;
+      document.querySelectorAll('.req-region-btn').forEach(b => {
+        b.classList.toggle('selected', b.textContent.trim() === draft.region);
+      });
+    }
     document.getElementById('oldContentExtra').value = draft.oldContentExtra || '';
     isOldContent = !!draft.isOldContent;
     try {
@@ -306,7 +331,10 @@ function updateRequestItem(id, field, value) {
 
         item.subType = '';
 
-        if (isEmlemd || isMaiChe || isTranhDen || isTigerSquare) {
+        const isNPP = isNPPSession();
+        if (isNPP) {
+          item.brand = 'Heineken';
+        } else if (isEmlemd || isMaiChe || isTranhDen || isTigerSquare) {
           item.brand = 'Tiger';
         } else {
           item.brand = '';
@@ -334,10 +362,11 @@ function updateRequestItem(id, field, value) {
           item.subType = '';
           item.width = '';
           item.height = '';
-          item.brand = '';
+          item.brand = isNPP ? 'Heineken' : '';
           item.useOldSize = false;
         }
 
+        const isAluNPP = tv === 'Bảng Alu Nhà Phân Phối' || tv === 'Bảng Alu NPP' || tl.includes('alu');
         // Mái che di động, Rèm Mái Che: mặc định hình thức 'Làm mới', vô hiệu hóa trụ (0)
         if (isMaiChe || isRem) {
           item.action = 'Làm mới';
@@ -345,6 +374,10 @@ function updateRequestItem(id, field, value) {
         } else if (isTranhDen) {
           item.poles = 0;
           if (!item.action) item.action = 'Làm mới';
+        } else if (isAluNPP) {
+          if (!item.action || (item.action !== 'Làm mới' && item.action !== 'Sửa chữa')) {
+            item.action = 'Làm mới';
+          }
         } else if (!isEmlemd && !isTigerSquare) {
           item.action = '';
         }
@@ -464,7 +497,10 @@ function updateRequestItem(id, field, value) {
 
     const tlAct = String(item.type || '').toLowerCase();
     const isFixedActionType = tlAct.includes('mái che') || tlAct.includes('mai che') || tlAct.includes('mái hiên') || tlAct.includes('mai hien') || tlAct.includes('rèm') || tlAct.includes('rem');
+    const isAluActionType = item.type === 'Bảng Alu Nhà Phân Phối' || item.type === 'Bảng Alu NPP' || tlAct.includes('alu');
     if (field === 'action' && isFixedActionType) {
+      item.action = 'Làm mới';
+    } else if (field === 'action' && isAluActionType && item.action !== 'Làm mới' && item.action !== 'Sửa chữa') {
       item.action = 'Làm mới';
     }
     // Only re-render the whole items list when the change affects layout
@@ -547,7 +583,16 @@ function renderRequestItems() {
   const activeId = active && active.id ? active.id : null;
   const activeSelectionStart = (active && typeof active.selectionStart === 'number') ? active.selectionStart : null;
 
+  const isNPP = isNPPSession();
+  const availableSignTypes = isNPP ? (typeof nppSignTypes !== 'undefined' ? nppSignTypes : signTypes) : signTypes;
+
   container.innerHTML = currentRequestItems.map((item, index) => {
+    if (isNPP) {
+      item.brand = 'Heineken';
+      if ((item.type === 'Bảng Alu Nhà Phân Phối' || item.type === 'Bảng Alu NPP') && (!item.action || (item.action !== 'Làm mới' && item.action !== 'Sửa chữa'))) {
+        item.action = 'Làm mới';
+      }
+    }
     const brands = getBrandsForType(item.type);
     const isOther = item.type === 'Hạng mục khác';
     const tl = String(item.type || '').toLowerCase();
@@ -556,7 +601,7 @@ function renderRequestItems() {
     const isTranhDenLegacy = tl.includes('tranh đèn') || tl.includes('tranh den');
     const isEmlemdLegacy = tl.includes('emlemd') || tl.includes('emblemd');
     const isTigerSquareLegacy = tl.includes('tiger square');
-    const isFixedTiger = isEmlemdLegacy || isMaiChe || isTranhDenLegacy || isTigerSquareLegacy;
+    const isFixedTiger = !isNPP && (isEmlemdLegacy || isMaiChe || isTranhDenLegacy || isTigerSquareLegacy);
 
     const isLogoIndoor = (item.type === 'Logo indoor' || tl.includes('logo indoor'));
     const isLogoIndoorTiger = isLogoIndoor && (item.brand === 'Tiger');
@@ -640,148 +685,101 @@ function renderRequestItems() {
         ` : ''}
 
         <div class="space-y-3">
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Loại bảng hiệu</label>
+          <!-- HÀNG 1: Loại bảng hiệu (100% khi chưa chọn -> thu về 50% khi chọn) + Brand (25%) + Hình thức (25%) -->
+          <div class="req-row-type-brand" id="reqRowMain-${item.id}">
+            <!-- Ô Loại bảng hiệu -->
+            <div class="req-col-type ${!item.type || isOther ? 'is-full' : 'is-shrunk'}">
+              <label class="block text-xs text-gray-500 mb-1">Loại bảng hiệu</label>
               <div class="custom-select" data-id="${item.id}" data-field="type">
-              <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')"><span class="cs-label">${item.type ? (item.type === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' : escapeHtml(item.type)) : 'Chọn loại bảng hiệu'}</span></button>
-              <div class="cs-options hidden ${index >= 1 ? 'dropup' : ''}">
-                ${signTypes.map(t => t === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml('Bảng hiflex 2 mặt ')}<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span></div>` : `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
+                <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')">
+                  <span class="cs-label">${item.type ? (item.type === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' : escapeHtml(item.type)) : 'Chọn loại bảng hiệu'}</span>
+                </button>
+                <div class="cs-options hidden ${index >= 1 ? 'dropup' : ''}">
+                  ${availableSignTypes.map(t => t === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml('Bảng hiflex 2 mặt ')}<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span></div>` : `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
+                </div>
               </div>
+            </div>
+
+            <!-- Ô Brand -->
+            <div class="req-col-brand ${!item.type || isOther ? 'is-hidden' : 'is-shown'}">
+              <label class="block text-xs text-gray-500 mb-1">Brand</label>
+              ${isNPP ? `
+                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Kênh NPP cố định thương hiệu Heineken">
+                  <span>Heineken</span>
+                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <input type="hidden" name="brand-${item.id}" value="Heineken">
+              ` : isFixedTiger ? `
+                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                  <span>Tiger</span>
+                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <input type="hidden" name="brand-${item.id}" value="Tiger">
+              ` : `
+                <div class="custom-select" data-id="${item.id}" data-field="brand">
+                  <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
+                  <div class="cs-options hidden">
+                    ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
+                  </div>
+                </div>
+              `}
+            </div>
+
+            <!-- Ô Hình thức -->
+            <div class="req-col-action ${!item.type || isOther || !hasBrandAndAction ? 'is-hidden' : 'is-shown'}">
+              <label class="block text-xs text-gray-500 mb-1">Hình thức</label>
+              ${isFixedAction ? `
+                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                  <span>Làm mới</span>
+                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <input type="hidden" name="action-${item.id}" value="Làm mới">
+              ` : `
+                <div class="custom-select" data-id="${item.id}" data-field="action">
+                  <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
+                  <div class="cs-options hidden">
+                    ${getActionsForItem(item.type, item).map(act => `<div class="cs-option" data-value="${escapeHtml(act)}">${escapeHtml(act)}</div>`).join('')}
+                  </div>
+                </div>
+              `}
             </div>
           </div>
 
-          ${item.type && !isOther ? `
-            ${hasBrandAndAction ? `
-              <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs text-gray-500 mb-1">Brand</label>
-                  ${isFixedTiger ? `
-                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
-                      <span>Tiger</span>
-                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    </div>
-                    <input type="hidden" name="brand-${item.id}" value="Tiger">
-                  ` : `
-                    <div class="custom-select" data-id="${item.id}" data-field="brand">
-                      <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
-                      <div class="cs-options hidden">
-                        ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
-                      </div>
-                    </div>
-                  `}
-                </div>
-                <div>
-                  <label class="block text-xs text-gray-500 mb-1">Hình thức</label>
-                  ${isFixedAction ? `
-                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
-                      <span>Làm mới</span>
-                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    </div>
-                    <input type="hidden" name="action-${item.id}" value="Làm mới">
-                  ` : `
-                    <div class="custom-select" data-id="${item.id}" data-field="action">
-                      <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
-                      <div class="cs-options hidden">
-                        ${getActionsForItem(item.type, item).map(act => `<div class="cs-option" data-value="${escapeHtml(act)}">${escapeHtml(act)}</div>`).join('')}
-                      </div>
-                    </div>
-                  `}
+          ${isLogoIndoorTiger || isLogoIndoorHeineken ? `
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Phân loại</label>
+              <div class="custom-select" data-id="${item.id}" data-field="subType">
+                <button type="button" id="subType-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'subType')">
+                  <span class="cs-label">${item.subType ? escapeHtml(getLogoSubTypeLabel(item.subType)) : 'Chọn phân loại'}</span>
+                </button>
+                <div class="cs-options hidden">
+                  ${(isLogoIndoorTiger ? tigerLogoSubTypes : (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : [])).map(s => `<div class="cs-option" data-value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</div>`).join('')}
                 </div>
               </div>
-            ` : `
-              <div>
-                <label class="block text-xs text-gray-500 mb-1">Brand</label>
-                ${isFixedTiger ? `
-                  <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
-                    <span>Tiger</span>
-                    <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                  </div>
-                  <input type="hidden" name="brand-${item.id}" value="Tiger">
-                ` : `
-                  <div class="custom-select" data-id="${item.id}" data-field="brand">
-                    <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
-                    <div class="cs-options hidden">
-                      ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
-                    </div>
-                  </div>
-                `}
-              </div>
-            `}
+            </div>
+          ` : ''}
 
-            ${isLogoIndoorTiger || isLogoIndoorHeineken ? `
-              <div>
-                <label class="block text-xs text-gray-500 mb-1">Phân loại</label>
-                <div class="custom-select" data-id="${item.id}" data-field="subType">
-                  <button type="button" id="subType-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'subType')">
-                    <span class="cs-label">${item.subType ? escapeHtml(getLogoSubTypeLabel(item.subType)) : 'Chọn phân loại'}</span>
-                  </button>
-                  <div class="cs-options hidden">
-                    ${(isLogoIndoorTiger ? tigerLogoSubTypes : (typeof heinekenLogoSubTypes !== 'undefined' ? heinekenLogoSubTypes : [])).map(s => `<div class="cs-option" data-value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</div>`).join('')}
-                  </div>
-                </div>
-              </div>
-            ` : ''}
-
-            ${hasBrandAndAction ? `
-              <div>
-                ${item.action === 'Di dời' ? `
-                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
-                    <span>Yêu cầu riêng</span>
-                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Tên quán lấy Logo</span>
-                  </label>
-                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập tên quán nơi lấy Logo và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
-                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
-                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <span>Bạn bắt buộc phải nhập tên quán nơi lấy Logo và yêu cầu khác nếu có</span>
-                  </p>
-                ` : item.action === 'Thu hồi' ? `
-                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
-                    <span>Yêu cầu riêng</span>
-                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Nơi lưu trữ</span>
-                  </label>
-                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập nơi lưu trữ và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
-                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
-                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <span>Bạn bắt buộc phải nhập nơi lưu trữ và yêu cầu khác nếu có</span>
-                  </p>
-                ` : `
-                  <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
-                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="2" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
-                `}
-              </div>
-            ` : ''}
-
-            ${!item.survey ? `
-            <div class="py-2">
-              <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
-                <span class="${noPoles ? 'text-gray-400' : ''}">Số trụ</span>
-                <span>Kích thước cũ</span>
-              </div>
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex items-center gap-3">
-                  <div class="flex items-center gap-2" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : ''}>
-                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, -1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">-</button>
-                    <input id="poles-${item.id}" type="text" ${noPoles ? `readonly onclick="showDefaultFieldToast(event)"` : ''} inputmode="numeric" pattern="\\d*" value="${noPoles ? 0 : (item.poles || 0)}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-12 h-8 px-2 border border-gray-200 rounded-lg text-sm text-center ${noPoles ? 'opacity-50 bg-gray-100 cursor-not-allowed text-gray-400' : ''}">
-                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, 1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">+</button>
-                    <span class="text-xs ${noPoles ? 'text-gray-400' : 'text-gray-500'}">trụ</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-3">
+          <!-- HÀNG 2: Kích thước cũ (1 cột) + Ngang (1 cột) + Cao (1 cột) + Số trụ (1 cột) -->
+          ${!item.survey && item.type && !isOther ? `
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+              <!-- 1. Kích thước cũ toggle ở ĐẦU TIÊN -->
+              <div class="col-span-1">
+                <label class="block text-xs text-gray-500 mb-1">Kích thước cũ</label>
+                <div class="flex items-center h-10">
                   <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} ${isFixedSize || isLogoIndoorHeineken || isLogoOutdoorFixed ? 'opacity-40 cursor-not-allowed' : ''} rounded-full p-0.5 relative">
                     <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
                   </button>
                 </div>
               </div>
-            </div>
 
-            ${isLogoIndoorHeineken ? `
-              ${!item.subType ? `
-                <div class="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                  Vui lòng chọn Phân loại để chọn kích thước
-                </div>
-              ` : `
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
+              <!-- 2 & 3. Ngang (m) và Cao (m) -->
+              ${isLogoIndoorHeineken ? `
+                ${!item.subType ? `
+                  <div class="col-span-2 py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                    Vui lòng chọn Phân loại để chọn kích thước
+                  </div>
+                ` : `
+                  <div class="col-span-1">
                     <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                     <div class="custom-select" data-id="${item.id}" data-field="heinekenWidth">
                       <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenWidth')">
@@ -796,7 +794,7 @@ function renderRequestItems() {
                       </div>
                     </div>
                   </div>
-                  <div>
+                  <div class="col-span-1">
                     <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                     <div class="custom-select" data-id="${item.id}" data-field="heinekenHeight">
                       <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenHeight')">
@@ -811,11 +809,9 @@ function renderRequestItems() {
                       </div>
                     </div>
                   </div>
-                </div>
-              `}
-            ` : isLogoOutdoorFixed ? `
-              <div class="grid grid-cols-2 gap-3">
-                <div>
+                `}
+              ` : isLogoOutdoorFixed ? `
+                <div class="col-span-1">
                   <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                   <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoWidth">
                     <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoWidth')">
@@ -830,7 +826,7 @@ function renderRequestItems() {
                     </div>
                   </div>
                 </div>
-                <div>
+                <div class="col-span-1">
                   <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                   <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoHeight">
                     <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoHeight')">
@@ -845,10 +841,8 @@ function renderRequestItems() {
                     </div>
                   </div>
                 </div>
-              </div>
-            ` : !item.useOldSize ? `
-              <div class="grid grid-cols-2 gap-3">
-                <div>
+              ` : !item.useOldSize ? `
+                <div class="col-span-1">
                   <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                   ${isFixedSize ? `
                     <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
@@ -860,7 +854,7 @@ function renderRequestItems() {
                     <input id="width-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.width}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'width', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
                   `}
                 </div>
-                <div>
+                <div class="col-span-1">
                   <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                   ${isFixedSize ? `
                     <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
@@ -872,13 +866,56 @@ function renderRequestItems() {
                     <input id="height-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.height}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'height', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
                   `}
                 </div>
+              ` : `
+                <div class="col-span-2">
+                  <label class="block text-xs text-gray-500 mb-1">Kích thước</label>
+                  <div class="h-10 px-3 flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg text-xs text-gray-500 italic">
+                    Sử dụng theo kích thước cũ
+                  </div>
+                </div>
+              `}
+
+              <!-- 4. Số trụ ở CUỐI CÙNG -->
+              <div class="col-span-1">
+                <label class="block text-xs text-gray-500 mb-1 ${noPoles ? 'text-gray-400' : ''}">Số trụ</label>
+                <div class="poles-counter-box flex items-center gap-1.5 h-10 px-2 bg-gray-100 dark:bg-slate-900 border border-gray-200 dark:border-white/10 rounded-xl" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : ''}>
+                  <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, -1)"`} class="w-7 h-7 flex items-center justify-center bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded-lg text-sm font-semibold transition-colors ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">-</button>
+                  <input id="poles-${item.id}" type="text" ${noPoles ? `readonly onclick="showDefaultFieldToast(event)"` : ''} inputmode="numeric" pattern="\\d*" value="${noPoles ? 0 : (item.poles || 0)}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-10 h-7 bg-transparent text-center font-bold text-sm ${noPoles ? 'opacity-50 cursor-not-allowed text-gray-400' : ''}">
+                  <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, 1)"`} class="w-7 h-7 flex items-center justify-center bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded-lg text-sm font-semibold transition-colors ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">+</button>
+                  <span class="text-xs ml-0.5 ${noPoles ? 'text-gray-400' : 'text-gray-500'}">trụ</span>
+                </div>
               </div>
-            ` : `
-              <div class="py-2 px-3 bg-gray-200 rounded-lg text-sm text-gray-600">
-                Sử dụng theo kích thước cũ
-              </div>
-            `}
-            ` : ''}
+            </div>
+          ` : ''}
+
+          <!-- HÀNG 3: Yêu cầu riêng -->
+          ${item.type && !isOther && hasBrandAndAction ? `
+            <div>
+              ${item.action === 'Di dời' ? `
+                <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                  <span>Yêu cầu riêng</span>
+                  <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Tên quán lấy Logo</span>
+                </label>
+                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập tên quán nơi lấy Logo và yêu cầu khác nếu có..." rows="3" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                  <span>Bạn bắt buộc phải nhập tên quán nơi lấy Logo và yêu cầu khác nếu có</span>
+                </p>
+              ` : item.action === 'Thu hồi' ? `
+                <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                  <span>Yêu cầu riêng</span>
+                  <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Nơi lưu trữ</span>
+                </label>
+                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập nơi lưu trữ và yêu cầu khác nếu có..." rows="3" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                  <span>Bạn bắt buộc phải nhập nơi lưu trữ và yêu cầu khác nếu có</span>
+                </p>
+              ` : `
+                <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
+                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
+              `}
+            </div>
           ` : ''}
 
           ${isOther ? `
@@ -900,6 +937,38 @@ function renderRequestItems() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const value = opt.getAttribute('data-value') || '';
+        if (field === 'type') {
+          const row = document.getElementById(`reqRowMain-${id}`);
+          const colType = row ? row.querySelector('.req-col-type') : null;
+          const colBrand = row ? row.querySelector('.req-col-brand') : null;
+          const colAction = row ? row.querySelector('.req-col-action') : null;
+          if (colType && colType.classList.contains('is-full')) {
+            closeAllCustomSelects();
+            const trigLabel = cs.querySelector('.cs-label');
+            if (trigLabel) {
+              trigLabel.innerHTML = value === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' 
+                ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' 
+                : escapeHtml(value);
+            }
+            // Kích hoạt transition thu về cực mượt
+            colType.classList.remove('is-full');
+            colType.classList.add('is-shrunk');
+            if (value !== 'Hạng mục khác') {
+              if (colBrand) {
+                colBrand.classList.remove('is-hidden');
+                colBrand.classList.add('is-shown');
+              }
+              if (colAction) {
+                colAction.classList.remove('is-hidden');
+                colAction.classList.add('is-shown');
+              }
+            }
+            setTimeout(() => {
+              chooseCustomOption(parseInt(id, 10), field, value);
+            }, 300);
+            return;
+          }
+        }
         chooseCustomOption(parseInt(id, 10), field, value);
       });
     });
@@ -964,7 +1033,22 @@ function attachValidationClearing() {
       el.addEventListener('input', saver);
       el.addEventListener('change', saver);
     });
-    // oldContent image upload removed — no oldInput listener needed
+    // Gắn kiểm tra trùng Outlet realtime ngay khi gõ đủ 8 số hoặc blur/paste
+    const ocEl = document.getElementById('outletCode');
+    if (ocEl && !ocEl._boundRealtimeLock) {
+      ocEl._boundRealtimeLock = true;
+      const runRealtimeDuplicateCheck = () => {
+        try { checkOutletDuplicate(); } catch (e) {}
+      };
+      ocEl.addEventListener('input', () => {
+        const val = (ocEl.value || '').trim();
+        if (/^\d{8}$/.test(val)) {
+          runRealtimeDuplicateCheck();
+        }
+      });
+      ocEl.addEventListener('blur', runRealtimeDuplicateCheck);
+      ocEl.addEventListener('paste', () => setTimeout(runRealtimeDuplicateCheck, 50));
+    }
   } catch (e) {}
 }
 
@@ -1083,6 +1167,20 @@ function validateTab1() {
     showToast('Vui lòng điền đầy đủ thông tin');
     return;
   }
+
+  // Region check for TBA / NPP
+  const isMultiReg = (typeof currentSession !== 'undefined' && currentSession)
+    ? (currentSession.saleType === 'tba' || currentSession.saleType === 'npp' || currentSession.isTBA || currentSession.isNPP)
+    : false;
+  if (isMultiReg) {
+    const selRegion = (document.getElementById('newReqSelectedRegion') && document.getElementById('newReqSelectedRegion').value) || '';
+    if (!selRegion) {
+      const wrapper = document.getElementById('newReqRegionWrapper');
+      if (wrapper) markFieldError(wrapper);
+      showToast('Vui lòng chọn khu vực điểm bán');
+      return;
+    }
+  }
   // outlet code must be exactly 8 digits, allow literal 'New Outlet' when toggle is used
   try {
     if (code !== 'New Outlet' && !/^\d{8}$/.test(code)) {
@@ -1131,10 +1229,15 @@ function validateTab1() {
     localStorage.setItem(OUTLET_DRAFT_KEY, JSON.stringify(draft));
     _justLoggedIn = false; // after confirming step 1, subsequent requests skip it
   } catch (e) {}
-  // If outlet matches an existing request, require explicit confirmation to continue
+  // If outlet matches an existing request, require explicit confirmation or block if pending
   checkOutletDuplicate();
+  if (duplicateOutletState && duplicateOutletState.mode === 'pending') {
+    showToast('Outlet này đang có yêu cầu chưa sản xuất. Bạn chỉ được chỉnh sửa trên yêu cầu cũ!');
+    showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+    return;
+  }
   if (duplicateOutletState && !userConfirmedNewForOutlet) {
-    // duplicate modal is shown by checkOutletDuplicate(); stop here until user picks an action
+    showDuplicateOutletModal(duplicateOutletState.existingRequests);
     return;
   }
   // Block if waiting for takeover confirmation of another sale's outlet
@@ -1221,9 +1324,10 @@ async function submitNewRequest() {
   const content = document.getElementById('signContent').value.trim();
   let hasError = false;
 
-  // Only require content when there is at least one signage item (Bảng or Hộp đèn)
+  // Only require content when there is at least one signage item (Bảng or Hộp đèn, bạt, alu, mái che...)
   if (hasSignageItems() && !isOldContent && !content) {
     markFieldError(document.getElementById('signContent'));
+    showToast('Hạng mục bảng hiệu bắt buộc phải có nội dung (nhập nội dung hoặc bật Sử dụng nội dung cũ)');
     hasError = true;
   }
   // Old content image upload removed — no image validation needed for oldContent
@@ -1297,17 +1401,24 @@ async function submitNewRequest() {
     return;
   }
 
+  const reqRegion = (document.getElementById('newReqSelectedRegion') && document.getElementById('newReqSelectedRegion').value) || (currentSession && currentSession.region) || '';
+  const sessionForReq = { ...(currentSession || {}) };
+  if (reqRegion) sessionForReq.region = reqRegion;
+
   const request = {
     type: 'new',
     outletCode: document.getElementById('outletCode').value.trim(),
     outletName: document.getElementById('outletName').value.trim(),
     address: document.getElementById('address').value.trim(),
+    region: reqRegion,
     outletLat: document.getElementById('outletLat').value || '',
     outletLng: document.getElementById('outletLng').value || '',
     locationSource: (document.getElementById('locationSource') || {}).value || 'manual',
     phone: document.getElementById('phone').value.trim(),
     items: JSON.stringify(currentRequestItems),
-    content: isOldContent ? '' : content,
+    content: isOldContent
+      ? ((document.getElementById('signContent') && document.getElementById('signContent').value.trim()) || (window._lastOutletOldContent || '') || content || '')
+      : content,
     oldContent: isOldContent,
     oldContentExtra: isOldContent ? (document.getElementById('oldContentExtra')||{value:''}).value.trim() : '',
     statusImages: JSON.stringify(_compressedStatusDataUrls),  // ← Images included directly
@@ -1315,13 +1426,25 @@ async function submitNewRequest() {
     acceptanceImages: '[]',
     createdAt: new Date().toISOString(),
     status: 'pending',
-    requester: JSON.stringify(currentSession || {}),
+    requester: JSON.stringify(sessionForReq),
     __backendId: __preBackendId,
+    allowDuplicate: Boolean(userConfirmedNewForOutlet),
+    userConfirmedNewForOutlet: Boolean(userConfirmedNewForOutlet)
   };
 
   // NOTE: Images are now included directly in the POST body (compressed base64).
   // The backend uploads them to GCS atomically during request creation.
   // No more background PATCH needed — images are guaranteed to be saved.
+
+  // Hard block: Cannot submit new request if outlet currently has an active unproduced request
+  if (duplicateOutletState && duplicateOutletState.mode === 'pending') {
+    showToast('Outlet này đã tạo yêu cầu và chưa sản xuất. Bạn chỉ được chỉnh sửa trên yêu cầu cũ!');
+    btn.disabled = false;
+    btn.textContent = 'Xác nhận yêu cầu';
+    _isNewRequestSubmitting = false;
+    showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+    return;
+  }
 
   // If user previously confirmed "Hạng mục mới" for this outlet, ensure items are not identical to the latest existing request
   try {
@@ -1409,7 +1532,7 @@ async function submitNewRequest() {
       return;
     } else {
       hideLoadingOverlay();
-      showToast('Lỗi tạo yêu cầu');
+      showToast((result && result.message) || 'Lỗi tạo yêu cầu');
     }
   } else {
     request.__backendId = generateBackendId();
@@ -1576,15 +1699,48 @@ function resetNewRequestForm() {
     if (sb) { sb.disabled = false; sb.textContent = 'Xác nhận yêu cầu'; }
   } catch (e) {}
   switchTab(1);
+  initNewRequestRegionUI();
   try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
+}
+
+function initNewRequestRegionUI() {
+  const wrapper = document.getElementById('newReqRegionWrapper');
+  const input = document.getElementById('newReqSelectedRegion');
+  if (!wrapper || !input) return;
+
+  const isMultiReg = (typeof currentSession !== 'undefined' && currentSession)
+    ? (currentSession.saleType === 'tba' || currentSession.saleType === 'npp' || currentSession.isTBA || currentSession.isNPP)
+    : false;
+
+  if (isMultiReg) {
+    wrapper.classList.remove('hidden');
+    input.value = '';
+    document.querySelectorAll('.req-region-btn').forEach(b => b.classList.remove('selected'));
+  } else {
+    wrapper.classList.add('hidden');
+    input.value = (currentSession && currentSession.region) || '';
+  }
+}
+
+function selectNewReqRegion(btn, region) {
+  const input = document.getElementById('newReqSelectedRegion');
+  if (input) input.value = region || '';
+  document.querySelectorAll('.req-region-btn').forEach(b => b.classList.remove('selected'));
+  if (btn) btn.classList.add('selected');
+  const wrapper = document.getElementById('newReqRegionWrapper');
+  if (wrapper) wrapper.classList.remove('field-error');
 }
 
 // Return true when we have at least one signage-related item
 function hasSignageItems() {
   try {
+    if (typeof qcagHasSignageItems === 'function') {
+      return qcagHasSignageItems(currentRequestItems);
+    }
     return Array.isArray(currentRequestItems) && currentRequestItems.some(i => {
-      const t = String((i && i.type) || '').toLowerCase();
-      return t.includes('bảng') || t.includes('hộp đèn') || t.includes('mái che') || t.includes('mai che') || t.includes('mái hiên') || t.includes('mai hien') || t.includes('rèm') || t.includes('rem');
+      const t = String((i && (i.type || i.name || i.category)) || '').toLowerCase();
+      if (t.includes('logo') && !t.includes('bảng') && !t.includes('hộp đèn') && !t.includes('alu') && !t.includes('bạt')) return false;
+      return t.includes('bảng') || t.includes('hộp đèn') || t.includes('mái che') || t.includes('mai che') || t.includes('mái hiên') || t.includes('mai hien') || t.includes('rèm') || t.includes('rem') || t.includes('alu') || t.includes('bạt') || t.includes('hiflex') || t.includes('decal') || t.includes('mica');
     });
   } catch (e) { return false; }
 }
@@ -1635,18 +1791,60 @@ function checkOutletDuplicate() {
       } catch (e) { return false; }
     }
 
+    function isReqProducedHelper(r) {
+      if (!r) return false;
+      if (typeof window._checkRequestLockState === 'function') {
+        const lock = window._checkRequestLockState(r);
+        if (lock && (lock.isProduced || lock.isInProduction || lock.isDone)) return true;
+      }
+      const q = r.bridge || (window._quoteDataMap && window._quoteDataMap[r.__backendId]);
+      if (q) {
+        const ordNo = String(q.order_number || q.orderNumber || '').trim();
+        if (ordNo && ordNo !== '---' && ordNo !== 'null' && ordNo !== 'Chưa có code') return true;
+        const qSt = String(q.qcag_status || q.qcagStatus || '').toLowerCase();
+        if (qSt.includes('đã ra đơn') || qSt.includes('sản xuất') || qSt.includes('hoàn thành')) return true;
+      }
+      return false;
+    }
+
     const matches = (allRequests || [])
-      .filter(r => (r.type === 'new') && ((r.outletCode || '').toString().toLowerCase() === code.toLowerCase()) && isOwnedByCurrentSession(r))
+      .filter(r => (r.type === 'new') && ((r.outletCode || '').toString().toLowerCase() === code.toLowerCase()) && isOwnedByCurrentSession(r) && !r.isCancelled && r.status !== 'cancelled' && r.status !== 'bao_huy')
       .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     if (matches && matches.length > 0) {
-      const mostRecent = matches[0];
-      // Always update state and show modal so user is warned each time they enter a duplicated code
-      duplicateOutletState = { outletCode: code, existingRequest: mostRecent, existingRequests: matches };
-      userConfirmedNewForOutlet = false;
-      // Clear other-outlet state since own match takes priority
-      otherOutletState = null;
-      userConfirmedTakeover = false;
-      showDuplicateOutletModal(matches);
+      const pendingMatches = matches.filter(r => !isReqProducedHelper(r));
+      const producedMatches = matches.filter(r => isReqProducedHelper(r));
+
+      if (pendingMatches.length > 0) {
+        // LUỒNG 1: Có yêu cầu CHƯA RA ĐƠN -> Chặn tạo mới, chỉ cho phép chỉnh sửa trên yêu cầu cũ
+        const activeReq = pendingMatches[0];
+        duplicateOutletState = {
+          mode: 'pending',
+          outletCode: code,
+          activeRequest: activeReq,
+          allPending: pendingMatches,
+          existingRequest: activeReq,
+          existingRequests: matches
+        };
+        userConfirmedNewForOutlet = false;
+        otherOutletState = null;
+        userConfirmedTakeover = false;
+        showDuplicateOutletModal(matches);
+      } else {
+        // LUỒNG 2: Tất cả các yêu cầu trước đó ĐÃ RA ĐƠN / SẢN XUẤT -> Cho phép hỏi làm thêm bảng hiệu
+        const latestProduced = producedMatches[0];
+        duplicateOutletState = {
+          mode: 'produced',
+          outletCode: code,
+          latestProduced: latestProduced,
+          existingRequest: latestProduced,
+          existingRequests: matches
+        };
+        userConfirmedNewForOutlet = false;
+        otherOutletState = null;
+        userConfirmedTakeover = false;
+        showDuplicateOutletModal(matches);
+      }
     } else {
       duplicateOutletState = null;
       userConfirmedNewForOutlet = false;
@@ -1672,9 +1870,64 @@ function checkOutletDuplicate() {
       } else {
         otherOutletState = null;
         userConfirmedTakeover = false;
+        // Kiểm tra đối soát trực tiếp từ Database Neon Backend (kể cả khi quán được tạo ở App 1 hoặc chưa sync RAM)
+        checkOutletLockStateBackendApp2(code);
       }
     }
   } catch (e) {}
+}
+
+async function checkOutletLockStateBackendApp2(code) {
+  if (!code || !/^\d{8}$/.test(code)) return;
+  try {
+    const base = (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL) || '').replace(/\/+$/, '');
+    const res = await fetch(`${base}/api/outlets/${encodeURIComponent(code)}/lock-state`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && (data.ok || data.success)) {
+      if (data.state === 'locked_pending' || data.state === 'locked_approved') {
+        const isApproved = data.state === 'locked_approved';
+        const rec = data.record || {};
+        // Kiểm tra xem có phải quán của Sale khác không
+        const currentSale = currentSession && currentSession.saleCode ? String(currentSession.saleCode).trim().toLowerCase() : '';
+        const recSale = (data.saleCode || rec.sale_code || '').trim().toLowerCase();
+        if (recSale && currentSale && recSale !== currentSale) {
+          otherOutletState = {
+            outletCode: code,
+            matches: [rec],
+            ownerName: data.saleName || rec.sale_name || 'Sale khác'
+          };
+          userConfirmedTakeover = false;
+          showOtherOutletModal([rec]);
+          return;
+        }
+
+        duplicateOutletState = {
+          mode: 'pending',
+          outletCode: code,
+          backendLock: data,
+          existingRequest: rec,
+          allPending: [rec]
+        };
+        userConfirmedNewForOutlet = false;
+        showDuplicateOutletModal([rec]);
+      } else if (data.state === 'confirm_new_phase') {
+        const rec = data.record || {};
+        duplicateOutletState = {
+          mode: 'produced',
+          outletCode: code,
+          backendLock: data,
+          latestProduced: rec,
+          existingRequest: rec,
+          existingRequests: [rec]
+        };
+        userConfirmedNewForOutlet = false;
+        showDuplicateOutletModal([rec]);
+      }
+    }
+  } catch (err) {
+    console.warn('[APP2_BACKEND_LOCK_CHECK] error:', err);
+  }
 }
 
 async function pasteToOutletCode() {
@@ -1739,76 +1992,154 @@ function toggleNewOutlet() {
   } catch (e) {}
 }
 
+function closeDuplicateOutletModalSilent() {
+  try {
+    const modal = document.getElementById('duplicateOutletModal');
+    if (modal) modal.classList.add('hidden');
+    disableModalBackdrop();
+  } catch (e) {}
+}
+
 function showDuplicateOutletModal(existingOrArray) {
   try { blurActiveInput(); } catch (e) {}
   try { enableModalBackdrop(); } catch (e) {}
   const modal = document.getElementById('duplicateOutletModal');
-  const msg = document.getElementById('duplicateOutletMessage');
-  if (!modal || !msg || !existingOrArray) return;
+  const titleEl = document.getElementById('duplicateOutletTitle');
+  const msgEl = document.getElementById('duplicateOutletMessage');
+  const confirmQ = document.getElementById('duplicateOutletConfirmQuestion');
+  const iconEl = document.getElementById('duplicateOutletIcon');
+  const btnPrimary = document.getElementById('dupPrimaryBtn');
+  const btnSecondary = document.getElementById('dupSecondaryBtn');
+  if (!modal || !existingOrArray) return;
+
   try {
-    const matches = Array.isArray(existingOrArray) ? existingOrArray : [existingOrArray];
-    const count = matches.length;
-    const nowYear = new Date().getFullYear();
-    const matchesThisYear = matches.filter(m => {
-      try { return new Date(m.createdAt).getFullYear() === nowYear; } catch (e) { return false; }
-    });
+    const isPendingMode = duplicateOutletState && duplicateOutletState.mode === 'pending';
+    const activeReq = isPendingMode
+      ? (duplicateOutletState.activeRequest || duplicateOutletState.existingRequest)
+      : (duplicateOutletState && duplicateOutletState.latestProduced ? duplicateOutletState.latestProduced : (duplicateOutletState && duplicateOutletState.existingRequest));
 
-    // If there are no requests in the current year but there are older requests,
-    // do NOT show a warning modal — instead autofill Tab1 from the most recent previous request.
-    if ((matchesThisYear.length === 0) && matches.length > 0) {
-      // use the most recent overall (matches is already sorted by createdAt desc by caller)
-      const mostRecent = matches[0];
-      duplicateOutletState = { outletCode: (mostRecent.outletCode || '').toString(), existingRequest: mostRecent, existingRequests: matches };
-      userConfirmedNewForOutlet = false;
-      // autofill Tab1 fields silently
-      try { fillOutletFieldsFromExisting(mostRecent); } catch (e) {}
-      return;
+    if (isPendingMode) {
+      // ══════════════════════════════════════════════════════════════════
+      // LUỒNG 1: YÊU CẦU CHƯA SẢN XUẤT (Chặn tạo mới, chỉ cho sửa trên yêu cầu cũ)
+      // ══════════════════════════════════════════════════════════════════
+      if (iconEl) {
+        iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-amber-500/10 text-amber-500 border border-amber-500/20';
+        iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+      }
+      if (titleEl) titleEl.textContent = 'Yêu cầu chưa sản xuất';
+      if (msgEl) {
+        msgEl.innerHTML = 'Outlet này đã tạo yêu cầu và chưa sản xuất.<br><span class="text-amber-500 dark:text-amber-400 font-semibold">Bạn chỉ được chỉnh sửa trên yêu cầu cũ.</span>';
+      }
+      if (confirmQ) {
+        const tk = (activeReq && (activeReq.tkCode || activeReq.tk_code)) || 'Chưa cấp mã TK';
+        const createdStr = (activeReq && activeReq.createdAt) ? new Date(activeReq.createdAt).toLocaleString('vi-VN') : '';
+        confirmQ.innerHTML = `
+          <div class="mt-2 py-2 px-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-300 flex items-center justify-between">
+            <span><strong>Mã TK:</strong> ${escapeHtml(tk)}</span>
+            <span>${escapeHtml(createdStr)}</span>
+          </div>
+        `;
+      }
+
+      // Nút 1: Yêu cầu chỉnh sửa (Primary)
+      if (btnPrimary) {
+        btnPrimary.className = 'w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+        btnPrimary.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          <span>Yêu cầu chỉnh sửa</span>
+        `;
+        btnPrimary.onclick = function() {
+          const reqToOpen = activeReq;
+          closeDuplicateOutletModalSilent();
+          if (reqToOpen && reqToOpen.__backendId) {
+            showRequestDetail(reqToOpen.__backendId);
+            setTimeout(() => {
+              if (typeof openEditRequestSheet === 'function') {
+                window._editRequestOrigin = 'detail';
+                openEditRequestSheet();
+              }
+            }, 350);
+          }
+        };
+      }
+
+      // Nút 2: Xem chi tiết yêu cầu (Secondary)
+      if (btnSecondary) {
+        btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+        btnSecondary.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          <span>Xem chi tiết yêu cầu</span>
+        `;
+        btnSecondary.onclick = function() {
+          const reqToOpen = activeReq;
+          closeDuplicateOutletModalSilent();
+          if (reqToOpen && reqToOpen.__backendId) {
+            showRequestDetail(reqToOpen.__backendId);
+          }
+        };
+      }
+
+    } else {
+      // ══════════════════════════════════════════════════════════════════
+      // LUỒNG 2: OUTLET ĐÃ ĐƯỢC SẢN XUẤT (Cho phép làm thêm bảng hiệu mới)
+      // ══════════════════════════════════════════════════════════════════
+      const latestProd = (duplicateOutletState && duplicateOutletState.latestProduced) || activeReq;
+      let orderNo = '';
+      if (typeof window._checkRequestLockState === 'function' && latestProd) {
+        orderNo = window._checkRequestLockState(latestProd).orderNo || '';
+      }
+      if (!orderNo && latestProd && latestProd.bridge) {
+        orderNo = latestProd.bridge.order_number || '';
+      }
+
+      if (iconEl) {
+        iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
+        iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+      }
+      if (titleEl) titleEl.textContent = 'Outlet đã sản xuất';
+      if (msgEl) {
+        msgEl.innerHTML = 'Outlet này đã được sản xuất.<br><strong class="text-slate-800 dark:text-slate-100">Bạn có chắc sẽ làm thêm bảng hiệu cho outlet này?</strong>';
+      }
+      if (confirmQ) {
+        confirmQ.innerHTML = orderNo ? `
+          <div class="mt-2 py-2 px-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-300 flex items-center justify-between">
+            <span><strong>Đơn hàng trước:</strong> #${escapeHtml(orderNo)}</span>
+            <span>Đã hoàn tất sản xuất</span>
+          </div>
+        ` : '';
+      }
+
+      // Nút 1: Xem chi tiết yêu cầu (Secondary)
+      if (btnSecondary) {
+        btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+        btnSecondary.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          <span>Xem chi tiết yêu cầu</span>
+        `;
+        btnSecondary.onclick = function() {
+          const reqToOpen = latestProd;
+          closeDuplicateOutletModalSilent();
+          if (reqToOpen && reqToOpen.__backendId) {
+            showRequestDetail(reqToOpen.__backendId);
+          }
+        };
+      }
+
+      // Nút 2: Hạng mục mới (Primary)
+      if (btnPrimary) {
+        btnPrimary.className = 'w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+        btnPrimary.innerHTML = `
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>Hạng mục mới</span>
+        `;
+        btnPrimary.onclick = continueWithNewOutlet;
+      }
     }
 
-    if (matchesThisYear.length === 1) {
-      const m = matchesThisYear[0];
-      const t = (m && m.createdAt) ? new Date(m.createdAt).toLocaleString('vi-VN') : '';
-      // show 'Vào lúc' then newline with the timestamp on next line
-      try { msg.innerHTML = `Outlet này bạn đã yêu cầu vào lúc<br>${t}.`; } catch (e) { msg.textContent = `Outlet này bạn đã yêu cầu vào lúc ${t}.`; }
-      // configure View button to open this specific request (label: Xem lại Yêu Cầu)
-      try {
-        const viewBtn = document.getElementById('dupViewBtn');
-        if (viewBtn) {
-          viewBtn.textContent = 'Xem lại Yêu Cầu';
-          // reuse existing handler which hides modal and disables backdrop
-          viewBtn.onclick = openExistingRequestFromDuplicateModal;
-        }
-      } catch (e) {}
-      duplicateOutletState = { outletCode: (m.outletCode || '').toString(), existingRequest: m, existingRequests: matchesThisYear };
-      userConfirmedNewForOutlet = false;
-      modal.classList.remove('hidden');
-      try { enableModalBackdrop(); } catch (e) {}
-      return;
-    }
-
-    // 2 or more requests in current year — show count message and link to list
-    if (matchesThisYear.length >= 2) {
-      msg.textContent = `Bạn có ${matchesThisYear.length} yêu cầu trong năm ${nowYear}.`;
-      try {
-        const viewBtn = document.getElementById('dupViewBtn');
-        if (viewBtn) {
-          viewBtn.textContent = 'Xem danh sách';
-          viewBtn.onclick = openOutletRequestListFromDuplicateModal;
-        }
-      } catch (e) {}
-      // store most recent of this year as existingRequest for fallback open
-      const mostRecentThisYear = matchesThisYear[0];
-      duplicateOutletState = { outletCode: (mostRecentThisYear.outletCode || '').toString(), existingRequest: mostRecentThisYear, existingRequests: matchesThisYear };
-      userConfirmedNewForOutlet = false;
-      modal.classList.remove('hidden');
-      try { enableModalBackdrop(); } catch (e) {}
-      return;
-    }
-  } catch (e) {
-    // fallback
-    msg.textContent = 'Outlet này đã có yêu cầu trước đó.';
     modal.classList.remove('hidden');
-    try { enableModalBackdrop(); } catch (e) {}
+    enableModalBackdrop();
+  } catch (err) {
+    console.error('[showDuplicateOutletModal] error:', err);
   }
 }
 
@@ -1838,14 +2169,13 @@ function fillOutletFieldsFromExisting(ex) {
 }
 
 function openExistingRequestFromDuplicateModal() {
-  // kept for backward compatibility — open the most recent existing request
   const modal = document.getElementById('duplicateOutletModal');
   if (modal) modal.classList.add('hidden');
   try { disableModalBackdrop(); } catch (e) {}
   try {
-    if (duplicateOutletState && duplicateOutletState.existingRequest) {
-      const id = duplicateOutletState.existingRequest.__backendId;
-      if (id) showRequestDetail(id);
+    const target = duplicateOutletState && (duplicateOutletState.activeRequest || duplicateOutletState.latestProduced || duplicateOutletState.existingRequest);
+    if (target && target.__backendId) {
+      showRequestDetail(target.__backendId);
       return;
     }
   } catch (e) {}
@@ -1853,19 +2183,15 @@ function openExistingRequestFromDuplicateModal() {
 }
 
 function openOutletRequestListFromDuplicateModal() {
-  // Hide modal and open request list filtered for this outlet
   const modal = document.getElementById('duplicateOutletModal');
   if (modal) modal.classList.add('hidden');
   try { disableModalBackdrop(); } catch (e) {}
   try {
     const code = duplicateOutletState && duplicateOutletState.outletCode ? duplicateOutletState.outletCode : null;
     if (!code) { showToast('Không tìm thấy mã outlet'); return; }
-    // set list tab to 'new' and set global search query, then show list
     try { currentListTab = 'new'; } catch (e) {}
     try { currentListSearchQuery = (code || '').toString().trim().toLowerCase(); } catch (e) { currentListSearchQuery = ''; }
-    // update UI search input if present
     try { const si = document.getElementById('listSearchInput'); if (si) si.value = code; } catch (e) {}
-    // navigate to list screen and render
     showRequestList();
   } catch (e) { showToast('Không thể mở danh sách yêu cầu'); }
 }
@@ -1875,28 +2201,31 @@ function closeDuplicateOutletModal() {
     const modal = document.getElementById('duplicateOutletModal');
     if (modal) modal.classList.add('hidden');
     try { disableModalBackdrop(); } catch (e) {}
-    // reset duplicate state
+
+    // Nếu đang ở trạng thái Pending (Chưa sản xuất) mà bấm Đóng [X] -> Bắt buộc xóa mã Outlet để tránh lọt qua Tab 2!
+    const isPending = duplicateOutletState && duplicateOutletState.mode === 'pending';
+
     duplicateOutletState = null;
     userConfirmedNewForOutlet = false;
     otherOutletState = null;
     userConfirmedTakeover = false;
-    // clear Tab 1 fields
-    window.isOutletLockedLocation = false;
-    try { document.getElementById('outletCode').value = ''; } catch (e) {}
-    try { document.getElementById('outletName').value = ''; } catch (e) {}
-    try { document.getElementById('address').value = ''; } catch (e) {}
-    try { document.getElementById('phone').value = ''; } catch (e) {}
-    try { document.getElementById('outletLat').value = ''; } catch (e) {}
-    try { document.getElementById('outletLng').value = ''; } catch (e) {}
-    // reset location preview if present
-    try { const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí'; } catch (e) {}
-    // if New Outlet toggle is on, turn it off
-    try {
-      const nt = document.getElementById('newOutletToggle');
-      if (nt && nt.classList.contains('toggle-on')) toggleNewOutlet();
-    } catch (e) {}
-    // ensure paste button visible
-    try { const pb = document.getElementById('outletPasteBtn'); if (pb) pb.style.display = ''; } catch (e) {}
+
+    if (isPending) {
+      window.isOutletLockedLocation = false;
+      try { document.getElementById('outletCode').value = ''; } catch (e) {}
+      try { document.getElementById('outletName').value = ''; } catch (e) {}
+      try { document.getElementById('address').value = ''; } catch (e) {}
+      try { document.getElementById('phone').value = ''; } catch (e) {}
+      try { document.getElementById('outletLat').value = ''; } catch (e) {}
+      try { document.getElementById('outletLng').value = ''; } catch (e) {}
+      try { const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí'; } catch (e) {}
+      try {
+        const nt = document.getElementById('newOutletToggle');
+        if (nt && nt.classList.contains('toggle-on')) toggleNewOutlet();
+      } catch (e) {}
+      try { const pb = document.getElementById('outletPasteBtn'); if (pb) pb.style.display = ''; } catch (e) {}
+      showToast('Outlet này đang có yêu cầu chưa sản xuất. Đã xóa mã Outlet.');
+    }
   } catch (e) {}
   try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
 }
@@ -1905,29 +2234,18 @@ function continueWithNewOutlet() {
   const modal = document.getElementById('duplicateOutletModal');
   if (modal) modal.classList.add('hidden');
   try { disableModalBackdrop(); } catch (e) {}
+
   userConfirmedNewForOutlet = true;
-  // Also clear any lingering other-outlet state
   otherOutletState = null;
   userConfirmedTakeover = false;
-  // Fill only Tab 1 fields with the existing request's outlet info and close modal.
+
+  // Tự động điền lại thông tin Outlet từ yêu cầu đã sản xuất trước đó vào Tab 1
   try {
-    if (duplicateOutletState && duplicateOutletState.existingRequest) {
-      const ex = duplicateOutletState.existingRequest;
-      const setIf = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val == null ? '' : val); };
-      setIf('outletCode', ex.outletCode || '');
-      setIf('outletName', ex.outletName || '');
-      setIf('address', ex.address || '');
-      setIf('phone', ex.phone || '');
-      if (ex.outletLat) setIf('outletLat', ex.outletLat);
-      if (ex.outletLng) setIf('outletLng', ex.outletLng);
-      // update location preview if possible
-      try {
-        if (ex.outletLat && ex.outletLng && typeof setLocationPreview === 'function') {
-          setLocationPreview(ex.address || '', parseFloat(ex.outletLat), parseFloat(ex.outletLng));
-        } else {
-          const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí';
-        }
-      } catch (e) {}
+    const ex = duplicateOutletState && (duplicateOutletState.latestProduced || duplicateOutletState.existingRequest);
+    if (ex) {
+      window._lastOutletOldContent = (ex.content || ex.signContent || '').trim();
+      fillOutletFieldsFromExisting(ex);
+      showToast('Đã nạp thông tin Outlet. Vui lòng bấm Tiếp tục để chọn hạng mục.');
     }
   } catch (e) {}
 }
@@ -2151,7 +2469,7 @@ function initQuickFill() {
   if (hasSurvey) {
     const special = document.createElement('button');
     special.type = 'button';
-    special.className = 'quick-sample';
+    special.className = 'quick-sample quick-sample-chip';
     special.textContent = 'Theo khảo sát';
     special.setAttribute('data-value', '__survey__');
     special.addEventListener('click', (e) => {
@@ -2167,7 +2485,7 @@ function initQuickFill() {
   QUICK_SAMPLES.forEach(s => {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'quick-sample';
+    btn.className = 'quick-sample quick-sample-chip';
     btn.textContent = s;
     btn.setAttribute('data-value', s);
     btn.addEventListener('click', (e) => {

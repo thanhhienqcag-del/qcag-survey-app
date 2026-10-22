@@ -16,10 +16,14 @@ let _labelsLayer = null; // Transparent POI/label overlay for satellite mode
 let _currentMapMode = 'satellite'; // 'normal' or 'satellite'
 
 function openLocationModal() {
+  setMapExifStatus(null);
   document.getElementById('mapModal').classList.remove('hidden');
   document.getElementById('mapModal').classList.add('flex');
   // Default to map selection tab (user wants to pick on map first)
   switchLocTab('map');
+  setTimeout(() => {
+    if (lMap) lMap.invalidateSize();
+  }, 200);
 }
 
 function closeMapModal() {
@@ -27,16 +31,29 @@ function closeMapModal() {
   document.getElementById('mapModal').classList.remove('flex');
 }
 
+function _setPickedCoordsSub(lat, lng) {
+  const el = document.getElementById('pickedLatLngText');
+  if (!el) return;
+  if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+    el.textContent = `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+    el.style.display = 'inline';
+  } else {
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+}
+
 function switchLocTab(tab) {
   locCurrentTab = tab;
   document.getElementById('locPanelGPS').classList.toggle('hidden', tab !== 'gps');
   document.getElementById('locPanelMap').classList.toggle('hidden', tab !== 'map');
-  document.getElementById('locTabGPS').className = tab === 'gps'
-    ? 'flex-1 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white'
-    : 'flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700';
-  document.getElementById('locTabMap').className = tab === 'map'
-    ? 'flex-1 py-2 rounded-lg text-sm font-medium bg-gray-900 text-white'
-    : 'flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700';
+  const gpsBtn = document.getElementById('locTabGPS');
+  const mapBtn = document.getElementById('locTabMap');
+  const activeClass = 'flex-1 py-2 rounded-lg text-sm font-semibold bg-gray-900 dark:bg-emerald-600 text-white shadow-sm';
+  const inactiveClass = 'flex-1 py-2 rounded-lg text-sm font-medium border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+
+  if (gpsBtn) gpsBtn.className = tab === 'gps' ? activeClass : inactiveClass;
+  if (mapBtn) mapBtn.className = tab === 'map' ? activeClass : inactiveClass;
 
   if (tab === 'map') {
     initLeafletMap();
@@ -56,11 +73,13 @@ function initLeafletMap() {
       else lMarker.setLatLng([latVal, lngVal]);
       pickedLatLng = { lat: latVal, lng: lngVal };
       document.getElementById('pickedCoords').textContent = `${latVal.toFixed(6)}, ${lngVal.toFixed(6)}`;
+      _setPickedCoordsSub(latVal, lngVal);
     } else {
       // Chưa có vị trí đã lưu → xóa ghim cũ (chưa save) khỏi bản đồ
       pickedLatLng = null;
       if (lMarker) { lMarker.remove(); lMarker = null; }
       document.getElementById('pickedCoords').textContent = 'Tap vào bản đồ để chọn vị trí';
+      _setPickedCoordsSub(null, null);
     }
     _updateSaveBtn();
     return;
@@ -127,6 +146,7 @@ function initLeafletMap() {
         else lMarker.setLatLng([lat, lng]);
         pickedLatLng = { lat, lng };
         document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        _setPickedCoordsSub(lat, lng);
         _updateSaveBtn();
         reverseGeocode(lat, lng, (addr) => {
           if (addr) document.getElementById('pickedCoords').textContent = addr;
@@ -148,6 +168,7 @@ function initLeafletMap() {
     if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
     else lMarker.setLatLng([lat, lng]);
     document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    _setPickedCoordsSub(lat, lng);
     _updateSaveBtn();
     reverseGeocode(lat, lng, (addr) => {
       document.getElementById('pickedCoords').textContent = addr || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
@@ -158,8 +179,10 @@ function initLeafletMap() {
     lMarker = L.marker([latVal, lngVal]).addTo(lMap);
     pickedLatLng = { lat: latVal, lng: lngVal };
     document.getElementById('pickedCoords').textContent = `${latVal.toFixed(6)}, ${lngVal.toFixed(6)}`;
+    _setPickedCoordsSub(latVal, lngVal);
   } else {
     pickedLatLng = null;
+    _setPickedCoordsSub(null, null);
   }
   _updateSaveBtn();
 }
@@ -204,10 +227,10 @@ function _updateMapLayerToggle() {
   var btn = document.getElementById('mapLayerToggleBtn');
   if (!btn) return;
   if (_currentMapMode === 'satellite') {
-    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg> Bản đồ';
+    btn.innerHTML = '<svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg> <span class="map-layer-text">Bản đồ</span>';
     btn.title = 'Chuyển sang bản đồ thường';
   } else {
-    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Vệ tinh';
+    btn.innerHTML = '<svg class="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> <span class="map-layer-text">Vệ tinh</span>';
     btn.title = 'Chuyển sang chế độ vệ tinh';
   }
 }
@@ -361,6 +384,11 @@ function savePickedLocation() {
   setLocationPreview(displayText, pickedLatLng.lat, pickedLatLng.lng);
   closeMapModal();
   showToast('Đã lưu vị trí');
+  if (typeof window._onLocationPicked === 'function') {
+    const cb = window._onLocationPicked;
+    window._onLocationPicked = null;
+    cb(pickedLatLng.lat, pickedLatLng.lng);
+  }
 }
 
 function setLocationPreview(displayText, lat, lng) {
@@ -418,6 +446,7 @@ function clearLocationPreview() {
 }
 
 function openSavedLocation(latArg, lngArg) {
+  setMapExifStatus(null);
   let lat = typeof latArg !== 'undefined' ? parseFloat(latArg) : parseFloat(document.getElementById('outletLat').value || 0);
   let lng = typeof lngArg !== 'undefined' ? parseFloat(lngArg) : parseFloat(document.getElementById('outletLng').value || 0);
   if (!lat || !lng) { showToast('Không có vị trí đã lưu'); return; }
@@ -428,6 +457,7 @@ function openSavedLocation(latArg, lngArg) {
   switchLocTab('map');
   setTimeout(() => {
     if (lMap) {
+      lMap.invalidateSize();
       lMap.setView([lat, lng], 17);
       if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
       else lMarker.setLatLng([lat, lng]);
@@ -436,16 +466,35 @@ function openSavedLocation(latArg, lngArg) {
         document.getElementById('pickedCoords').textContent = addr || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
       });
     }
-  }, 300);
+  }, 200);
 }
 
 function openMapPicker() { switchLocTab('map'); }
+
+const LOCATE_ICON_SVG = '<svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><circle cx="12" cy="12" r="8"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="22"></line></svg> <span>Hiện tại</span>';
 
 // Center Leaflet map on user's current GPS position
 function locateMeOnMap() {
   if (!navigator.geolocation || !lMap) return;
   const btn = document.getElementById('locateMeBtn');
-  if (btn) btn.textContent = '...';
+  const span = btn ? btn.querySelector('span') : null;
+  const svg = btn ? btn.querySelector('svg') : null;
+  const originalText = span ? span.textContent : 'Hiện tại';
+
+  if (btn) {
+    btn.disabled = true;
+    if (span) span.textContent = 'Đang lấy...';
+    if (svg) svg.classList.add('animate-spin');
+  }
+
+  const restoreBtn = () => {
+    if (btn) {
+      btn.disabled = false;
+      if (span) span.textContent = originalText;
+      if (svg) svg.classList.remove('animate-spin');
+    }
+  };
+
   navigator.geolocation.getCurrentPosition((pos) => {
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
@@ -458,12 +507,13 @@ function locateMeOnMap() {
     pickedLatLng = { lat, lng };
     _updateSaveBtn();
     document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    _setPickedCoordsSub(lat, lng);
     reverseGeocode(lat, lng, (addr) => {
       if (addr) document.getElementById('pickedCoords').textContent = addr;
     });
-    if (btn) btn.textContent = '◎';
+    restoreBtn();
   }, (err) => {
-    if (btn) btn.textContent = '◎';
+    restoreBtn();
     showToast('Không lấy được vị trí');
   }, { enableHighAccuracy: true, timeout: 10000 });
 }
@@ -503,3 +553,133 @@ function showMultiLocationPicker(locations) {
     document.getElementById('pickedCoords').textContent = 'Chọn một ghim trên bản đồ';
   }, 500);
 }
+
+// ====================================================================
+// EXIF Photo GPS Extraction Module (Song song với chọn vị trí bản đồ)
+// ====================================================================
+
+function setMapExifStatus(type, message) {
+  const el = document.getElementById('mapExifStatus');
+  if (!el) return;
+  if (!type || !message) {
+    el.innerHTML = '';
+    return;
+  }
+  if (type === 'loading') {
+    el.innerHTML = `
+      <span class="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-medium text-xs">
+        <svg class="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span class="truncate">${message}</span>
+      </span>`;
+  } else if (type === 'success') {
+    el.innerHTML = `
+      <span class="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+        <span class="truncate">${message}</span>
+      </span>`;
+  } else if (type === 'error') {
+    el.innerHTML = `
+      <span class="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium text-xs" title="${message}">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <span class="truncate">${message}</span>
+      </span>`;
+  }
+}
+
+function triggerMapExifPicker() {
+  const input = document.getElementById('mapExifFileInput');
+  if (input) {
+    input.value = ''; // Cho phép chọn lại cùng một file
+    input.click();
+  }
+}
+
+function handleMapExifFileInput(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  const file = input.files[0];
+  processMapExifFile(file);
+}
+
+function processMapExifFile(file) {
+  if (!file) return;
+  setMapExifStatus('loading', 'Đang trích xuất toạ độ GPS từ EXIF...');
+
+  let exifPromise;
+  if (typeof getExifLocation === 'function') {
+    exifPromise = getExifLocation(file);
+  } else if (typeof EXIF !== 'undefined') {
+    exifPromise = new Promise(function(resolve) {
+      try {
+        EXIF.getData(file, function() {
+          const lat = EXIF.getTag(this, "GPSLatitude");
+          const lon = EXIF.getTag(this, "GPSLongitude");
+          const latRef = EXIF.getTag(this, "GPSLatitudeRef") || "N";
+          const lonRef = EXIF.getTag(this, "GPSLongitudeRef") || "E";
+          if (lat && lon) {
+            const parseVal = function(v) {
+              if (v && v.numerator !== undefined && v.denominator !== undefined) {
+                return v.denominator === 0 ? 0 : (v.numerator / v.denominator);
+              }
+              return Number(v) || 0;
+            };
+            let ddLat = parseVal(lat[0]) + parseVal(lat[1]) / 60 + parseVal(lat[2]) / 3600;
+            if (latRef === "S" || latRef === "w") ddLat = -ddLat;
+            let ddLon = parseVal(lon[0]) + parseVal(lon[1]) / 60 + parseVal(lon[2]) / 3600;
+            if (lonRef === "W" || lonRef === "w") ddLon = -ddLon;
+            resolve({ lat: ddLat, lng: ddLon });
+          } else {
+            resolve(null);
+          }
+        });
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  } else {
+    setMapExifStatus('error', 'Thư viện EXIF chưa sẵn sàng trên trình duyệt');
+    return;
+  }
+
+  exifPromise.then(function(coords) {
+    if (coords && coords.lat && coords.lng) {
+      const lat = parseFloat(coords.lat);
+      const lng = parseFloat(coords.lng);
+      pickedLatLng = { lat: lat, lng: lng };
+
+      if (lMap) {
+        lMap.setView([lat, lng], 18);
+        if (!lMarker) lMarker = L.marker([lat, lng]).addTo(lMap);
+        else lMarker.setLatLng([lat, lng]);
+      }
+
+      document.getElementById('pickedCoords').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      _setPickedCoordsSub(lat, lng);
+      _updateSaveBtn();
+
+      reverseGeocode(lat, lng, function(addr) {
+        if (addr) document.getElementById('pickedCoords').textContent = addr;
+      });
+
+      setMapExifStatus('success', `Đã lấy GPS từ EXIF: ${lat.toFixed(6)}, ${lng.toFixed(6)} (Đã ghim)`);
+      if (typeof showToast === 'function') {
+        showToast('Trích xuất GPS từ ảnh thành công!');
+      }
+    } else {
+      setMapExifStatus('error', 'Ảnh không chứa toạ độ GPS trong EXIF — Vui lòng chọn trên bản đồ');
+      if (typeof showToast === 'function') {
+        showToast('Ảnh không có dữ liệu GPS (EXIF trống)');
+      }
+    }
+  }).catch(function(err) {
+    console.warn('[Map EXIF] Lỗi đọc dữ liệu EXIF:', err);
+    setMapExifStatus('error', 'Không thể đọc EXIF từ file — Vui lòng chọn trên bản đồ');
+  });
+}
+

@@ -48,13 +48,12 @@ function getLocalDevCandidates(req) {
 
 function getBackendCandidates(req) {
   return unique([
+    'https://ks-backend-staging-493469512136.asia-southeast1.run.app',
     process.env.BACKEND_URL,
     process.env.KS_BACKEND_URL,
     process.env.KS_BACKEND_FALLBACK_URL,
     ...splitList(process.env.KS_BACKEND_CANDIDATES),
-    ...getLocalDevCandidates(req),
-    // Known production backend for this project.
-    'https://ks-backend-493469512136.asia-southeast1.run.app'
+    ...getLocalDevCandidates(req)
   ]);
 }
 
@@ -122,7 +121,9 @@ module.exports = async function handler(req, res) {
 
   let lastError = null;
 
-  for (const base of candidates) {
+  for (let i = 0; i < candidates.length; i++) {
+    const base = candidates[i];
+    const isLast = (i === candidates.length - 1);
     const upstreamUrl = base + upstreamPath;
     try {
       const upstream = await fetch(upstreamUrl, {
@@ -130,6 +131,11 @@ module.exports = async function handler(req, res) {
         headers,
         body: canHaveBody ? body : undefined
       });
+
+      // If upstream is 404 or 5xx and we have other candidates, try them before failing
+      if ((upstream.status === 404 || upstream.status >= 500) && !isLast) {
+        continue;
+      }
 
       copyHeadersFromUpstream(upstream, res);
       res.statusCode = upstream.status;

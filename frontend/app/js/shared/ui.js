@@ -72,20 +72,55 @@ function closeConfirmSuccessModal() {
   }
 }
 
-// ── Loading Overlay ──────────────────────────────────────────────────────
-function showLoadingOverlay(message, subMessage) {
+// ── Loading Overlay (Smart Debounce: Chống chớp giật cho các tác vụ siêu tốc < 300ms) ──
+var _ksLoadingTimer = null;
+var _ksLoadingShownAt = 0;
+var _KS_DEBOUNCE_MS = 300;
+var _KS_MIN_HOLD_MS = 350;
+
+function showLoadingOverlay(message, subMessage, immediate) {
   var el = document.getElementById('loadingOverlay');
   if (!el) return;
   var msg = document.getElementById('loadingOverlayMsg');
   var sub = document.getElementById('loadingOverlaySub');
   if (msg) msg.textContent = message || 'Đang xử lý...';
   if (sub) { sub.textContent = subMessage || ''; sub.style.display = subMessage ? '' : 'none'; }
-  el.classList.add('active');
+
+  if (immediate) {
+    if (_ksLoadingTimer) { clearTimeout(_ksLoadingTimer); _ksLoadingTimer = null; }
+    el.classList.add('active');
+    _ksLoadingShownAt = Date.now();
+  } else if (!_ksLoadingTimer && !el.classList.contains('active')) {
+    _ksLoadingTimer = setTimeout(function() {
+      _ksLoadingTimer = null;
+      el.classList.add('active');
+      _ksLoadingShownAt = Date.now();
+    }, _KS_DEBOUNCE_MS);
+  }
 }
 
 function hideLoadingOverlay() {
+  if (_ksLoadingTimer) {
+    clearTimeout(_ksLoadingTimer);
+    _ksLoadingTimer = null;
+  }
   var el = document.getElementById('loadingOverlay');
-  if (el) el.classList.remove('active');
+  if (!el) return;
+
+  if (el.classList.contains('active')) {
+    var elapsed = Date.now() - _ksLoadingShownAt;
+    if (_ksLoadingShownAt > 0 && elapsed < _KS_MIN_HOLD_MS) {
+      setTimeout(function() {
+        el.classList.remove('active');
+        _ksLoadingShownAt = 0;
+      }, _KS_MIN_HOLD_MS - elapsed);
+    } else {
+      el.classList.remove('active');
+      _ksLoadingShownAt = 0;
+    }
+  } else {
+    _ksLoadingShownAt = 0;
+  }
 }
 
 // Toggle per-home-stats loading state (non-blocking). When enabled,
@@ -107,10 +142,15 @@ function setHomeStatsLoading(on) {
       } catch (e) {}
     });
 
-    // Show/hide the small home-loading note so users know they can create while data loads
+    // Show/hide the small home-loading note: CHỈ hiển thị khi đang chờ tải VÀ chưa có dữ liệu
     try {
       var note = document.getElementById('homeLoadNote');
-      if (note) note.style.display = window._homeStatsLoading ? '' : 'none';
+      if (note) {
+        var reqs = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests : [];
+        var shouldShow = Boolean(window._homeStatsLoading && reqs.length === 0);
+        note.style.display = shouldShow ? '' : 'none';
+        note.classList.toggle('hidden', !shouldShow);
+      }
     } catch (e) {}
 
     // banner removed — no-op

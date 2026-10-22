@@ -11,7 +11,18 @@ function generateBackendId() {
 
 function saveAllRequestsToStorage() {
   try {
-    localStorage.setItem('ks_requests', JSON.stringify(allRequests));
+    if (!Array.isArray(allRequests)) return;
+    const slim = allRequests.slice(0, 50).map(r => ({
+      id: r.id,
+      __backendId: r.__backendId,
+      tkCode: r.tkCode,
+      status: r.status,
+      outletName: r.outletName,
+      outletCode: r.outletCode,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    }));
+    localStorage.setItem('ks_requests', JSON.stringify(slim));
   } catch (e) {
     console.warn('Failed to save requests to localStorage', e);
   }
@@ -194,9 +205,35 @@ function _ksSnapshotKnownIds() {
 }
 
 // ── Global SSE invalidation hook (called from data_sdk) ──────────────
-// Detect new/warranty/edit requests and show desktop banner instantly.
+// Detect new/warranty/edit requests, quote updates, and show desktop banner/toast instantly.
 window.__ksOnInvalidate = function (payload) {
-  if (!payload || payload.resource !== 'ks_requests') return;
+  if (!payload) return;
+
+  var resType = String(payload.resource || '').toLowerCase();
+
+  // ── Xử lý realtime Báo Giá từ App 1 (quote_ready hoặc resource quotations) ──
+  if (payload.quote_ready || resType === 'quotations') {
+    if (typeof _fetchApp1QuoteListWithCache === 'function') {
+      _fetchApp1QuoteListWithCache(true).then(function () {
+        if (typeof renderRequestList === 'function') {
+          renderRequestList();
+        }
+      }).catch(function () {});
+    }
+    if (payload.quote_ready) {
+      var qOutlet = payload.outlet_name || (payload.data && (payload.data.outletName || payload.data.outletCode)) || 'Điểm bán';
+      var qAmt = payload.amount_formatted ? (' — ' + payload.amount_formatted) : '';
+      if (typeof showToast === 'function') {
+        showToast('✓ Điểm bán ' + qOutlet + ' đã có Báo Giá' + qAmt, 4000);
+      }
+      if (typeof _ksShowDesktopBanner === 'function' && payload.data && payload.data.__backendId) {
+        _ksShowDesktopBanner('Đã có Báo Giá', 'Điểm bán ' + qOutlet + ' đã có báo giá' + qAmt, payload.data.__backendId, 'done');
+      }
+    }
+    if (resType === 'quotations' && !payload.quote_ready) return;
+  }
+
+  if (resType !== 'ks_requests') return;
   var action = payload.action;
   var data = payload.data;
   if (!data || !data.__backendId) {
@@ -243,26 +280,35 @@ async function initHomeAndLoad() {
 }
 
 async function initApp() {
-  // Desktop QCAG: keep a blocking loading overlay visible until initial data load finishes.
-  try {
-    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof showLoadingOverlay === 'function') {
-      showLoadingOverlay('Đang tải dữ liệu...', 'Vui lòng chờ trong giây lát');
+  // Chỉ hiển thị loading overlay chặn màn hình cho QCAG Desktop; Mobile Heineken tải ngầm và hiển thị dòng đỏ homeLoadNote
+  if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+    if (typeof showLoadingOverlay === 'function') {
+      showLoadingOverlay('Đang tải dữ liệu...', 'Đang đồng bộ danh sách khảo sát');
     }
-  } catch (e) {}
-
-  // Instead of a blocking fullscreen overlay, mark home stats as loading
-  // so counters show placeholders while data loads.
+  }
   try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(true); } catch (e) {}
 
-  // Show cached data instantly so the list is never blank while network loads
+  // Chốt chặn an toàn: Tuyệt đối không bao giờ để overlay treo màn hình quá 1.5s
+  setTimeout(() => {
+    if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+  }, 1500);
+
+  // Fast-path: Load full cached requests from IndexedDB (all 3,665+ rows, not truncated to 100)
   try {
-    loadAllRequestsFromStorage();
-    updateRequestCount();
-    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-      if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+    if (typeof window !== 'undefined' && window.ksIdb && window.ksIdb.isSupported()) {
+      const cachedRows = await window.ksIdb.getAll();
+      if (Array.isArray(cachedRows) && cachedRows.length > 0) {
+        allRequests = _ksDedupeRequests(cachedRows);
+        updateRequestCount();
+        if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+          if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+          if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+        }
+        const listEl = document.getElementById('listScreen');
+        if (listEl && listEl.classList.contains('flex')) renderRequestList();
+        try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
+      }
     }
-    const listEl = document.getElementById('listScreen');
-    if (listEl && listEl.classList.contains('flex')) renderRequestList();
   } catch (_e) {}
 
   if (window.elementSdk) {
@@ -284,7 +330,8 @@ async function initApp() {
   }
 
   if (window.dataSdk) {
-    const result = await window.dataSdk.init({
+    try {
+      const result = await window.dataSdk.init({
       onDataChanged: (data) => {
         allRequests = _ksDedupeRequests(data);
         if (typeof _qcagDesktopFullRequestCache !== 'undefined' && typeof qcagDesktopMergePreserveImageFields === 'function') {
@@ -297,11 +344,21 @@ async function initApp() {
         // Snapshot known IDs for banner detection (first call builds baseline)
         _ksSnapshotKnownIds();
         updateRequestCount();
+        try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
         if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-          // Chỉ refresh list khi có dữ liệu mới từ SSE realtime.
-          // KHÔNG gọi openQCAGDesktop() ở đây — nó sẽ re-render toàn bộ màn hình
-          // sau mỗi lần PATCH, gây giật hình và nhảy tag loạn xạ.
-          if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+          // Debounce 100ms: gom các đợt bão packet realtime liên tiếp thành 1 lần render duy nhất
+          if (typeof window._qcagDebouncedRenderTimer !== 'undefined' && window._qcagDebouncedRenderTimer) {
+            clearTimeout(window._qcagDebouncedRenderTimer);
+          }
+          window._qcagDebouncedRenderTimer = setTimeout(() => {
+            window._qcagDebouncedRenderTimer = null;
+            if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+            if (typeof updateDesktopTaskBadge === 'function') updateDesktopTaskBadge();
+            if (typeof renderQcagTaskList === 'function') {
+              const taskDd = document.getElementById('qcagTaskDropdown');
+              if (taskDd && !taskDd.classList.contains('hidden')) renderQcagTaskList();
+            }
+          }, 100);
 
           // If a QCAG desktop detail is open, perform an in-place refresh of that
           // detail (avoids full re-render and preserves scroll / UI state).
@@ -313,15 +370,20 @@ async function initApp() {
                 const newTs = updated.updatedAt ? new Date(updated.updatedAt).getTime() : 0;
                 const oldCommentsLen = (currentDetailRequest.comments || '').length;
                 const newCommentsLen = (updated.comments || '').length;
-                const oldDesignLen = (currentDetailRequest.designImages || '').length;
-                const newDesignLen = (updated.designImages || '').length;
+                const isPlaceholderDesign = updated.designImages === '["..."]';
+                const hasDesignChanged = !isPlaceholderDesign && ((currentDetailRequest.designImages || '').length !== (updated.designImages || '').length);
                 const hasChanged = (newTs !== oldTs) ||
                                    (newCommentsLen !== oldCommentsLen) ||
-                                   (newDesignLen !== oldDesignLen) ||
+                                   hasDesignChanged ||
                                    (updated.status !== currentDetailRequest.status) ||
-                                   (updated.editingRequestedAt !== currentDetailRequest.editingRequestedAt);
+                                   (updated.editingRequestedAt !== currentDetailRequest.editingRequestedAt) ||
+                                   (Boolean(updated.deleteRequested) !== Boolean(currentDetailRequest.deleteRequested));
 
-                if (hasChanged) {
+                const isJustOptimisticallySaved = !!(window._qcagLastOptimisticSaveTs && 
+                  (Date.now() - window._qcagLastOptimisticSaveTs < 4000) && 
+                  window._qcagLastOptimisticSaveId === updated.__backendId);
+
+                if (hasChanged && !isJustOptimisticallySaved) {
                   if (typeof qcagDesktopGetFullRequest === 'function' && typeof _qcagDesktopInPlaceRefresh === 'function') {
                     qcagDesktopGetFullRequest(updated.__backendId, true).then(full => {
                       if (full) {
@@ -345,13 +407,26 @@ async function initApp() {
                     _qcagDesktopInPlaceRefresh(updated);
                   }
                 }
+              } else {
+                // Item đang mở đã bị xóa khỏi hệ thống qua realtime
+                const deadBid = currentDetailRequest.__backendId;
+                const deadTk = currentDetailRequest.tkCode;
+                if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
+                  if (deadBid) delete _qcagDesktopFullRequestCache[deadBid];
+                  if (deadTk) delete _qcagDesktopFullRequestCache[deadTk];
+                }
+                _qcagDesktopCurrentId = null;
+                currentDetailRequest = null;
+                const detailEl = document.getElementById('qcagDesktopDetail');
+                if (detailEl) detailEl.innerHTML = '<div class="qcag-desktop-empty-placeholder">Chọn một yêu cầu khảo sát từ danh sách bên trái để xem chi tiết.</div>';
               }
             }
           } catch (e) {
             console.warn('qcag desktop in-place refresh failed', e);
           }
         }
-        if (document.getElementById('listScreen').classList.contains('flex')) {
+        const listEl = document.getElementById('listScreen');
+        if (listEl && listEl.classList.contains('flex')) {
           renderRequestList();
         }
         if (typeof updateNotifBadge === 'function') updateNotifBadge();
@@ -365,13 +440,18 @@ async function initApp() {
             const detailEl = document.getElementById('detailScreen');
             if (detailEl && detailEl.classList.contains('flex') &&
                 typeof currentDetailRequest !== 'undefined' && currentDetailRequest && currentDetailRequest.__backendId) {
-              const detailUpdated = (allRequests || []).find(r => r.__backendId === currentDetailRequest.__backendId);
+              const detailUpdated = (allRequests || []).find(r => r.__backendId === currentDetailRequest.__backendId || (currentDetailRequest.tkCode && r.tkCode === currentDetailRequest.tkCode));
               if (detailUpdated) {
                 const oldTs = currentDetailRequest.updatedAt ? new Date(currentDetailRequest.updatedAt).getTime() : 0;
                 const newTs = detailUpdated.updatedAt ? new Date(detailUpdated.updatedAt).getTime() : 0;
                 if (newTs !== oldTs && typeof showRequestDetail === 'function') {
                   showRequestDetail(detailUpdated.__backendId);
                 }
+              } else {
+                // Khảo sát đã bị xóa bởi QCAG
+                currentDetailRequest = null;
+                if (typeof showScreen === 'function') showScreen('listScreen');
+                if (typeof showToast === 'function') showToast('Khảo sát này đã được xóa');
               }
             }
           } catch (e) {
@@ -393,11 +473,15 @@ async function initApp() {
         }
       }
     });
-    if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
     if (!result.isOk) {
       showToast('Lỗi kết nối dữ liệu');
     }
-    try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
+    } catch (sdkInitErr) {
+      console.warn('[sdk-init] dataSdk.init error:', sdkInitErr);
+    } finally {
+      if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+      try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
+    }
   }
 
   // If no remote data SDK, load from localStorage as a fallback
@@ -407,7 +491,8 @@ async function initApp() {
     if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
       if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
     }
-    if (document.getElementById('listScreen').classList.contains('flex')) {
+    const listScreenEl = document.getElementById('listScreen');
+    if (listScreenEl && listScreenEl.classList.contains('flex')) {
       renderRequestList();
     }
     if (typeof updateNotifBadge === 'function') updateNotifBadge();
