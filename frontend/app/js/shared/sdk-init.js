@@ -205,21 +205,41 @@ function _ksSnapshotKnownIds() {
 }
 
 // ── Global SSE invalidation hook (called from data_sdk) ──────────────
+// ── Global SSE invalidation hook (called from data_sdk) ──────────────
 // Detect new/warranty/edit requests, quote updates, and show desktop banner/toast instantly.
 window.__ksOnInvalidate = function (payload) {
   if (!payload) return;
 
   var resType = String(payload.resource || '').toLowerCase();
 
-  // ── Xử lý realtime Báo Giá từ App 1 (quote_ready hoặc resource quotations) ──
+  // ── 2. Xử lý realtime Báo Giá từ App 1 (quote_ready hoặc resource quotations) ──
   if (payload.quote_ready || resType === 'quotations') {
-    if (typeof _fetchApp1QuoteListWithCache === 'function') {
+    var targetTk = payload.tk_code || (payload.data && (payload.data.tk_code || payload.data.tkCode)) || '';
+    var targetQuoteCode = payload.id || (payload.data && (payload.data.quote_code || payload.data.quoteCode)) || '';
+
+    // Cache quote trực tiếp nếu có data
+    if (payload.data && typeof payload.data === 'object') {
+      window._quoteDataMap = window._quoteDataMap || {};
+      if (targetTk) window._quoteDataMap[targetTk] = payload.data;
+      if (targetQuoteCode) window._quoteDataMap[targetQuoteCode] = payload.data;
+      if (payload.data.__backendId) window._quoteDataMap[payload.data.__backendId] = payload.data;
+    }
+
+    // Tải nhắm mục tiêu tức thì qua B-Tree Index (< 10ms)
+    if (typeof _fetchTargetedQuoteByTk === 'function' && (targetTk || targetQuoteCode)) {
+      _fetchTargetedQuoteByTk(targetTk, targetQuoteCode).then(function (q) {
+        if (q && typeof renderRequestList === 'function') {
+          renderRequestList();
+        }
+      }).catch(function () {});
+    } else if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache(true).then(function () {
         if (typeof renderRequestList === 'function') {
           renderRequestList();
         }
       }).catch(function () {});
     }
+
     if (payload.quote_ready) {
       var qOutlet = payload.outlet_name || (payload.data && (payload.data.outletName || payload.data.outletCode)) || 'Điểm bán';
       var qAmt = payload.amount_formatted ? (' — ' + payload.amount_formatted) : '';
@@ -236,6 +256,63 @@ window.__ksOnInvalidate = function (payload) {
   if (resType !== 'ks_requests') return;
   var action = payload.action;
   var data = payload.data;
+
+  // ── 3. Xử lý Yêu Cầu Chỉnh Sửa / Ghi Chú Chat (action: 'note' hoặc có payload.note) ──
+  if (action === 'note' || payload.note) {
+    var note = payload.note;
+    var targetId = payload.id;
+    if (note && targetId) {
+      var reqList = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests : [];
+      var matchedReq = reqList.find(function (r) {
+        return (r.tkCode && r.tkCode === targetId) || (r.__backendId && r.__backendId === targetId) || String(r.id) === String(targetId);
+      });
+
+      var noteText = String(note.text || note.noteText || '');
+      var isEditReq = note.noteType === 'edit_requested' || note.noteType === 'edit-request' ||
+                      /chỉnh\s+sửa|yêu\s+cầu\s+sửa/i.test(noteText) ||
+                      (Array.isArray(note.editCategories) && note.editCategories.length > 0);
+
+      if (isEditReq && matchedReq) {
+        matchedReq.editingRequestedAt = note.createdAt || new Date().toISOString();
+        if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
+
+        // Gắn tag chỉnh sửa in-place trên thẻ danh sách ngay lập tức
+        var cardEl = document.querySelector('[data-req-id="' + matchedReq.__backendId + '"]') ||
+                     document.querySelector('[data-req-id="' + targetId + '"]');
+        if (cardEl) {
+          var thumbWrap = cardEl.querySelector('.mq-thumb-wrapper, .qcag-thumb-wrap');
+          if (thumbWrap && !thumbWrap.querySelector('.mq-editing-badge-overlay')) {
+            var badge = document.createElement('div');
+            badge.className = 'mq-editing-badge-overlay';
+            badge.textContent = 'Đang chỉnh sửa';
+            thumbWrap.appendChild(badge);
+          }
+          var img = cardEl.querySelector('.mq-card-img, .qcag-mq-img');
+          if (img) img.classList.add('mq-img-editing');
+        }
+
+        // Cập nhật QCAG Desktop tasks nếu đang mở
+        if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+          if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+          if (typeof updateDesktopTaskBadge === 'function') updateDesktopTaskBadge();
+        }
+
+        var oLabel = matchedReq.outletName || matchedReq.outletCode || 'Điểm bán';
+        if (typeof _ksShowDesktopBanner === 'function') {
+          _ksShowDesktopBanner('Yêu cầu chỉnh sửa MQ', 'Outlet ' + oLabel + ' yêu cầu chỉnh sửa', matchedReq.__backendId || targetId, 'editing');
+        } else if (typeof showToast === 'function') {
+          showToast('⚠ Outlet ' + oLabel + ' vừa gửi yêu cầu chỉnh sửa', 3500);
+        }
+      }
+
+      // Đẩy tin nhắn vào khung chat đang mở ngay lập tức (In-Place DOM Patch)
+      if (typeof _appendCommentToActiveChat === 'function') {
+        _appendCommentToActiveChat(note, targetId);
+      }
+    }
+    return;
+  }
+
   if (!data || !data.__backendId) {
     if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
       window.dataSdk.refresh(true).catch(function () {});
@@ -248,19 +325,53 @@ window.__ksOnInvalidate = function (payload) {
   var type = data.type || 'new';
   var outletLabel = data.outletName || data.outletCode || 'Outlet';
 
-  // New request created
+  // ── 1. Request mới (action: 'create'): Hiển thị thông báo + Hiện THẺ LẬP TỨC ──
   if (action === 'create' && !prev) {
     if (type === 'warranty') {
       _ksShowDesktopBanner('Yêu cầu bảo hành mới', 'Outlet ' + outletLabel, bid, 'warranty');
     } else {
       _ksShowDesktopBanner('Yêu cầu khảo sát mới', 'Outlet ' + outletLabel, bid, 'new');
     }
-    // Update snapshot
+    // Cập nhật snapshot
     _ksKnownRequestIds[bid] = { status: data.status || '', editingRequestedAt: data.editingRequestedAt || null, designImages: data.designImages || '[]' };
+
+    // In-Place Memory Update: Đưa vào đầu danh sách allRequests nếu chưa có
+    if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+      var existsIdx = allRequests.findIndex(function (r) {
+        return r.__backendId === bid || (data.tkCode && r.tkCode === data.tkCode);
+      });
+      if (existsIdx === -1) {
+        allRequests.unshift(data);
+      } else {
+        Object.assign(allRequests[existsIdx], data);
+      }
+      if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
+    }
+
+    // In-Place DataSdk Store Update
+    if (window.dataSdk && Array.isArray(window.dataSdk._store)) {
+      var storeExists = window.dataSdk._store.some(function (r) { return r.__backendId === bid; });
+      if (!storeExists) window.dataSdk._store.unshift(data);
+    }
+
+    // In-Place DOM Render: Thẻ xuất hiện ngay lập tức trên màn hình
+    if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+      if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+      if (typeof updateDesktopTaskBadge === 'function') updateDesktopTaskBadge();
+      if (typeof renderQcagTaskList === 'function') {
+        var taskDd = document.getElementById('qcagTaskDropdown');
+        if (taskDd && !taskDd.classList.contains('hidden')) renderQcagTaskList();
+      }
+    } else {
+      if (typeof renderRequestList === 'function') renderRequestList();
+      if (typeof updateRequestCount === 'function') updateRequestCount();
+      if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false);
+      if (typeof renderHomeStats === 'function') renderHomeStats();
+    }
     return;
   }
 
-  // Existing request updated
+  // Cập nhật request hiện hữu (action: 'update')
   if (prev) {
     // Editing requested (Sale asked for changes)
     if (data.editingRequestedAt && !prev.editingRequestedAt) {

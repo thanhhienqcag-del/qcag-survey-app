@@ -132,6 +132,42 @@ if ('serviceWorker' in navigator) {
       } else if (typeof showToast === 'function') {
         showToast(title + (body ? '\n' + body : ''), 3000);
       }
+
+      // Kích hoạt ngay lập tức luồng SWR + In-Place DOM Patch qua __ksOnInvalidate
+      if (typeof window.__ksOnInvalidate === 'function') {
+        const isQuote = lowTitle.includes('báo giá') || lowTitle.includes('báo gia');
+        if (isQuote) {
+          window.__ksOnInvalidate({
+            resource: 'quotations',
+            quote_ready: true,
+            id: backendId || data.quote_code || data.tk_code,
+            tk_code: data.tk_code || data.tkCode,
+            data: data
+          });
+        } else if (type === 'editing') {
+          window.__ksOnInvalidate({
+            resource: 'ks_requests',
+            action: 'note',
+            id: backendId || data.tk_code || data.tkCode,
+            note: {
+              text: body || title,
+              authorRole: 'heineken',
+              authorName: 'Sale Heineken',
+              noteType: 'edit_requested',
+              createdAt: new Date().toISOString()
+            }
+          });
+        } else if (type === 'new' || type === 'warranty') {
+          if (backendId) {
+            window.__ksOnInvalidate({
+              resource: 'ks_requests',
+              action: 'create',
+              id: backendId,
+              data: data.request || { __backendId: backendId, tkCode: data.tk_code, type: type, outletName: body || 'Điểm bán' }
+            });
+          }
+        }
+      }
     } catch (e) {}
   });
 }

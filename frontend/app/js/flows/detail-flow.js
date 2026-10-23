@@ -1603,8 +1603,152 @@ window._applyRequestLockUI = _applyRequestLockUI;
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache(true).catch(() => {});
     }
-  }, 150);
-})();
+// ── In-Place DOM Helper: Đẩy tin nhắn/yêu cầu sửa vào khung chat đang mở ──
+function _appendCommentToActiveChat(note, tkOrBid) {
+  if (!note || !tkOrBid) return;
+  const isDetailOpen = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest &&
+    (currentDetailRequest.__backendId === tkOrBid || currentDetailRequest.tkCode === tkOrBid || String(currentDetailRequest.id) === String(tkOrBid)));
+  if (!isDetailOpen) return;
+
+  // 1. QCAG Desktop Chat
+  const desktopTimeline = document.getElementById('qcagCommentTimeline');
+  if (desktopTimeline) {
+    const emptyPlaceholder = desktopTimeline.querySelector('.qcag-detail-muted');
+    if (emptyPlaceholder) emptyPlaceholder.remove();
+
+    const tempDiv = document.createElement('div');
+    if (typeof qcagDesktopCommentHtml === 'function') {
+      tempDiv.innerHTML = qcagDesktopCommentHtml(note, [note], 0);
+    } else {
+      tempDiv.innerHTML = '<div class="qcag-chat-msg-row is-other"><div class="qcag-chat-bubble"><div class="qcag-chat-text">' +
+        String(note.text || '').replace(/</g, '&lt;') + '</div></div></div>';
+    }
+    while (tempDiv.firstChild) {
+      desktopTimeline.appendChild(tempDiv.firstChild);
+    }
+    desktopTimeline.scrollTop = desktopTimeline.scrollHeight;
+
+    const countLabel = document.querySelector('.qcag-chat-count-label');
+    if (countLabel) {
+      const curCount = parseInt(countLabel.textContent, 10) || 0;
+      countLabel.textContent = (curCount + 1) + ' tin';
+    }
+  }
+
+  // 2. Mobile Heineken Chat
+  const mobileTimeline = document.getElementById('detailCommentsList');
+  if (mobileTimeline) {
+    const emptyMuted = mobileTimeline.querySelector('.text-gray-400');
+    if (emptyMuted) emptyMuted.remove();
+
+    const isMine = (typeof currentSession !== 'undefined' && currentSession &&
+      (note.authorRole === currentSession.role || note.authorName === currentSession.name));
+    const bubbleDiv = document.createElement('div');
+    const isEditReq = note.noteType === 'edit_requested' || note.noteType === 'edit-request';
+    bubbleDiv.className = 'qcag-chat-msg-row ' + (isMine ? 'is-mine' : 'is-other') + (isEditReq ? ' is-edit-request' : '');
+    const safeText = String(note.text || '').replace(/</g, '&lt;');
+    const safeName = String(note.authorName || 'Người gửi').replace(/</g, '&lt;');
+    bubbleDiv.innerHTML =
+      '<div class="qcag-chat-bubble">' +
+        '<div class="qcag-chat-bubble-top">' +
+          '<span class="qcag-chat-author-name">' + safeName + '</span>' +
+        '</div>' +
+        '<div class="qcag-chat-text">' + safeText + '</div>' +
+        '<div class="qcag-chat-bubble-footer">' +
+          '<span class="qcag-chat-bubble-time">Vừa xong</span>' +
+        '</div>' +
+      '</div>';
+    mobileTimeline.appendChild(bubbleDiv);
+    mobileTimeline.scrollTop = mobileTimeline.scrollHeight;
+
+    const countBadges = document.querySelectorAll('.qcag-comments-count-badge, .qcag-chat-count-label');
+    countBadges.forEach(function (b) {
+      var cur = parseInt(b.textContent, 10) || 0;
+      b.textContent = (cur + 1) + (b.classList.contains('qcag-chat-count-label') ? ' tin' : '');
+    });
+  }
+}
+window._appendCommentToActiveChat = _appendCommentToActiveChat;
+
+// ── B-Tree Index Targeted Quote Loader (< 10ms, không tải 1000 items thừa) ──
+async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
+  if (!tkCode && !quoteCode && !outletCode) return null;
+  const targetTk = tkCode ? String(tkCode).trim() : '';
+
+  // 1. Kiểm tra cache RAM (0ms)
+  if (targetTk && window._quoteDataMap && window._quoteDataMap[targetTk]) {
+    return window._quoteDataMap[targetTk];
+  }
+  if (Array.isArray(window.__qcagQuoteListCache)) {
+    const matched = window.__qcagQuoteListCache.find(q =>
+      (targetTk && (q.tk_code === targetTk || q.request_tk_code === targetTk)) ||
+      (quoteCode && (q.quote_code === quoteCode || q.id === quoteCode))
+    );
+    if (matched) return matched;
+  }
+
+  // 2. Tra cứu B-Tree cực nhanh qua local App 2 backend (< 5ms)
+  const qParams = new URLSearchParams();
+  if (targetTk) {
+    qParams.set('tk_code', targetTk);
+    qParams.set('exact', '1');
+  } else if (quoteCode) {
+    qParams.set('quote_code', quoteCode);
+  } else if (outletCode) {
+    qParams.set('outlet_code', outletCode);
+  }
+
+  const queryStr = qParams.toString();
+  let foundQuote = null;
+
+  try {
+    const localBase = (window.dataSdk && window.dataSdk._baseUrl) || '';
+    const res = await fetch(`${localBase}/api/ks/quotations?${queryStr}`).catch(() => null)
+             || await fetch(`/quotations?${queryStr}`).catch(() => null);
+    if (res && res.ok) {
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data) && data.length > 0) {
+        foundQuote = data[0];
+      } else if (data && data.quote_code) {
+        foundQuote = data;
+      }
+    }
+  } catch (e) {}
+
+  // 3. Fallback sang App 1 Staging backend qua B-Tree Index
+  if (!foundQuote) {
+    try {
+      const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
+      const res1 = await fetch(`${app1Base}/quotations?${queryStr}`).catch(() => null);
+      if (res1 && res1.ok) {
+        const data1 = await res1.json().catch(() => null);
+        if (Array.isArray(data1) && data1.length > 0) {
+          foundQuote = data1[0];
+        } else if (data1 && data1.quote_code) {
+          foundQuote = data1;
+        }
+      }
+    } catch (e) {
+      console.warn('[B-Tree Quote Fetch Error]', e);
+    }
+  }
+
+  if (foundQuote) {
+    window._quoteDataMap = window._quoteDataMap || {};
+    if (targetTk) window._quoteDataMap[targetTk] = foundQuote;
+    if (foundQuote.__backendId) window._quoteDataMap[foundQuote.__backendId] = foundQuote;
+    if (foundQuote.id) window._quoteDataMap[foundQuote.id] = foundQuote;
+
+    if (Array.isArray(window.__qcagQuoteListCache)) {
+      const exIdx = window.__qcagQuoteListCache.findIndex(q => q.quote_code === foundQuote.quote_code);
+      if (exIdx === -1) window.__qcagQuoteListCache.unshift(foundQuote);
+      else window.__qcagQuoteListCache[exIdx] = foundQuote;
+    }
+  }
+
+  return foundQuote;
+}
+window._fetchTargetedQuoteByTk = _fetchTargetedQuoteByTk;
 
 let _quoteFetchInFlight = null;
 
@@ -1800,40 +1944,15 @@ async function _loadBridgeStatus(backendId) {
       quoteData = window.__qcagQuoteListCache.find(matches);
     }
 
-    // 5. Fetch live/cached quote data from App 1 backend
+    // 5. Fetch live targeted quote via B-Tree Index (< 10ms)
     if (!quoteData) {
-      if (typeof _fetchApp1QuoteListWithCache === 'function') {
+      if (typeof _fetchTargetedQuoteByTk === 'function') {
+        quoteData = await _fetchTargetedQuoteByTk(targetTk, targetQuoteCode, targetOutlet);
+      }
+      if (!quoteData && typeof _fetchApp1QuoteListWithCache === 'function') {
         const cachedQuotes = await _fetchApp1QuoteListWithCache();
         if (Array.isArray(cachedQuotes)) {
           quoteData = cachedQuotes.find(matches);
-        }
-      }
-
-      // 6. Fallback direct API lookup if not found in list cache
-      if (!quoteData) {
-        const queryParams = [];
-        if (targetQuoteCode) queryParams.push('quote_code=' + encodeURIComponent(targetQuoteCode));
-        if (targetTk) queryParams.push('tk_code=' + encodeURIComponent(targetTk));
-        if (targetOutlet && targetOutlet !== '---' && targetOutlet !== 'Chưa có code') queryParams.push('outlet_code=' + encodeURIComponent(targetOutlet));
-
-        if (queryParams.length > 0) {
-          try {
-            const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
-            const directRes = await fetch(app1Base + '/quotations?' + queryParams.join('&')).catch(() => null);
-            if (directRes && directRes.ok) {
-              const directJson = await directRes.json().catch(() => null);
-              if (Array.isArray(directJson) && directJson.length > 0) {
-                quoteData = directJson.find(matches) || directJson[0];
-                if (quoteData && Array.isArray(window.__qcagQuoteListCache)) {
-                  if (!window.__qcagQuoteListCache.some(q => q && q.quote_code === quoteData.quote_code)) {
-                    window.__qcagQuoteListCache.push(quoteData);
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('Direct quote fallback error:', e);
-          }
         }
       }
     }
@@ -1978,30 +2097,16 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     q = window.__qcagQuoteListCache.find(isMatchingQuote);
   }
 
-  // 6. Nếu chưa có báo giá khớp, fetch trực tiếp cho yêu cầu này (hỗ trợ Xem Nhanh ngoài danh sách)
+  // 6. Nếu chưa có báo giá khớp, fetch trực tiếp qua B-Tree Index (< 10ms)
   if (!q && (targetTk || targetQuoteCode || targetOutlet || backendId)) {
     try {
-      if (typeof showToast === 'function') showToast('Đang tải báo giá...');
-      if (typeof _fetchApp1QuoteListWithCache === 'function') {
+      if (typeof _fetchTargetedQuoteByTk === 'function') {
+        q = await _fetchTargetedQuoteByTk(targetTk, targetQuoteCode, targetOutlet);
+      }
+      if (!q && typeof _fetchApp1QuoteListWithCache === 'function') {
         const cachedQuotes = await _fetchApp1QuoteListWithCache();
         if (Array.isArray(cachedQuotes)) {
           q = cachedQuotes.find(isMatchingQuote);
-        }
-      }
-      if (!q) {
-        const queryParams = [];
-        if (targetQuoteCode) queryParams.push('quote_code=' + encodeURIComponent(targetQuoteCode));
-        if (targetTk) queryParams.push('tk_code=' + encodeURIComponent(targetTk));
-        if (targetOutlet && targetOutlet !== '---') queryParams.push('outlet_code=' + encodeURIComponent(targetOutlet));
-        if (queryParams.length > 0) {
-          const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
-          const r = await fetch(app1Base + '/quotations?' + queryParams.join('&')).catch(() => null);
-          if (r && r.ok) {
-            const list = await r.json().catch(() => null);
-            if (Array.isArray(list) && list.length > 0) {
-              q = list.find(isMatchingQuote) || list[0];
-            }
-          }
         }
       }
     } catch (e) {

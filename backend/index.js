@@ -1445,6 +1445,19 @@ app.get('/quotations/view', async (req, res) => {
 app.get('/quotations', async (req, res) => {
     try {
         await ensureDbInitStarted();
+
+        const tkCode = req.query && (req.query.tk_code || req.query.request_tk_code) ? String(req.query.tk_code || req.query.request_tk_code).trim() : '';
+        if (tkCode) {
+            const [tkRows] = await pool.query(
+                `SELECT ${QUOTATION_SELECT_COLUMNS}
+                 FROM quotations
+                 WHERE (request_tk_code = ? OR tk_code = ?)
+                 ORDER BY created_at DESC LIMIT 5`,
+                [tkCode, tkCode]
+            );
+            return res.json(shrinkQuotationImages(tkRows));
+        }
+
         const limitRaw = Number(req.query && req.query.limit);
         const offsetRaw = Number(req.query && req.query.offset);
         const beforeIdRaw = Number(req.query && req.query.before_id);
