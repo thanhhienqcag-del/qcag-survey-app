@@ -214,18 +214,53 @@ window.__ksOnInvalidate = function (payload) {
 
   // ── 2. Xử lý realtime Báo Giá từ App 1 (quote_ready hoặc resource quotations) ──
   if (payload.quote_ready || resType === 'quotations') {
-    var targetTk = payload.tk_code || (payload.data && (payload.data.tk_code || payload.data.tkCode)) || '';
-    var targetQuoteCode = payload.id || (payload.data && (payload.data.quote_code || payload.data.quoteCode)) || '';
+    var targetTk = payload.tkCode || payload.tk_code || (payload.data && (payload.data.tk_code || payload.data.tkCode)) || '';
+    var targetQuoteCode = payload.quote_code || payload.quoteCode || payload.id || (payload.data && (payload.data.quote_code || payload.data.quoteCode)) || '';
+    var totalAmt = Number(payload.quote_total || (payload.data && (payload.data.total_amount || payload.data.totalAmount)) || 0);
 
-    // Cache quote trực tiếp nếu có data
+    // Cache quote trực tiếp vào window._quoteDataMap
+    window._quoteDataMap = window._quoteDataMap || {};
     if (payload.data && typeof payload.data === 'object') {
-      window._quoteDataMap = window._quoteDataMap || {};
       if (targetTk) window._quoteDataMap[targetTk] = payload.data;
       if (targetQuoteCode) window._quoteDataMap[targetQuoteCode] = payload.data;
       if (payload.data.__backendId) window._quoteDataMap[payload.data.__backendId] = payload.data;
     }
 
-    // Tải nhắm mục tiêu tức thì qua B-Tree Index (< 10ms)
+    // In-Place Memory Patch: Gắn ngay báo giá vào thẻ request tương ứng trong allRequests
+    var tkMatch = targetTk || payload.tkCode;
+    var qMatch = targetQuoteCode || payload.quote_code;
+    if (typeof allRequests !== 'undefined' && Array.isArray(allRequests) && (tkMatch || qMatch)) {
+      var foundIdx = allRequests.findIndex(function (r) {
+        if (!r) return false;
+        var rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
+        var rQ = String(r.quoteCode || r.quote_code || (r.bridge && r.bridge.quote_code) || '').trim().toLowerCase();
+        if (tkMatch && rTk && rTk === String(tkMatch).trim().toLowerCase()) return true;
+        if (qMatch && rQ && rQ === String(qMatch).trim().toLowerCase()) return true;
+        return false;
+      });
+
+      if (foundIdx !== -1) {
+        var reqObj = allRequests[foundIdx];
+        reqObj.quoteCode = qMatch || reqObj.quoteCode;
+        if (totalAmt > 0) reqObj.totalAmount = totalAmt;
+        reqObj.bridge = Object.assign({}, reqObj.bridge || {}, {
+          quote_code: qMatch || (reqObj.bridge && reqObj.bridge.quote_code),
+          quoteCode: qMatch || (reqObj.bridge && reqObj.bridge.quoteCode),
+          total_amount: totalAmt || (reqObj.bridge && reqObj.bridge.total_amount) || 0,
+          totalAmount: totalAmt || (reqObj.bridge && reqObj.bridge.totalAmount) || 0,
+          status: 'confirmed'
+        });
+        if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
+
+        // In-Place DOM Update ngay lập tức (không cần chờ fetch mạng)
+        if (typeof renderRequestList === 'function') renderRequestList();
+        if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof renderQCAGDesktopList === 'function') {
+          renderQCAGDesktopList();
+        }
+      }
+    }
+
+    // Tải đối soát nhắm mục tiêu tức thì qua B-Tree Index (< 10ms)
     if (typeof _fetchTargetedQuoteByTk === 'function' && (targetTk || targetQuoteCode)) {
       _fetchTargetedQuoteByTk(targetTk, targetQuoteCode).then(function (q) {
         if (q && typeof renderRequestList === 'function') {

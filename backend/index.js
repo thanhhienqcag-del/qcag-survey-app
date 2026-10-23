@@ -2933,6 +2933,22 @@ function ksRowToApp(row, lightweight = false) {
         designFilename: row.design_filename || '',
         createdAt: safeIsoDate(row.created_at),
         updatedAt: safeIsoDate(row.updated_at),
+        bridge: row.quote_code ? {
+            quote_code: row.quote_code,
+            quoteCode: row.quote_code,
+            total_amount: Number(row.total_amount || 0),
+            totalAmount: Number(row.total_amount || 0),
+            status: row.quote_status || row.status || '',
+            production_approval_status: row.production_approval_status || '',
+            order_number: row.order_number || '',
+            orderNumber: row.order_number || '',
+            spo_status: row.spo_status || '',
+            spo_number: row.spo_number || ''
+        } : null,
+        quoteCode: row.quote_code || '',
+        totalAmount: Number(row.total_amount || 0),
+        orderNumber: row.order_number || '',
+        productionApprovalStatus: row.production_approval_status || '',
     };
 }
 
@@ -3035,7 +3051,14 @@ const KS_REQUESTS_SELECT_SQL = `
       r.delete_requested_phone,
       r.delete_requested_sale_code,
       r.delete_status,
-      r.delete_reject_reason
+      r.delete_reject_reason,
+      COALESCE(q_lat.quote_code, '') AS quote_code,
+      COALESCE(q_lat.total_amount, 0)::numeric AS total_amount,
+      COALESCE(q_lat.quote_status, '') AS quote_status,
+      COALESCE(q_lat.spo_status, '') AS spo_status,
+      COALESCE(q_lat.spo_number, '') AS spo_number,
+      COALESCE(q_lat.order_number, '') AS order_number,
+      COALESCE(q_lat.production_approval_status, '') AS production_approval_status
     FROM (
         SELECT r_sub.*,
                COALESCE(o_sub.code, '') AS outlet_code,
@@ -3094,6 +3117,22 @@ const KS_REQUESTS_SELECT_SQL = `
       LIMIT 1
     ) n_edit_first ON true
     LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN LATERAL (
+      SELECT 
+          q_sub.quote_code, 
+          q_sub.total_amount, 
+          q_sub.status AS quote_status,
+          q_sub.spo_status,
+          q_sub.spo_number,
+          ord_sub.order_no AS order_number,
+          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status
+      FROM quotations q_sub
+      LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
+      LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
+      WHERE (q_sub.tk_code = r.tk_code OR q_sub.request_tk_code = r.tk_code)
+        AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
+      ORDER BY q_sub.created_at DESC LIMIT 1
+    ) q_lat ON true
 `;
 
 const KS_REQUESTS_LITE_SQL = `
@@ -3162,7 +3201,14 @@ const KS_REQUESTS_LITE_SQL = `
       r.delete_requested_phone,
       r.delete_requested_sale_code,
       r.delete_status,
-      r.delete_reject_reason
+      r.delete_reject_reason,
+      COALESCE(q_lat.quote_code, '') AS quote_code,
+      COALESCE(q_lat.total_amount, 0)::numeric AS total_amount,
+      COALESCE(q_lat.quote_status, '') AS quote_status,
+      COALESCE(q_lat.spo_status, '') AS spo_status,
+      COALESCE(q_lat.spo_number, '') AS spo_number,
+      COALESCE(q_lat.order_number, '') AS order_number,
+      COALESCE(q_lat.production_approval_status, '') AS production_approval_status
     FROM requests r
     LEFT JOIN outlets o ON r.outlet_id = o.id
     LEFT JOIN users u ON r.requester_id = u.id
@@ -3208,6 +3254,22 @@ const KS_REQUESTS_LITE_SQL = `
       LIMIT 1
     ) n_edit_first ON true
     LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN LATERAL (
+      SELECT 
+          q_sub.quote_code, 
+          q_sub.total_amount, 
+          q_sub.status AS quote_status,
+          q_sub.spo_status,
+          q_sub.spo_number,
+          ord_sub.order_no AS order_number,
+          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status
+      FROM quotations q_sub
+      LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
+      LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
+      WHERE (q_sub.tk_code = r.tk_code OR q_sub.request_tk_code = r.tk_code)
+        AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
+      ORDER BY q_sub.created_at DESC LIMIT 1
+    ) q_lat ON true
     WHERE COALESCE(r.is_deleted, false) = false
     ORDER BY r.created_at DESC
 `;
