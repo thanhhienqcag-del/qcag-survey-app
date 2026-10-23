@@ -716,6 +716,23 @@
     if (!normalized.deleteRequestedSaleCode && normalized.delete_requested_sale_code != null) normalized.deleteRequestedSaleCode = normalized.delete_requested_sale_code;
     if (!normalized.deleteStatus && normalized.delete_status != null) normalized.deleteStatus = normalized.delete_status;
     if (!normalized.deleteRejectReason && normalized.delete_reject_reason != null) normalized.deleteRejectReason = normalized.delete_reject_reason;
+    if (!normalized.quoteCode && (normalized.quote_code != null || normalized.quoteCode != null)) {
+      normalized.quoteCode = normalized.quoteCode || normalized.quote_code;
+    }
+    if (!normalized.totalAmount && (normalized.total_amount != null || normalized.totalAmount != null)) {
+      normalized.totalAmount = Number(normalized.totalAmount || normalized.total_amount || 0);
+    }
+    if (!normalized.bridge && (normalized.quoteCode || normalized.quote_code)) {
+      var qc = normalized.quoteCode || normalized.quote_code;
+      normalized.bridge = {
+        quote_code: qc,
+        quoteCode: qc,
+        total_amount: Number(normalized.totalAmount || normalized.total_amount || 0),
+        totalAmount: Number(normalized.totalAmount || normalized.total_amount || 0),
+        spo_status: normalized.spo_status || normalized.spoStatus || 'Chưa có SPO',
+        production_approval_status: normalized.production_approval_status || normalized.productionApprovalStatus || ''
+      };
+    }
 
     return normalized;
   }

@@ -326,9 +326,9 @@ function getCardQuoteBadge(req) {
     return { hasQuote: true, label: 'Chưa có SPO', cls: 'bg-slate-600/30 text-slate-300 border border-slate-500/50 font-bold' };
   }
 
-  // 1. Direct check: embedded quote data
+  // 1. Direct check: embedded quote data từ backend
   let directQuote = null;
-  if (req.bridge && (req.bridge.quote_code || (Array.isArray(req.bridge.items) && req.bridge.items.length > 0) || req.bridge.total_amount)) {
+  if (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode || (Array.isArray(req.bridge.items) && req.bridge.items.length > 0) || req.bridge.total_amount || req.bridge.totalAmount)) {
     directQuote = req.bridge;
   } else if (req.quoteCode || req.quote_code) {
     const qCodeTarget = String(req.quoteCode || req.quote_code || '').trim();
@@ -339,7 +339,13 @@ function getCardQuoteBadge(req) {
         ) || null;
       }
       if (!directQuote && qCodeTarget) {
-        directQuote = { quote_code: qCodeTarget };
+        directQuote = {
+          quote_code: qCodeTarget,
+          quoteCode: qCodeTarget,
+          total_amount: req.totalAmount || req.total_amount || 0,
+          spo_status: req.spo_status || req.spoStatus || 'Chưa có SPO',
+          production_approval_status: req.productionApprovalStatus || req.production_approval_status || ''
+        };
       }
     }
   }
@@ -350,50 +356,51 @@ function getCardQuoteBadge(req) {
   if (Array.isArray(cached) && cached.length > 0) {
     const rQCode = String(req.quoteCode || req.quote_code || '').trim();
     const rTkRaw = String(req.tkCode || req.tk_code || '').trim();
-    const isOfficialTk = /^TK/i.test(rTkRaw);
-    const rTkDigits = isOfficialTk ? rTkRaw.replace(/\D/g, '') : '';
+    const rTkDigits = rTkRaw.replace(/\D/g, '');
 
     let matchedQ = null;
 
     // Match 1: Quote Code (cao nhất)
-    if (rQCode) {
+    if (rQCode && rQCode !== '---' && rQCode !== 'Chưa có code') {
       matchedQ = cached.find(q => q && String(q.quote_code || q.quoteCode || q.id || '').trim() === rQCode) || null;
     }
 
-    // Match 2: TK Code (Sợi chỉ đỏ liên kết App 1 - App 2)
-    if (!matchedQ && isOfficialTk && rTkDigits && rTkDigits.length >= 4) {
+    // Match 2: TK Code (Sợi chỉ đỏ liên kết App 1 - App 2 — đối chiếu dãy số định danh)
+    if (!matchedQ && rTkDigits && rTkDigits.length >= 4) {
       matchedQ = cached.find(q => {
         if (!q) return false;
-        const qTkRaw = String(q.tk_code || q.tkCode || '').trim();
+        const qTkRaw = String(q.tk_code || q.tkCode || q.request_tk_code || q.requestTkCode || '').trim();
         const qTkDigits = qTkRaw.replace(/\D/g, '');
         return (qTkRaw.toLowerCase() === rTkRaw.toLowerCase()) || (qTkDigits.length >= 4 && qTkDigits === rTkDigits);
       }) || null;
     }
 
-    // Match 3: Outlet Code fallback (đồng bộ 100% với detail-flow.js)
+    // Match 3: Outlet Code fallback
     if (!matchedQ) {
       const rOutlet = String(req.outletCode || req.outlet_code || '').trim();
       if (rOutlet && rOutlet !== '---' && rOutlet !== 'Chưa có code' && rOutlet !== 'null') {
         matchedQ = cached.find(q => {
           if (!q) return false;
           const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
-          return qOutlet && qOutlet === rOutlet;
+          return qOutlet && qOutlet.toLowerCase() === rOutlet.toLowerCase();
         }) || null;
       }
     }
 
+    // Match 4: window._quoteDataMap RAM cache
+    if (!matchedQ && window._quoteDataMap) {
+      matchedQ = (req.__backendId && window._quoteDataMap[req.__backendId]) ||
+                 (rTkRaw && window._quoteDataMap[rTkRaw]) ||
+                 (rQCode && window._quoteDataMap[rQCode]) || null;
+    }
+
     if (matchedQ) {
       return _resolveStatusFromQuote(matchedQ);
-    } else {
-      return { isLoading: false, hasQuote: false, label: '', cls: '' };
     }
   }
 
-  // 3. If quotes list is NOT loaded yet (đang chờ load báo giá từ App 1)
+  // 3. If quotes list is NOT loaded yet (đang nạp báo giá từ App 1)
   if (!window.__qcagQuoteListLoaded) {
-    if (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag') {
-      return { isLoading: false, hasQuote: false, label: '', cls: '' };
-    }
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache().then(() => {
         const listScreen = document.getElementById('listScreen');

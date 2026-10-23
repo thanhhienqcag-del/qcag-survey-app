@@ -1673,6 +1673,17 @@ function _appendCommentToActiveChat(note, tkOrBid) {
 }
 window._appendCommentToActiveChat = _appendCommentToActiveChat;
 
+// ── Base URL Resolver cho App 1 Backend ──────────────────────────────────────
+function _resolveApp1Base() {
+  const isStaging = (typeof window !== 'undefined' && (window.location.hostname.includes('staging') || window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')));
+  return isStaging
+    ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
+    : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+}
+if (typeof window !== 'undefined') {
+  window._resolveApp1Base = _resolveApp1Base;
+}
+
 // ── B-Tree Index Targeted Quote Loader (< 10ms, không tải 1000 items thừa) ──
 async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
   if (!tkCode && !quoteCode && !outletCode) return null;
@@ -1718,19 +1729,12 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
     }
   } catch (e) {}
 
-function _resolveApp1Base() {
-  const isStaging = (typeof window !== 'undefined' && (window.location.hostname.includes('staging') || window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')));
-  return isStaging
-    ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
-    : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
-}
-
   // 3. Fallback sang App 1 backend qua B-Tree Index
   if (!foundQuote) {
     try {
       const app1Base = _resolveApp1Base();
       const controller1 = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer1 = controller1 ? setTimeout(() => controller1.abort(), 2500) : null;
+      const timer1 = controller1 ? setTimeout(() => controller1.abort(), 4000) : null;
       const res1 = await fetch(`${app1Base}/quotations?${queryStr}`, { signal: controller1 ? controller1.signal : undefined }).catch(() => null);
       if (timer1) clearTimeout(timer1);
       if (res1 && res1.ok) {
@@ -1779,19 +1783,33 @@ async function _fetchApp1QuoteListWithCache(force = false) {
   }
 
   _quoteFetchInFlight = (async () => {
-    const app1Base = _resolveApp1Base();
+    const app1Base = (typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : (typeof window._resolveApp1Base === 'function' ? window._resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app'));
     let allQuotes = [];
 
-    const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
-    const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
-    const sessionName = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleName || currentSession.name || currentSession.username || '') : '';
+    let sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
+    let sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
+    let sessionName = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleName || currentSession.name || currentSession.username || '') : '';
+
+    if (!sessionCode && !sessionPhone) {
+      try {
+        const rawSes = localStorage.getItem('ks_session');
+        if (rawSes) {
+          const s = JSON.parse(rawSes);
+          if (s) {
+            sessionCode = s.saleCode || s.userCode || s.code || s.username || '';
+            sessionPhone = s.phone || s.salePhone || '';
+            sessionName = s.saleName || s.name || s.fullname || '';
+          }
+        }
+      } catch (_) {}
+    }
 
     try {
       let url1 = app1Base + '/pending-orders?summary=1';
       if (sessionCode) url1 += '&sale_code=' + encodeURIComponent(sessionCode);
       if (sessionPhone) url1 += '&sale_phone=' + encodeURIComponent(sessionPhone);
       const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 2500) : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
       const res = await fetch(url1, { signal: controller ? controller.signal : undefined }).catch(() => null);
       if (timer) clearTimeout(timer);
       if (res && res.ok) {
@@ -1813,7 +1831,7 @@ async function _fetchApp1QuoteListWithCache(force = false) {
       if (sessionPhone) url2 += '&sale_phone=' + encodeURIComponent(sessionPhone);
       if (sessionName) url2 += '&sale_name=' + encodeURIComponent(sessionName);
       const controller2 = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer2 = controller2 ? setTimeout(() => controller2.abort(), 3000) : null;
+      const timer2 = controller2 ? setTimeout(() => controller2.abort(), 8000) : null;
       const res2 = await fetch(url2, { signal: controller2 ? controller2.signal : undefined }).catch(() => null);
       if (timer2) clearTimeout(timer2);
       if (res2 && res2.ok) {
@@ -2211,6 +2229,31 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     if (Array.isArray(req.items)) items = req.items;
     else if (typeof req.items === 'string') {
       try { items = JSON.parse(req.items); } catch (_) { items = []; }
+    }
+  }
+
+  // Tự động nạp chi tiết vật tư đầy đủ từ App 1 nếu ban đầu là dữ liệu tóm tắt (Zero Oversized Transfers)
+  if ((!items || items.length === 0) && (quoteCode || q.id || tkCode)) {
+    try {
+      const qIdTarget = quoteCode || q.id || tkCode;
+      const app1Base = (typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : (window._resolveApp1Base ? window._resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app'));
+      const qDetailRes = await fetch(`${app1Base}/quotations/${encodeURIComponent(qIdTarget)}`).catch(() => null);
+      if (qDetailRes && qDetailRes.ok) {
+        const fullQ = await qDetailRes.json().catch(() => null);
+        if (fullQ) {
+          if (fullQ.items) {
+            if (Array.isArray(fullQ.items)) items = fullQ.items;
+            else if (typeof fullQ.items === 'string') {
+              try { items = JSON.parse(fullQ.items); } catch (_) {}
+            }
+          }
+          if (fullQ.total_amount && !q.total_amount) q.total_amount = fullQ.total_amount;
+          q.items = items;
+          if (backendId && window._quoteDataMap) window._quoteDataMap[backendId] = Object.assign({}, q, fullQ, { items });
+        }
+      }
+    } catch (e) {
+      console.warn('Lazy load quote items warning:', e);
     }
   }
 
