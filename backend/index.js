@@ -3040,33 +3040,39 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, d.created_at 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
-      ORDER BY d.id DESC LIMIT 1
+      ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
-        AND n.note_type = 'edit-request'
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
+        AND n.note_type IN ('edit-request', 'edit_request')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_edit ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
         AND n.note_type = 'edit-resolved'
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_res ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
-        AND n.note_type = 'edit-request'
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
+        AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
         AND (d_lat.created_at IS NULL OR n.created_at > d_lat.created_at)
       ORDER BY n.created_at ASC
@@ -3148,33 +3154,39 @@ const KS_REQUESTS_LITE_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, d.created_at 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
-      ORDER BY d.id DESC LIMIT 1
+      ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
-        AND n.note_type = 'edit-request'
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
+        AND n.note_type IN ('edit-request', 'edit_request')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_edit ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
         AND n.note_type = 'edit-resolved'
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_res ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
-      WHERE n.ref_type = 'request'
-        AND (n.ref_id = r.tk_code OR n.ref_id = r.id)
-        AND n.note_type = 'edit-request'
+      WHERE (
+          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+        )
+        AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
         AND (d_lat.created_at IS NULL OR n.created_at > d_lat.created_at)
       ORDER BY n.created_at ASC
@@ -3282,8 +3294,10 @@ app.get('/api/ks/health', async (req, res) => {
 // Proxies GCS image requests to bypass browser CORS headers for clipboard copying.
 app.get('/api/ks/proxy-image', async (req, res) => {
     try {
-        const url = req.query.url;
-        if (!url) return res.status(400).send('Missing url parameter');
+        const rawUrl = req.query.url;
+        if (!rawUrl) return res.status(400).send('Missing url parameter');
+
+        const url = String(rawUrl).trim().replace(/^https:\/\/storage\.cloud\.google\.com\//i, 'https://storage.googleapis.com/');
 
         if (!url.startsWith('https://storage.googleapis.com/')) {
             return res.status(403).send('Forbidden URL domain');
@@ -3297,6 +3311,8 @@ app.get('/api/ks/proxy-image', async (req, res) => {
         const contentType = response.headers.get('content-type') || 'image/png';
         res.setHeader('Content-Type', contentType);
         res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
 
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
@@ -3691,16 +3707,28 @@ async function getRequestDetailDirect(idOrTkCode) {
             SELECT url FROM designs WHERE request_tk_code = ? ORDER BY id DESC
         `, [tkCode]),
         pool.query(`
-            SELECT id, 
-                   CASE WHEN author_name LIKE '%Sale%' OR user_id LIKE '%SALE%' THEN 'heineken' ELSE 'qcag' END AS "authorRole",
-                   COALESCE(author_name, 'Hệ thống') AS "authorName",
-                   content AS "text",
-                   note_type AS "commentType",
-                   CASE WHEN image_url IS NOT NULL AND image_url != '' THEN json_build_array(image_url) ELSE '[]'::json END AS images,
-                   created_at AS "createdAt"
-            FROM notes
-            WHERE ref_type = 'request' AND ref_id = ?
-            ORDER BY created_at
+            SELECT n.id, 
+                   CASE 
+                     WHEN LOWER(TRIM(COALESCE(n.author_name, ''))) IN (
+                       'phong', 'trần huỳnh phong', 'đoàn minh thái', 'đòan minh thái', 'thái', 
+                       'thanh hiển', 'nguyễn thanh hiển', 'mến', 'võ thị mến', 'mến võ',
+                       'thảo', 'thảo võ', 'mỹ linh', 'trần lê mỹ linh', 'admin qcag', 'quản trị',
+                       '0966767731', '0868866240', '0901017401', '0859219424', '0123567899'
+                     ) THEN 'qcag'
+                     WHEN LOWER(COALESCE(n.author_name, '')) LIKE '%qcag%' 
+                       OR LOWER(COALESCE(n.author_name, '')) LIKE '%thiết kế%' 
+                       OR LOWER(COALESCE(n.author_name, '')) LIKE '%designer%' THEN 'qcag'
+                     WHEN n.note_type = 'edit-resolved' THEN 'qcag'
+                     ELSE 'heineken'
+                   END AS "authorRole",
+                   COALESCE(n.author_name, 'Hệ thống') AS "authorName",
+                   n.content AS "text",
+                   n.note_type AS "commentType",
+                   CASE WHEN n.image_url IS NOT NULL AND n.image_url != '' THEN json_build_array(n.image_url) ELSE '[]'::json END AS images,
+                   n.created_at AS "createdAt"
+            FROM notes n
+            WHERE n.ref_type = 'request' AND n.ref_id = ?
+            ORDER BY n.created_at ASC
         `, [tkCode])
     ]);
 
@@ -3760,20 +3788,32 @@ app.get('/api/ks/requests/:id/notes', async (req, res) => {
 
         const [notes] = await pool.query(`
             SELECT 
-                id, 
-                ref_type AS "refType", 
-                ref_id AS "refId", 
-                note_type AS "noteType", 
-                note_type AS "commentType", 
-                content AS "text", 
-                author_name AS "authorName", 
-                CASE WHEN author_name LIKE '%Sale%' OR user_id LIKE '%SALE%' THEN 'heineken' ELSE 'qcag' END AS "authorRole",
-                image_url AS "imageUrl", 
-                CASE WHEN image_url IS NOT NULL AND image_url != '' THEN json_build_array(image_url) ELSE '[]'::json END AS "images",
-                created_at AS "createdAt"
-            FROM notes
-            WHERE ref_type = 'request' AND ref_id = ?
-            ORDER BY created_at ASC
+                n.id, 
+                n.ref_type AS "refType", 
+                n.ref_id AS "refId", 
+                n.note_type AS "noteType", 
+                n.note_type AS "commentType", 
+                n.content AS "text", 
+                n.author_name AS "authorName", 
+                CASE 
+                  WHEN LOWER(TRIM(COALESCE(n.author_name, ''))) IN (
+                    'phong', 'trần huỳnh phong', 'đoàn minh thái', 'đòan minh thái', 'thái', 
+                    'thanh hiển', 'nguyễn thanh hiển', 'mến', 'võ thị mến', 'mến võ',
+                    'thảo', 'thảo võ', 'mỹ linh', 'trần lê mỹ linh', 'admin qcag', 'quản trị',
+                    '0966767731', '0868866240', '0901017401', '0859219424', '0123567899'
+                  ) THEN 'qcag'
+                  WHEN LOWER(COALESCE(n.author_name, '')) LIKE '%qcag%' 
+                    OR LOWER(COALESCE(n.author_name, '')) LIKE '%thiết kế%' 
+                    OR LOWER(COALESCE(n.author_name, '')) LIKE '%designer%' THEN 'qcag'
+                  WHEN n.note_type = 'edit-resolved' THEN 'qcag'
+                  ELSE 'heineken'
+                END AS "authorRole",
+                n.image_url AS "imageUrl", 
+                CASE WHEN n.image_url IS NOT NULL AND n.image_url != '' THEN json_build_array(n.image_url) ELSE '[]'::json END AS "images",
+                n.created_at AS "createdAt"
+            FROM notes n
+            WHERE n.ref_type = 'request' AND n.ref_id = ?
+            ORDER BY n.created_at ASC
         `, [tkCode]);
 
         return res.json({ ok: true, data: notes || [] });
@@ -3814,6 +3854,15 @@ async function handleCreateRequestNote(req, res) {
             VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
         `, [noteId, tkCode, noteType, text, authorName, imageUrl]);
 
+        const isQcagAuthor = (
+            String(b.authorRole || '').toLowerCase() === 'qcag' ||
+            String(b.role || '').toLowerCase() === 'qcag' ||
+            /^(phong|trần huỳnh phong|đoàn minh thái|đòan minh thái|thái|thanh hiển|nguyễn thanh hiển|mến|võ thị mến|mến võ|thảo|thảo võ|mỹ linh|trần lê mỹ linh|admin qcag|quản trị|0966767731|0868866240|0901017401|0859219424|0123567899)$/i.test(authorName.trim()) ||
+            /qcag|thiết\s*kế|designer/i.test(authorName) ||
+            noteType === 'edit-resolved'
+        );
+        const resolvedAuthorRole = isQcagAuthor ? 'qcag' : 'heineken';
+
         const noteObj = {
             id: noteId,
             refType: 'request',
@@ -3822,7 +3871,7 @@ async function handleCreateRequestNote(req, res) {
             commentType: noteType,
             text,
             authorName,
-            authorRole: (b.authorRole || (authorName.includes('Sale') ? 'heineken' : 'qcag')),
+            authorRole: resolvedAuthorRole,
             images: imageUrl ? [imageUrl] : [],
             createdAt: new Date().toISOString()
         };
@@ -4318,21 +4367,43 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
 
         const cText = String(lastComment.text || lastComment.content).trim();
         if (!cText) return;
-        const cAuthor = String(lastComment.authorName || lastComment.author || 'Sale Heineken').trim();
+        const cAuthor = String(lastComment.authorName || lastComment.author || 'QCAG Thiết Kế').trim();
         const cType = String(lastComment.commentType || lastComment.noteType || 'comment').trim();
         let cImg = Array.isArray(lastComment.images) && lastComment.images.length > 0 ? lastComment.images[0] : null;
         if (typeof cImg !== 'string' || !cImg.trim() || cImg.startsWith('data:image')) cImg = null;
 
-        const [existing] = await pool.query(
-            `SELECT id FROM notes WHERE ref_type = 'request' AND ref_id = ? AND content = ? LIMIT 1`,
-            [tkCode, cText]
-        );
-        if (!existing || existing.length === 0) {
-            const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-            await pool.query(`
-                INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
-                VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
-            `, [noteId, tkCode, cType, cText, cAuthor, cImg]);
+        const isEditResolved = cType === 'edit-resolved' || cText.includes('đã chỉnh sửa xong');
+
+        // Bỏ qua chặn trùng lặp đối với edit-resolved để luôn ghi nhận mốc thời gian hoàn thành mới nhất
+        if (!isEditResolved) {
+            const [existing] = await pool.query(
+                `SELECT id FROM notes WHERE ref_type = 'request' AND ref_id = ? AND content = ? LIMIT 1`,
+                [tkCode, cText]
+            );
+            if (existing && existing.length > 0) return;
+        }
+
+        const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        await pool.query(`
+            INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
+            VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
+        `, [noteId, tkCode, isEditResolved ? 'edit-resolved' : cType, cText, cAuthor, cImg]);
+
+        // Nếu là giải quyết yêu cầu sửa, ghi thêm note edit-resolved cho quotation liên quan nếu có
+        if (isEditResolved) {
+            try {
+                const [qRows] = await pool.query(`SELECT quote_code FROM quotations WHERE request_tk_code = ? LIMIT 1`, [tkCode]);
+                if (qRows && qRows.length > 0 && qRows[0].quote_code) {
+                    const qCode = qRows[0].quote_code;
+                    const qNoteId = `nt_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
+                    await pool.query(`
+                        INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
+                        VALUES (?, 'quotation', ?, 'edit-resolved', ?, ?, ?, NOW())
+                    `, [qNoteId, qCode, cText, cAuthor, cImg]);
+                }
+            } catch (qErr) {
+                console.warn('[saveCommentPayloadToNotes] quotation note sync warning:', qErr && qErr.message);
+            }
         }
     } catch (e) {
         console.warn('[saveCommentPayloadToNotes] warning:', e && e.message);
@@ -4521,6 +4592,15 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             vals.push(now);
             vals.push(tkCode);
             await pool.query(`UPDATE requests SET ${fields.join(', ')} WHERE tk_code = ?`, vals);
+        }
+
+        if (b.status === 'done') {
+            try {
+                await pool.query(`UPDATE design_tasks SET status = 'done', updated_at = NOW() WHERE tk_code = ?`, [tkCode]);
+                wsInvalidate('design_tasks', { action: 'update', tk_code: tkCode });
+            } catch (dtDoneErr) {
+                console.warn('[ks/update] design_tasks done update warning:', dtDoneErr && dtDoneErr.message);
+            }
         }
 
         // Synchronize designer assignment to design_tasks table
@@ -4878,10 +4958,23 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                         q.request_tk_code,
                         COALESCE(o.code, '') AS outlet_code
                     FROM latest_edit_req e
-                    LEFT JOIN latest_edit_res r ON e.ref_id = r.ref_id
                     LEFT JOIN quotations q ON (q.quote_code = e.ref_id OR q.request_tk_code = e.ref_id)
                     LEFT JOIN outlets o ON q.outlet_id = o.id
+                    LEFT JOIN latest_edit_res r ON (
+                        r.ref_id = e.ref_id 
+                        OR (q.request_tk_code IS NOT NULL AND r.ref_id = q.request_tk_code)
+                        OR (q.quote_code IS NOT NULL AND r.ref_id = q.quote_code)
+                    )
+                    LEFT JOIN LATERAL (
+                        SELECT COALESCE(d.updated_at, d.created_at) AS design_effective_at
+                        FROM designs d
+                        WHERE (q.request_tk_code IS NOT NULL AND d.request_tk_code = q.request_tk_code)
+                           OR d.request_tk_code = e.ref_id
+                        ORDER BY COALESCE(d.updated_at, d.created_at) DESC
+                        LIMIT 1
+                    ) d_lat ON true
                     WHERE (r.created_at IS NULL OR r.created_at < e.created_at)
+                      AND (d_lat.design_effective_at IS NULL OR d_lat.design_effective_at < e.created_at)
                 `);
 
                 (editRows || []).forEach(r => {

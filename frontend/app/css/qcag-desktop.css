@@ -2764,13 +2764,16 @@
   }
 
   .qcag-chat-author-name {
-    font-size: 10.5px;
+    display: inline-block;
+    font-size: 11.5px;
     font-weight: 600;
-    font-style: italic;
+    font-style: normal !important;
     color: #475569;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    overflow: visible !important;
+    padding-right: 8px !important;
+    line-height: 1.4 !important;
+    letter-spacing: 0.2px;
   }
 
   .qcag-chat-role-tag {
@@ -2782,6 +2785,16 @@
     flex-shrink: 0;
     background: #e2e8f0;
     color: #475569;
+  }
+
+  .qcag-chat-role-tag.role-qcag {
+    background: rgba(2, 132, 199, 0.12);
+    color: #0284c7;
+  }
+
+  .qcag-chat-role-tag.role-sale {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
   }
 
   .qcag-chat-text {
@@ -3751,12 +3764,22 @@
 }
 
 .theme-dark .qcag-chat-author-name {
-  color: #94a3b8;
+  color: #94a3b8 !important;
 }
 
 .theme-dark .qcag-chat-role-tag {
   background: rgba(255, 255, 255, 0.08);
   color: #94a3b8;
+}
+
+.theme-dark .qcag-chat-role-tag.role-qcag {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: #38bdf8 !important;
+}
+
+.theme-dark .qcag-chat-role-tag.role-sale {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #34d399 !important;
 }
 
 .theme-dark .qcag-sys-bullet {

@@ -1096,13 +1096,41 @@ async function showRequestDetail(id) {
           `;
         }
 
-        // Nhận diện nhân sự QCAG vs Sale
-        const isQcagAuthor = (
-          rawRole === 'qcag' ||
-          rawRole === 'designer' ||
-          /qcag|thiết kế|thanh hiển|thái|phong/i.test(rawAuthor) ||
-          /QCAG\s+(đã\s+)?(chỉnh\s+sửa|hoàn\s+tất|sửa xong|gửi)/i.test(text)
+        // Nhận diện nhân sự QCAG vs Sale chính xác
+        const authorLower = String(rawAuthor || '').toLowerCase().trim();
+        const reqObj = (() => { try { return JSON.parse(request2.requester || '{}'); } catch (_) { return {}; } })();
+        const reqSaleName = String(reqObj.saleName || reqObj.name || request2.createdByName || '').toLowerCase().trim();
+
+        const isKnownQcagMember = (
+          authorLower === 'phong' ||
+          authorLower.includes('phong') ||
+          authorLower.includes('trần huỳnh phong') ||
+          authorLower.includes('đoàn minh thái') ||
+          authorLower.includes('đòan minh thái') ||
+          authorLower.includes('thanh hiển') ||
+          authorLower.includes('nguyễn thanh hiển') ||
+          authorLower.includes('võ thị mến') ||
+          authorLower.includes('mến') ||
+          authorLower.includes('mỹ linh') ||
+          authorLower.includes('thảo võ') ||
+          authorLower === 'thảo' ||
+          authorLower.includes('qcag') ||
+          authorLower.includes('designer') ||
+          authorLower.includes('thiết kế')
         );
+
+        let isQcagAuthor = false;
+        if (reqSaleName && (authorLower === reqSaleName || authorLower.includes(reqSaleName) || reqSaleName.includes(authorLower))) {
+          isQcagAuthor = false;
+        } else if (rawRole === 'sale' || rawRole === 'heineken' || rawRole === 'sales') {
+          isQcagAuthor = false;
+        } else if (isKnownQcagMember) {
+          isQcagAuthor = true;
+        } else if (cType === 'edit-resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(text)) {
+          isQcagAuthor = true;
+        } else {
+          isQcagAuthor = false;
+        }
 
         let isMine = false;
         if (_isQcagRole) {
@@ -1124,7 +1152,6 @@ async function showRequestDetail(id) {
           }
         } else {
           if (!displayName || displayName === 'Sale Heineken' || displayName === 'Người dùng' || displayName === 'heineken' || displayName === 'unknown') {
-            const reqObj = (() => { try { return JSON.parse(request2.requester || '{}'); } catch (_) { return {}; } })();
             displayName = reqObj.saleName || reqObj.name || request2.createdByName || 'Sale Heineken';
           }
         }
@@ -1137,12 +1164,7 @@ async function showRequestDetail(id) {
 
         // Phân loại Yêu Cầu Chỉnh Sửa vs Đã Chỉnh Sửa Xong
         const isEditResolved = isQcagAuthor && (cType === 'edit-resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(text));
-        const isFromQcagEditRequest = isQcagAuthor && (
-          cType === 'edit-request' ||
-          /^Yêu\s+cầu\s+chỉnh\s+sửa/i.test(text) ||
-          /Yêu\s+cầu\s+chỉnh\s+sửa\s+được\s+gửi\s+từ/i.test(text)
-        );
-        const isEditRequest = (!isQcagAuthor && (cType === 'edit-request' || /^Yêu\s+cầu\s+chỉnh\s+sửa/i.test(text))) || isFromQcagEditRequest;
+        const isEditRequest = (!isSystem && (cType === 'edit-request' || /^yêu\s+cầu\s+chỉnh\s+sửa/i.test(text)));
 
         // 2. Thẻ Yêu Cầu Sửa
         if (isEditRequest) {
@@ -1159,10 +1181,11 @@ async function showRequestDetail(id) {
           const imagesHtml = images.length > 0
             ? `<div class="qcag-chat-images-grid">${images.map(img => `<img src="${escapeHtml(img)}" alt="đính kèm" onclick="showImageFull(this.src,false)">`).join('')}</div>`
             : '';
-          const editLabelText = isFromQcagEditRequest ? 'QCAG đã gửi yêu cầu' : 'Yêu cầu sửa';
+          const editLabelText = isQcagAuthor ? 'QCAG yêu cầu sửa' : 'Sale yêu cầu sửa';
+          const editRowSide = isMine ? 'is-mine' : 'is-other';
 
           return dateDividerHtml + `
-            <div class="qcag-chat-msg-row ${isMine ? 'is-mine' : 'is-other'} is-edit-request">
+            <div class="qcag-chat-msg-row ${editRowSide} is-edit-request">
               <div class="qcag-chat-bubble edit-request-card">
                 <div class="qcag-chat-bubble-top">
                   <span class="qcag-chat-author-name">${escapeHtml(displayName)}</span>

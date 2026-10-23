@@ -863,15 +863,8 @@ async function qcagDesktopConfirmEditOutletModal() {
   const newLngStr = (document.getElementById('qcagEditOutletLng').value || '').trim();
   const note = (document.getElementById('qcagEditOutletNote').value || '').trim();
 
-  const curCode = currentDetailRequest.outletCode || '';
-  const effectiveCode = newCode || (isPlaceholderOutletCode(curCode) ? curCode : '');
-
-  if (!newName) {
-    showToast('Tên Outlet không được để trống');
-    return;
-  }
-  if (!effectiveCode) {
-    showToast('Outlet Code không được để trống');
+  if (!newCode || !newName) {
+    showToast('Outlet Code và Tên Outlet không được để trống');
     return;
   }
 
@@ -882,7 +875,7 @@ async function qcagDesktopConfirmEditOutletModal() {
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
 
   const changes = [];
-  if (effectiveCode !== (currentDetailRequest.outletCode || '')) changes.push(`Outlet Code: ${currentDetailRequest.outletCode || '-'} → ${effectiveCode}`);
+  if (newCode !== (currentDetailRequest.outletCode || '')) changes.push(`Outlet Code: ${currentDetailRequest.outletCode || '-'} → ${newCode}`);
   if (newName !== (currentDetailRequest.outletName || '')) changes.push(`Tên Outlet: ${currentDetailRequest.outletName || '-'} → ${newName}`);
   if (newPhone !== (currentDetailRequest.phone || '')) changes.push(`SĐT: ${currentDetailRequest.phone || '-'} → ${newPhone}`);
   if (newAddress !== (currentDetailRequest.address || '')) changes.push(`Địa chỉ: ${currentDetailRequest.address || '-'} → ${newAddress}`);
@@ -905,7 +898,7 @@ async function qcagDesktopConfirmEditOutletModal() {
 
   const updated = {
     ...currentDetailRequest,
-    outletCode: effectiveCode,
+    outletCode: newCode,
     outletName: newName,
     phone: newPhone,
     address: newAddress,
@@ -2775,7 +2768,6 @@ function renderQCAGDesktopList(forceRebuild = false) {
     const requestCode = req.tkCode || '-'; // Sử dụng tkCode từ server trả về
 
     let isTaskDone = false;
-    let isTaskEdit = false;
     let chkBadgeHtml = '';
     let saleApprBadgeHtml = '';
 
@@ -2794,11 +2786,6 @@ function renderQCAGDesktopList(forceRebuild = false) {
       const saleAppr = saleApprFn
         ? saleApprFn(req)
         : { key: 'pending', label: 'Chờ Sale', cls: 'status-pending' };
-
-      if (saleAppr.key === 'pending-edit' || saleAppr.key === 'rejected' || req.hasEditRequest || req.isPendingEdit || qcagDesktopIsPendingEditRequest(req)) {
-        isTaskEdit = true;
-        isTaskDone = false;
-      }
 
       // Badge duy nhất trên thẻ trong Task Mode là trạng thái duyệt từ Sale: Chờ Sale - Yêu cầu sửa - Từ chối - Đã duyệt
       // Trạng thái "Đã kiểm tra" được thể hiện trực quan bằng viền xanh lá của cả khối thẻ (is-task-complete)
@@ -2851,7 +2838,7 @@ function renderQCAGDesktopList(forceRebuild = false) {
       deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${escapeHtml(reqId)}'))" title="Xóa yêu cầu"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
     }
     return `
-      <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskEdit ? 'is-task-edit qcag-task-card-edit' : (isTaskDone ? 'is-task-complete qcag-task-card-done' : '')}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
+      <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
         <div class="qcag-request-item-top">
           <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}</div>
           <div class="flex flex-col items-end gap-1">
@@ -3311,10 +3298,6 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
     const patchToSend = Object.assign({}, updated);
     for (const field of IMAGE_FIELDS) {
       if (!(field in patchToSend)) continue;
-      // Luôn bảo vệ và gửi designImages nếu người dùng cố ý upload hoặc thay MQ
-      if (field === 'designImages' && (updated._mqReplacedDuringEdit || updated._hasNewDesignUploaded)) {
-        continue;
-      }
       const v = String(patchToSend[field] == null ? '' : patchToSend[field]);
       // Strip if it's a placeholder sentinel
       if (PLACEHOLDER_RE.test(v)) { delete patchToSend[field]; continue; }
@@ -3450,7 +3433,7 @@ function qcagCheckCompletionConditions(req) {
       // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải có bản vẽ MQ mới upload sau thời điểm yêu cầu sửa
       const editTime = req.editingRequestedAt || req.editing_requested_at;
       const designTime = req.designUpdatedAt || req.design_updated_at;
-      let hasNewMq = Boolean(req._mqReplacedDuringEdit || req._hasNewDesignUploaded);
+      let hasNewMq = Boolean(req._mqReplacedDuringEdit);
       if (!hasNewMq && editTime && designTime) {
         try {
           hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
@@ -3706,10 +3689,10 @@ function qcagDesktopSyncReadStatus(request) {
 
 function qcagGetCommentAuthorInfo(comment, currentRequest) {
   let isQCAG = false;
-  const role = String((comment && comment.authorRole) || '').toLowerCase();
-  const rawAuthor = String((comment && comment.authorName) || '').trim();
+  const role = String((comment && (comment.authorRole || comment.role)) || '').toLowerCase();
+  const rawAuthor = String((comment && (comment.authorName || comment.author)) || '').trim();
   const text = String((comment && comment.text) || '');
-  const cType = String((comment && comment.commentType) || '').toLowerCase();
+  const cType = String((comment && (comment.commentType || comment.noteType)) || '').toLowerCase();
 
   const isSystem = (
     cType === 'system' ||
@@ -3729,14 +3712,40 @@ function qcagGetCommentAuthorInfo(comment, currentRequest) {
     };
   }
 
-  // Nhận diện nhân sự QCAG chính xác
   const authorLower = rawAuthor.toLowerCase();
-  const isQcagText = /QCAG\s+(đã\s+)?(chỉnh\s+sửa|hoàn\s+tất|sửa xong|gửi)/i.test(text);
+
+  // 1. Lấy thông tin Sale phụ trách request này để đối soát
+  let reqSaleName = '';
+  let reqSaleCode = '';
+  let reqSalePhone = '';
+  if (currentRequest) {
+    const reqObj = (() => {
+      try {
+        return typeof currentRequest.requester === 'string'
+          ? JSON.parse(currentRequest.requester || '{}')
+          : (currentRequest.requester || {});
+      } catch (_) { return {}; }
+    })();
+    reqSaleName = String(reqObj.saleName || reqObj.name || currentRequest.createdByName || '').toLowerCase().trim();
+    reqSaleCode = String(reqObj.saleCode || '').toLowerCase().trim();
+    reqSalePhone = String(reqObj.phone || '').toLowerCase().trim();
+  }
+
+  // 2. Danh sách nhân sự nội bộ QCAG chính thức (Bao gồm Trần Huỳnh Phong, Thái, Hiển, Mến, Linh, Thảo,...)
   const isKnownQcagMember = (
-    authorLower.includes('qcag') ||
-    authorLower.includes('thanh hiển') ||
-    authorLower.includes('thái') ||
+    authorLower === 'phong' ||
     authorLower.includes('phong') ||
+    authorLower.includes('trần huỳnh phong') ||
+    authorLower.includes('đoàn minh thái') ||
+    authorLower.includes('đòan minh thái') ||
+    authorLower.includes('thanh hiển') ||
+    authorLower.includes('nguyễn thanh hiển') ||
+    authorLower.includes('võ thị mến') ||
+    authorLower.includes('mến') ||
+    authorLower.includes('mỹ linh') ||
+    authorLower.includes('thảo võ') ||
+    authorLower === 'thảo' ||
+    authorLower.includes('qcag') ||
     authorLower.includes('designer') ||
     authorLower.includes('thiết kế')
   );
@@ -3746,24 +3755,38 @@ function qcagGetCommentAuthorInfo(comment, currentRequest) {
     currentDesignerName = String(currentRequest.designCreatedBy || currentRequest.designLastEditedBy || '').toLowerCase().trim();
   }
 
-  if (
-    role === 'qcag' ||
-    role === 'designer' ||
-    role === 'admin' ||
-    isKnownQcagMember ||
-    isQcagText ||
-    (currentDesignerName && authorLower.includes(currentDesignerName))
-  ) {
+  // 3. Quy chuẩn phân định danh tính QCAG vs Sale Heineken:
+  // - Nếu tên tác giả trùng với Sale của request này -> 100% LÀ SALE HEINEKEN
+  // - Nếu role truyền vào là sale/heineken/sales -> 100% LÀ SALE HEINEKEN
+  // - Nếu thuộc danh sách nhân sự nội bộ QCAG (Phong, Thái, Hiển, Mến, Linh, Thảo,...) -> 100% LÀ QCAG
+  // - Nếu tác giả là designer được giao cho request này -> 100% LÀ QCAG
+  // - Nếu là thông báo hoàn tất sửa (edit-resolved) -> 100% LÀ QCAG
+  // - MỌI TRƯỜNG HỢP CÒN LẠI: MẶC ĐỊNH AN TOÀN TUYỆT ĐỐI LÀ SALE HEINEKEN
+  if (reqSaleName && (authorLower === reqSaleName || authorLower.includes(reqSaleName) || reqSaleName.includes(authorLower))) {
+    isQCAG = false;
+  } else if (reqSaleCode && authorLower === reqSaleCode) {
+    isQCAG = false;
+  } else if (reqSalePhone && authorLower === reqSalePhone) {
+    isQCAG = false;
+  } else if (role === 'sale' || role === 'heineken' || role === 'sales') {
+    isQCAG = false;
+  } else if (isKnownQcagMember) {
     isQCAG = true;
+  } else if (currentDesignerName && authorLower.includes(currentDesignerName)) {
+    isQCAG = true;
+  } else if (cType === 'edit-resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(text)) {
+    isQCAG = true;
+  } else {
+    // Mặc định an toàn tuyệt đối là Sale Heineken
+    isQCAG = false;
   }
 
   let displayName = rawAuthor;
-  if (!displayName || displayName === 'Sale Heineken' || displayName === 'Người dùng' || displayName === 'heineken' || displayName === 'unknown') {
+  if (!displayName || displayName === 'QCAG' || displayName === 'Sale Heineken' || displayName === 'Người dùng' || displayName === 'heineken' || displayName === 'unknown') {
     if (isQCAG) {
       displayName = 'QCAG Thiết Kế';
-    } else if (currentRequest) {
-      const reqObj = (() => { try { return JSON.parse(currentRequest.requester || '{}'); } catch (_) { return {}; } })();
-      displayName = reqObj.saleName || reqObj.name || currentRequest.createdByName || 'Sale';
+    } else if (reqSaleName) {
+      displayName = String(reqSaleName).toUpperCase();
     } else {
       displayName = 'Sale Heineken';
     }
@@ -3857,14 +3880,9 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
 
   // Tự động phân loại chính xác Yêu Cầu Chỉnh Sửa vs Đã Chỉnh Sửa Xong
   const isEditResolved = isQCAG && (cType === 'edit-resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(commentText));
-  const isFromQcagEditRequest = isQCAG && (
-    cType === 'edit-request' ||
-    /^Yêu\s+cầu\s+chỉnh\s+sửa/i.test(commentText) ||
-    /Yêu\s+cầu\s+chỉnh\s+sửa\s+được\s+gửi\s+từ/i.test(commentText)
-  );
-  const isEditRequest = (!isQCAG && !isSystem) || isFromQcagEditRequest;
+  const isEditRequest = (!isSystem && (cType === 'edit-request' || /^yêu\s+cầu\s+chỉnh\s+sửa/i.test(commentText)));
 
-  // 2. Thẻ Yêu Cầu Sửa (Icon cờ lê màu vàng nằm ngang với dòng thời gian, canh trái)
+  // 2. Thẻ Yêu Cầu Sửa
   if (isEditRequest) {
     const catsArr = Array.isArray(comment.editCategories) ? comment.editCategories : [];
     let displayText = commentText;
@@ -3880,10 +3898,11 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
       ? `<div class="qcag-chat-images-grid">${images.map(img => `<img src="${img}" alt="đính kèm" onclick="showImageFull(this.src,false)">`).join('')}</div>`
       : '';
 
-    const editLabelText = isFromQcagEditRequest ? 'QCAG đã gửi yêu cầu' : 'Yêu cầu sửa';
+    const editLabelText = isQCAG ? 'QCAG yêu cầu sửa' : 'Sale yêu cầu sửa';
+    const rowSideCls = isQCAG ? 'is-mine' : 'is-other';
 
     return `
-      <div class="qcag-chat-msg-row ${isQCAG ? 'is-mine' : 'is-other'} is-edit-request">
+      <div class="qcag-chat-msg-row ${rowSideCls} is-edit-request">
         <div class="qcag-chat-bubble edit-request-card">
           <div class="qcag-chat-bubble-top">
             <span class="qcag-chat-author-name">${escapeHtml(name)}</span>
@@ -4713,7 +4732,7 @@ function qcagDesktopBuildEditRequestAlertBannerHtml(req) {
     author = reqObj.saleName || reqObj.name || req.createdByName || reqObj.phone || 'Sale Heineken';
   }
 
-  let text = (latestEditComment && latestEditComment.text) ? latestEditComment.text.trim() : (req.editReason || req.rejectReason || req.productionRejectReason || req.production_reject_reason || 'Yêu cầu điều chỉnh lại thiết kế.');
+  let text = (latestEditComment && latestEditComment.text) ? latestEditComment.text.trim() : (req.editReason || req.productionRejectReason || 'Yêu cầu điều chỉnh lại thiết kế.');
   if (text.startsWith('Yêu cầu chỉnh sửa: ')) text = text.slice('Yêu cầu chỉnh sửa: '.length).trim();
 
   const imgs = (latestEditComment && Array.isArray(latestEditComment.images)) ? latestEditComment.images : [];
@@ -5585,7 +5604,7 @@ async function qcagDesktopUploadStatusImage(input) {
   if (ok) {
     // Only update the UI section for the request that was active when upload started.
     // If the user has navigated to a different request, skip the DOM update entirely.
-    if (!qcagDesktopIsSameRequest(targetRequest, _qcagDesktopCurrentId)) return;
+    if (_qcagDesktopCurrentId !== targetId) return;
     const thumbGrid = document.getElementById('qcagStatusThumbGrid');
     if (thumbGrid) {
       const newImgs = qcagDesktopPrepareRenderImageList(currentImgs);
@@ -5606,19 +5625,6 @@ async function qcagDesktopUploadStatusImage(input) {
   }
 }
 
-function qcagDesktopIsSameRequest(target, curId) {
-  if (!target) return false;
-  if (!curId) return true;
-  const targetBk = target.__backendId;
-  const targetTk = target.tkCode;
-  const targetId = target.id;
-  const curStr = String(curId).trim();
-  return (targetBk && curStr === String(targetBk)) ||
-         (targetTk && curStr.toUpperCase() === String(targetTk).toUpperCase()) ||
-         (targetId != null && curStr === String(targetId)) ||
-         (targetId != null && curStr === ('db_' + targetId));
-}
-
 async function qcagDesktopUploadMQ(input) {
   if (!currentDetailRequest || !input) return;
   const files = Array.from(input.files || []);
@@ -5629,208 +5635,184 @@ async function qcagDesktopUploadMQ(input) {
 
   // Ghi nhận targetRequest ngay trước async — bảo vệ đúng TK request
   const targetRequest = currentDetailRequest;
-  const targetId = targetRequest.__backendId || (targetRequest.id ? ('db_' + targetRequest.id) : targetRequest.tkCode);
+  const targetId = targetRequest.__backendId;
   const uploadToken = ++_qcagCurrentMqUploadToken;
 
   const isWarrantyReq = String((targetRequest.type || '')).toLowerCase() === 'warranty';
 
-  const isStillOnSameRequest = () => {
-    if (!currentDetailRequest) return false;
-    const sameReq = (targetRequest.tkCode && currentDetailRequest.tkCode && targetRequest.tkCode === currentDetailRequest.tkCode) ||
-                    (targetRequest.__backendId && currentDetailRequest.__backendId && targetRequest.__backendId === currentDetailRequest.__backendId) ||
-                    (targetRequest.id && currentDetailRequest.id && String(targetRequest.id) === String(currentDetailRequest.id));
-    if (!sameReq) return false;
-    if (_qcagDesktopCurrentId && !qcagDesktopIsSameRequest(targetRequest, _qcagDesktopCurrentId)) {
-      return false;
-    }
-    return true;
-  };
-
+  // Nén ảnh nhanh (WebP/Canvas 2048px chất lượng 0.88, cực nhanh ~60ms, đọc rõ số đo MQ)
+  let dataUrl;
   try {
-    // Nén ảnh nhanh (WebP/Canvas 2048px chất lượng 0.88, cực nhanh ~60ms, đọc rõ số đo MQ)
-    let dataUrl;
-    try {
-      dataUrl = await _compressImageFile(file, 2048, 0.88);
-    } catch (_) {
-      dataUrl = await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.readAsDataURL(file);
-      });
-    }
+    dataUrl = await _compressImageFile(file, 2048, 0.88);
+  } catch (_) {
+    dataUrl = await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.readAsDataURL(file);
+    });
+  }
 
-    // Guard: Nếu user chuyển sang TK khác trong lúc nén thì hủy
-    if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
+  // Guard: Nếu user chuyển sang TK khác trong lúc nén thì hủy
+  if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
 
-    if (isWarrantyReq) {
-      // Luồng bảo hành: upload nghiệm thu
-      let imageUrl = dataUrl;
-      if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
-        showToast('Đang upload ảnh nghiệm thu...');
-        try {
-          const uploaded = await window.dataSdk.uploadImage(
-            dataUrl, file.name || 'accept.jpg', targetId, 'nghiem-thu'
-          );
-          if (typeof uploaded === 'string' && uploaded.trim()) {
-            imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
-          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-            imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
-          }
-        } catch (e) {
-          console.warn('[qcagDesktopUploadMQ] GCS upload failed for acceptance, keeping base64:', e);
-        }
-      }
-      if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
-      const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
-      existingAccept.push(imageUrl);
-      const updated = {
-        ...currentDetailRequest,
-        acceptanceImages: JSON.stringify(existingAccept),
-        updatedAt: new Date().toISOString()
-      };
-      const ok = await qcagDesktopPersistRequest(updated, 'Đã upload ảnh nghiệm thu', true);
-      if (ok && uploadToken === _qcagCurrentMqUploadToken) qcagDesktopRefreshMQInPlace(updated);
-      return;
-    }
-
-    // ── Luồng MQ thiết kế chuẩn Production ──
-    const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
-
-    // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' và hiển thị preview tại chỗ
-    currentDetailRequest.status = 'processing';
-    currentDetailRequest.designImages = JSON.stringify([dataUrl]);
-    currentDetailRequest.designFilename = file.name;
-    currentDetailRequest._mqReplacedDuringEdit = true;
-    currentDetailRequest._hasNewDesignUploaded = true;
-
-    const idxPreview = allRequests.findIndex(r => (r.__backendId && r.__backendId === targetId) || (r.tkCode && r.tkCode === targetRequest.tkCode));
-    if (idxPreview !== -1) {
-      allRequests[idxPreview].status = 'processing';
-      allRequests[idxPreview].designImages = currentDetailRequest.designImages;
-      allRequests[idxPreview].designFilename = file.name;
-      allRequests[idxPreview]._mqReplacedDuringEdit = true;
-      allRequests[idxPreview]._hasNewDesignUploaded = true;
-    }
-    if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
-      const cacheKey = targetId || targetRequest.tkCode;
-      if (_qcagDesktopFullRequestCache[cacheKey]) {
-        _qcagDesktopFullRequestCache[cacheKey].status = 'processing';
-        _qcagDesktopFullRequestCache[cacheKey].designImages = currentDetailRequest.designImages;
-        _qcagDesktopFullRequestCache[cacheKey].designFilename = file.name;
-        _qcagDesktopFullRequestCache[cacheKey]._mqReplacedDuringEdit = true;
-        _qcagDesktopFullRequestCache[cacheKey]._hasNewDesignUploaded = true;
-      }
-    }
-
-    // Cập nhật giao diện in-place: preview MQ, mở khóa nút Hoàn thành và cập nhật badge thẻ bên trái
-    qcagDesktopRefreshMQInPlace(currentDetailRequest);
-
-    // 2. Upload GCS nền: Tạo promise tải nền để qcagDesktopMarkProcessed có thể tái sử dụng ngay lập tức
-    let finalImageUrl = dataUrl;
+  if (isWarrantyReq) {
+    // Luồng bảo hành: upload nghiệm thu
+    let imageUrl = dataUrl;
     if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
-      showToast('Đang tải MQ lên cloud...', 2000);
-      const mqSubfolder = 'mq-' + String(targetRequest.outletCode || 'OUTLET')
-        .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
-      _qcagActiveMqUploadPromise = (async () => {
-        try {
-          const uploaded = await window.dataSdk.uploadImage(
-            dataUrl, file.name || 'mq.webp', targetId, mqSubfolder
-          );
-          if (typeof uploaded === 'string' && uploaded.trim()) {
-            return qcagDesktopNormalizeImageUrl(uploaded);
-          } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
-            return qcagDesktopNormalizeImageUrl(uploaded.url);
-          }
-        } catch (e) {
-          console.warn('[qcagDesktopUploadMQ] GCS upload failed, fallback to base64:', e);
+      showToast('Đang upload ảnh nghiệm thu...');
+      try {
+        const uploaded = await window.dataSdk.uploadImage(
+          dataUrl, file.name || 'accept.jpg', targetId, 'nghiem-thu'
+        );
+        if (typeof uploaded === 'string' && uploaded.trim()) {
+          imageUrl = qcagDesktopNormalizeImageUrl(uploaded);
+        } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+          imageUrl = qcagDesktopNormalizeImageUrl(uploaded.url);
         }
-        return dataUrl;
-      })();
-
-      finalImageUrl = await _qcagActiveMqUploadPromise;
-      _qcagActiveMqUploadPromise = null;
+      } catch (e) {
+        console.warn('[qcagDesktopUploadMQ] GCS upload failed for acceptance, keeping base64:', e);
+      }
     }
-
-    // Guard sau async upload: user chuyển sang yêu cầu khác thì dừng
-    if (uploadToken !== _qcagCurrentMqUploadToken || !isStillOnSameRequest()) return;
-
-    // Nếu người dùng đã bấm "Hoàn thành" trong lúc upload GCS đang chạy, không ghi đè lại status 'processing'
-    const curSt = String((currentDetailRequest && currentDetailRequest.status) || '').toLowerCase();
-    if (_qcagMarkProcessedInFlight || curSt === 'done' || curSt === 'processed') {
-      return;
-    }
-
-    const now = new Date().toISOString();
+    if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
+    const existingAccept = qcagDesktopParseJson(currentDetailRequest.acceptanceImages, []);
+    existingAccept.push(imageUrl);
     const updated = {
       ...currentDetailRequest,
-      designImages: JSON.stringify([finalImageUrl]),
-      designFilename: file.name,
-      designUpdatedAt: now,
-      _mqReplacedDuringEdit: true,
-      _hasNewDesignUploaded: true,
-      designLastEditedBy: currentSession ? (currentSession.fullname || currentSession.name || currentSession.saleName || currentSession.phone || 'QCAG') : 'QCAG',
-      designLastEditedAt: now,
-      editingRequestedAt: isPendingEdit
-        ? (currentDetailRequest.editingRequestedAt || now)
-        : null,
-      status: 'processing',
-      updatedAt: now
+      acceptanceImages: JSON.stringify(existingAccept),
+      updatedAt: new Date().toISOString()
     };
-
-    // Ghi nhận mốc thời gian để chặn vòng lặp giật lag từ websocket realtime
-    window._qcagLastOptimisticSaveTs = Date.now();
-    window._qcagLastOptimisticSaveId = targetId;
-
-    // Luồng chỉnh sửa: chỉ preview draft in-memory để Designer xem trước,
-    // TUYỆT ĐỐI không persist đè lên database cho đến khi người dùng bấm xác nhận "Đã chỉnh sửa"
-    if (isPendingEdit) {
-      currentDetailRequest.designImages = JSON.stringify([finalImageUrl]);
-      currentDetailRequest.designFilename = file.name;
-      currentDetailRequest.designUpdatedAt = now;
-      currentDetailRequest._mqReplacedDuringEdit = true;
-      currentDetailRequest._hasNewDesignUploaded = true;
-      currentDetailRequest._pendingNewMqUrl = finalImageUrl;
-
-      const cacheKey = targetId || targetRequest.tkCode;
-      if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[cacheKey]) {
-        _qcagDesktopFullRequestCache[cacheKey].designImages = currentDetailRequest.designImages;
-        _qcagDesktopFullRequestCache[cacheKey].designFilename = file.name;
-        _qcagDesktopFullRequestCache[cacheKey]._mqReplacedDuringEdit = true;
-        _qcagDesktopFullRequestCache[cacheKey]._hasNewDesignUploaded = true;
-        _qcagDesktopFullRequestCache[cacheKey]._pendingNewMqUrl = finalImageUrl;
-        _qcagDesktopFullRequestCache[cacheKey]._originalDesignImagesBeforeEdit = currentDetailRequest._originalDesignImagesBeforeEdit;
-      }
-      if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
-        const idxAll = allRequests.findIndex(r => (r.__backendId && r.__backendId === targetId) || (r.tkCode && r.tkCode === targetRequest.tkCode));
-        if (idxAll !== -1) {
-          allRequests[idxAll].designImages = currentDetailRequest.designImages;
-          allRequests[idxAll].designFilename = file.name;
-          allRequests[idxAll]._mqReplacedDuringEdit = true;
-          allRequests[idxAll]._hasNewDesignUploaded = true;
-        }
-      }
-
-      qcagDesktopRefreshMQInPlace(currentDetailRequest);
-      showToast('Đã tải preview ảnh mới — nhấn "Đã chỉnh sửa" để thay thế vĩnh viễn', 3000);
-      return;
-    }
-
-    // Persist chuẩn qua qcagDesktopPersistRequest (skipRerender: true để tránh re-render giật lag)
-    const ok = await qcagDesktopPersistRequest(
-      updated,
-      'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận',
-      true
-    );
-
-    if (ok && uploadToken === _qcagCurrentMqUploadToken) {
-      qcagDesktopRefreshMQInPlace(updated);
-    }
-  } catch (err) {
-    console.error('[qcagDesktopUploadMQ] Lỗi upload MQ:', err);
-    showToast('Lỗi khi tải MQ: ' + (err && err.message ? err.message : 'Vui lòng thử lại'));
-  } finally {
+    const ok = await qcagDesktopPersistRequest(updated, 'Đã upload ảnh nghiệm thu', true);
+    if (ok && uploadToken === _qcagCurrentMqUploadToken) qcagDesktopRefreshMQInPlace(updated);
     if (input && input.value !== undefined) input.value = '';
+    return;
   }
+
+  // ── Luồng MQ thiết kế chuẩn Production (tham khảo G:\10. Code) ──
+  const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+
+  // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' (Chờ xác nhận) ngay lập tức
+  // và hiển thị preview tại chỗ bằng Base64 đã nén để mở khóa nút "Hoàn thành" ngay 0ms
+  currentDetailRequest.status = 'processing';
+  currentDetailRequest.designImages = JSON.stringify([dataUrl]);
+  currentDetailRequest.designFilename = file.name;
+  currentDetailRequest._mqReplacedDuringEdit = true;
+
+  const idxPreview = allRequests.findIndex(r => r.__backendId === targetId);
+  if (idxPreview !== -1) {
+    allRequests[idxPreview].status = 'processing';
+    allRequests[idxPreview].designImages = currentDetailRequest.designImages;
+    allRequests[idxPreview].designFilename = file.name;
+    allRequests[idxPreview]._mqReplacedDuringEdit = true;
+  }
+  if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[targetId]) {
+    _qcagDesktopFullRequestCache[targetId].status = 'processing';
+    _qcagDesktopFullRequestCache[targetId].designImages = currentDetailRequest.designImages;
+    _qcagDesktopFullRequestCache[targetId].designFilename = file.name;
+    _qcagDesktopFullRequestCache[targetId]._mqReplacedDuringEdit = true;
+  }
+
+  // Cập nhật giao diện in-place: preview MQ, mở khóa nút Hoàn thành và cập nhật badge thẻ bên trái
+  // Tuyệt đối không gọi renderQCAGDesktopList() ở đây để giữ nguyên vị trí cuộn danh sách (không bị nhảy về top)
+  qcagDesktopRefreshMQInPlace(currentDetailRequest);
+
+  // 2. Upload GCS nền: Tạo promise tải nền để qcagDesktopMarkProcessed có thể tái sử dụng ngay lập tức
+  let finalImageUrl = dataUrl;
+  if (window.dataSdk && window.dataSdk.uploadImage && targetId) {
+    showToast('Đang tải MQ lên cloud...', 2000);
+    const mqSubfolder = 'mq-' + String(targetRequest.outletCode || 'OUTLET')
+      .replace(/[^a-zA-Z0-9]/g, '-').replace(/-{2,}/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+    _qcagActiveMqUploadPromise = (async () => {
+      try {
+        const uploaded = await window.dataSdk.uploadImage(
+          dataUrl, file.name || 'mq.webp', targetId, mqSubfolder
+        );
+        if (typeof uploaded === 'string' && uploaded.trim()) {
+          return qcagDesktopNormalizeImageUrl(uploaded);
+        } else if (uploaded && typeof uploaded.url === 'string' && uploaded.url.trim()) {
+          return qcagDesktopNormalizeImageUrl(uploaded.url);
+        }
+      } catch (e) {
+        console.warn('[qcagDesktopUploadMQ] GCS upload failed, fallback to base64:', e);
+      }
+      return dataUrl;
+    })();
+
+    finalImageUrl = await _qcagActiveMqUploadPromise;
+    _qcagActiveMqUploadPromise = null;
+  }
+
+  // Guard sau async upload: user chuyển sang yêu cầu khác thì dừng
+  if (uploadToken !== _qcagCurrentMqUploadToken || _qcagDesktopCurrentId !== targetId) return;
+
+  // Nếu người dùng đã bấm "Hoàn thành" trong lúc upload GCS đang chạy, tuyệt đối không ghi đè lại status 'processing'
+  const curSt = String((currentDetailRequest && currentDetailRequest.status) || '').toLowerCase();
+  if (_qcagMarkProcessedInFlight || curSt === 'done' || curSt === 'processed') {
+    if (input && input.value !== undefined) input.value = '';
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const updated = {
+    ...currentDetailRequest,
+    designImages: JSON.stringify([finalImageUrl]),
+    designFilename: file.name,
+    designUpdatedAt: now,
+    _mqReplacedDuringEdit: true,
+    designLastEditedBy: currentSession ? (currentSession.fullname || currentSession.name || currentSession.saleName || currentSession.phone || 'QCAG') : 'QCAG',
+    designLastEditedAt: now,
+    editingRequestedAt: isPendingEdit
+      ? (currentDetailRequest.editingRequestedAt || now)
+      : null,
+    status: 'processing',
+    updatedAt: now
+  };
+
+  // Ghi nhận mốc thời gian để chặn vòng lặp giật lag từ websocket realtime
+  window._qcagLastOptimisticSaveTs = Date.now();
+  window._qcagLastOptimisticSaveId = targetId;
+
+  // Luồng chỉnh sửa: chỉ preview draft in-memory để Designer xem trước,
+  // TUYỆT ĐỐI không persist đè lên database cho đến khi người dùng bấm xác nhận "Đã chỉnh sửa"
+  if (isPendingEdit) {
+    currentDetailRequest.designImages = JSON.stringify([finalImageUrl]);
+    currentDetailRequest.designFilename = file.name;
+    currentDetailRequest.designUpdatedAt = now;
+    currentDetailRequest._mqReplacedDuringEdit = true;
+    currentDetailRequest._pendingNewMqUrl = finalImageUrl;
+
+    if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[targetId]) {
+      _qcagDesktopFullRequestCache[targetId].designImages = currentDetailRequest.designImages;
+      _qcagDesktopFullRequestCache[targetId].designFilename = file.name;
+      _qcagDesktopFullRequestCache[targetId]._mqReplacedDuringEdit = true;
+      _qcagDesktopFullRequestCache[targetId]._pendingNewMqUrl = finalImageUrl;
+      _qcagDesktopFullRequestCache[targetId]._originalDesignImagesBeforeEdit = currentDetailRequest._originalDesignImagesBeforeEdit;
+    }
+    if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+      const idxAll = allRequests.findIndex(r => r.__backendId === targetId);
+      if (idxAll !== -1) {
+        allRequests[idxAll].designImages = currentDetailRequest.designImages;
+        allRequests[idxAll].designFilename = file.name;
+        allRequests[idxAll]._mqReplacedDuringEdit = true;
+      }
+    }
+
+    qcagDesktopRefreshMQInPlace(currentDetailRequest);
+    showToast('Đã tải preview ảnh mới — nhấn "Đã chỉnh sửa" để thay thế vĩnh viễn', 3000);
+    if (input && input.value !== undefined) input.value = '';
+    return;
+  }
+
+  // Persist chuẩn qua qcagDesktopPersistRequest (skipRerender: true để tránh re-render giật lag)
+  const ok = await qcagDesktopPersistRequest(
+    updated,
+    'Đã tải MQ lên — nhấn "Hoàn thành" để xác nhận',
+    true
+  );
+
+  if (ok && uploadToken === _qcagCurrentMqUploadToken) {
+    qcagDesktopRefreshMQInPlace(updated);
+  }
+  if (input && input.value !== undefined) input.value = '';
 }
 
 async function qcagDesktopUpdateStatus(status) {
@@ -5934,18 +5916,14 @@ async function qcagDesktopMarkProcessed() {
 
     const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
     if (isPendingEdit) {
-      const lastC = comments.length > 0 ? comments[comments.length - 1] : null;
-      const lastText = lastC ? String(lastC.text || lastC.content || '').trim() : '';
-      if (!lastText.includes('QCAG đã chỉnh sửa xong')) {
-        comments.push({
-          authorRole: 'qcag',
-          authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
-          commentType: 'edit-resolved',
-          text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
-          readBy: [],
-          createdAt: new Date().toISOString()
-        });
-      }
+      comments.push({
+        authorRole: 'qcag',
+        authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
+        commentType: 'edit-resolved',
+        text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
+        readBy: [],
+        createdAt: new Date().toISOString()
+      });
     }
     const now = new Date().toISOString();
     // If this is the first time a MQ is confirmed (complete), record the creator
@@ -5976,11 +5954,15 @@ async function qcagDesktopMarkProcessed() {
     const _finalDesignImgStr = JSON.stringify(finalDesignImages);
     const patchPayload = {
       __backendId: currentDetailRequest.__backendId,
-      tkCode: currentDetailRequest.tkCode || '',
       status: 'done',
       processedAt: now,
       updatedAt: now,
       editingRequestedAt: null,
+      editing_requested_at: null,
+      hasEditRequest: false,
+      isEditPending: false,
+      productionApprovalStatus: 'approved',
+      production_approval_status: 'approved',
       comments: JSON.stringify(comments),
       designImages: _finalDesignImgStr,
       ...extraFields
@@ -5990,8 +5972,54 @@ async function qcagDesktopMarkProcessed() {
     const _rollbackRequest = { ...currentDetailRequest };
     const updated = {
       ...currentDetailRequest,
-      ...patchPayload
+      ...patchPayload,
+      hasEditRequest: false,
+      isEditPending: false,
+      editingRequestedAt: null,
+      editing_requested_at: null,
+      productionApprovalStatus: 'approved',
+      production_approval_status: 'approved'
     };
+
+    // Đồng bộ tức thì bộ nhớ đệm RAM trạng thái duyệt sản xuất (triệt tiêu tình trạng nhảy ngược về 'Yêu cầu sửa')
+    if (typeof window !== 'undefined' && window._qcagProductionApprovalStatusMap) {
+      const keysToApprove = [
+        updated.quoteCode, updated.quote_code,
+        updated.tkCode, updated.tk_code,
+        updated.outletCode, updated.outlet_code,
+        updated.__backendId, updated.id
+      ].filter(Boolean);
+      for (const k of keysToApprove) {
+        const cleanK = String(k).trim().toLowerCase().replace(/^bg[-_]?/i, '');
+        const rawK = String(k).trim().toLowerCase();
+        window._qcagProductionApprovalStatusMap.set(cleanK, { status: 'approved' });
+        window._qcagProductionApprovalStatusMap.set(rawK, { status: 'approved' });
+      }
+    }
+
+    // Nếu đang trong Task Mode của Đơn hàng, cập nhật ngay quote tương ứng trong gói nhiệm vụ
+    if (typeof _qcagCurrentTaskOrder !== 'undefined' && _qcagCurrentTaskOrder) {
+      let tQuotes = [];
+      if (Array.isArray(_qcagCurrentTaskOrder.quotes)) tQuotes = _qcagCurrentTaskOrder.quotes;
+      else if (typeof _qcagCurrentTaskOrder.quotes === 'string') {
+        try { tQuotes = JSON.parse(_qcagCurrentTaskOrder.quotes); } catch (_) {}
+      }
+      const curTk = String(updated.tkCode || updated.tk_code || '').trim().toLowerCase();
+      const curQ = String(updated.quoteCode || updated.quote_code || '').trim().toLowerCase();
+      const matchQ = tQuotes.find(q => {
+        if (!q) return false;
+        const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
+        const qCode = String(q.quote_code || q.quoteCode || '').trim().toLowerCase();
+        return (qTk && curTk && qTk === curTk) || (qCode && curQ && qCode === curQ);
+      });
+      if (matchQ) {
+        matchQ.productionApprovalStatus = 'approved';
+        matchQ.status = 'approved';
+        matchQ.hasEditRequest = false;
+        matchQ.isPendingEdit = false;
+        matchQ.editingRequestedAt = null;
+      }
+    }
 
     // Optimistically update local state & caches (0ms UI latency — chuẩn Production chính)
     const idxAll = allRequests.findIndex(r => r.__backendId === updated.__backendId);
@@ -6009,11 +6037,14 @@ async function qcagDesktopMarkProcessed() {
     window._qcagLastOptimisticSaveId = updated.__backendId;
 
     // Cập nhật giao diện in-place chuẩn mực như G:\10. Code:
-    // Nút bấm lập tức chuyển sang "Đã hoàn thành" (disabled), badge thẻ bên trái chuyển "Hoàn thành" tại chỗ.
+    // Nút bấm lập tức chuyển sang "Đã hoàn thành" (disabled), badge thẻ bên trái chuyển "Đã duyệt" tại chỗ.
     // Không gọi renderQCAGDesktopList() ở đây để giữ nguyên scroll và giữ thẻ cố định tại chỗ.
     qcagDesktopRefreshMQInPlace(updated);
     if (typeof qcagDesktopUpdateFilterCounts === 'function') {
       qcagDesktopUpdateFilterCounts();
+    }
+    if (typeof qcagUpdateTaskCardChecklistBadge === 'function') {
+      qcagUpdateTaskCardChecklistBadge(updated);
     }
 
     showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
@@ -8611,6 +8642,76 @@ function _dvhcHighlight(text, query) {
 // QCAG Desktop Image Actions: Right-Click Copy, Right-Click Paste & Drag-Drop
 // ====================================================================
 
+async function qcagFetchImageAsPngBlob(rawUrl) {
+  if (!rawUrl) throw new Error('Không có URL ảnh');
+  let url = String(rawUrl).trim().replace(/^https:\/\/storage\.cloud\.google\.com\//i, 'https://storage.googleapis.com/');
+
+  let rawBlob = null;
+  if (url.startsWith('data:image/') || url.startsWith('blob:')) {
+    const res = await fetch(url);
+    rawBlob = await res.blob();
+  } else {
+    const be = typeof resolveApp2BackendUrl === 'function'
+      ? resolveApp2BackendUrl()
+      : ((typeof window !== 'undefined' && window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-staging-493469512136.asia-southeast1.run.app');
+
+    const isExternal = url.startsWith('http') && !url.startsWith(window.location.origin) && !url.includes('localhost') && !url.includes('127.0.0.1');
+    const proxyUrl = isExternal
+      ? `${be}/api/ks/proxy-image?url=${encodeURIComponent(url)}`
+      : url;
+
+    let res;
+    try {
+      res = await fetch(proxyUrl);
+    } catch (err) {
+      console.warn('[qcagFetchImageAsPngBlob] Proxy fetch failed, trying direct fetch:', err);
+      if (proxyUrl !== url) res = await fetch(url);
+      else throw err;
+    }
+
+    if (!res || !res.ok) {
+      if (proxyUrl !== url) {
+        const directRes = await fetch(url);
+        if (!directRes.ok) throw new Error(`HTTP ${res ? res.status : 'fetch_error'}`);
+        rawBlob = await directRes.blob();
+      } else {
+        throw new Error(`HTTP ${res ? res.status : 'fetch_error'}`);
+      }
+    } else {
+      rawBlob = await res.blob();
+    }
+  }
+
+  if (!rawBlob) throw new Error('Không đọc được dữ liệu nhị phân ảnh');
+
+  // Chuyển đổi sang image/png qua Canvas (yêu cầu chuẩn của Clipboard API để Windows tự mapping sang CF_DIB cho Corel/Illustrator)
+  const objUrl = URL.createObjectURL(rawBlob);
+  try {
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Không thể render ảnh vào Canvas'));
+      img.src = objUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width || 800;
+    canvas.height = img.naturalHeight || img.height || 600;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    const pngBlob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => {
+        if (b) resolve(b);
+        else reject(new Error('Canvas sang PNG thất bại'));
+      }, 'image/png');
+    });
+    return pngBlob;
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
 (function initQcagImageInteractions() {
   let activeContextMenu = null;
 
@@ -8621,54 +8722,115 @@ function _dvhcHighlight(text, query) {
     activeContextMenu = null;
   }
 
-  // 1. Sao chép ảnh vào Clipboard
+  // 1. Sao chép ảnh vào Clipboard (Hỗ trợ dán trực tiếp vào Corel, Illustrator, Photoshop, Zalo)
   async function copyImageToClipboard(imgUrl) {
     if (!imgUrl) return;
+    if (typeof showToast === 'function') showToast('Đang sao chép ảnh vào bộ nhớ tạm...');
     try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.src = imgUrl;
-      await new Promise((res, rej) => {
-        img.onload = res;
-        img.onerror = rej;
-      });
+      if (!navigator.clipboard || !window.ClipboardItem) {
+        throw new Error('Trình duyệt không hỗ trợ ClipboardItem');
+      }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth || img.width || 800;
-      canvas.height = img.naturalHeight || img.height || 600;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
+      const pngPromise = qcagFetchImageAsPngBlob(imgUrl);
+      let item;
+      try {
+        item = new ClipboardItem({ 'image/png': pngPromise });
+      } catch (_) {
+        const resolvedBlob = await pngPromise;
+        item = new ClipboardItem({ 'image/png': resolvedBlob });
+      }
 
-      canvas.toBlob(async (blob) => {
-        if (blob && navigator.clipboard && navigator.clipboard.write) {
-          try {
-            await navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': blob })
-            ]);
-            if (typeof showToast === 'function') showToast('Đã sao chép ảnh vào bộ nhớ tạm');
-            return;
-          } catch (clipErr) {
-            console.warn('[Copy] ClipboardItem write failed, fallback URL:', clipErr);
-          }
-        }
-        // Fallback: Copy URL text
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(imgUrl);
-          if (typeof showToast === 'function') showToast('Đã sao chép đường link ảnh vào bộ nhớ tạm');
-        }
-      }, 'image/png');
+      await navigator.clipboard.write([item]);
+      if (typeof showToast === 'function') {
+        showToast('Đã sao chép ảnh vào Clipboard! Bạn có thể dán (Ctrl+V) vào Corel / Illustrator / Zalo.');
+      }
     } catch (e) {
-      console.warn('[Copy] Canvas failed, fallback URL:', e);
+      console.warn('[Copy] Image blob copy failed, fallback URL:', e);
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(imgUrl);
-          if (typeof showToast === 'function') showToast('Đã sao chép đường link ảnh vào bộ nhớ tạm');
+          if (typeof showToast === 'function') {
+            showToast('Không thể sao chép trực tiếp tệp ảnh, đã sao chép đường link ảnh');
+          }
         }
       } catch (err) {
         if (typeof showToast === 'function') showToast('Không thể sao chép ảnh');
       }
     }
   }
+
+  // Sao chép riêng liên kết URL ảnh
+  async function copyImageUrlToClipboard(imgUrl) {
+    if (!imgUrl) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(imgUrl);
+        if (typeof showToast === 'function') showToast('Đã sao chép link ảnh vào bộ nhớ tạm');
+      }
+    } catch (err) {
+      if (typeof showToast === 'function') showToast('Không thể sao chép link ảnh');
+    }
+  }
+
+  // Tải tệp ảnh xuống máy
+  async function downloadImageFile(imgUrl) {
+    if (!imgUrl) return;
+    if (typeof showToast === 'function') showToast('Đang tải ảnh xuống máy...');
+    try {
+      let blob = null;
+      let ext = 'jpg';
+      if (imgUrl.startsWith('data:image/') || imgUrl.startsWith('blob:')) {
+        const res = await fetch(imgUrl);
+        blob = await res.blob();
+      } else {
+        const be = (typeof window !== 'undefined' && window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
+        const isExternal = imgUrl.startsWith('http') && !imgUrl.startsWith(window.location.origin) && !imgUrl.includes('localhost') && !imgUrl.includes('127.0.0.1');
+        const proxyUrl = isExternal ? `${be}/api/ks/proxy-image?url=${encodeURIComponent(imgUrl)}` : imgUrl;
+        let res;
+        try {
+          res = await fetch(proxyUrl);
+        } catch (_) {
+          if (proxyUrl !== imgUrl) res = await fetch(imgUrl);
+        }
+        if (res && res.ok) {
+          blob = await res.blob();
+          const ct = res.headers.get('content-type') || '';
+          if (ct.includes('png')) ext = 'png';
+          else if (ct.includes('webp')) ext = 'webp';
+        }
+      }
+
+      if (blob) {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'anh_' + Date.now() + '.' + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+        if (typeof showToast === 'function') showToast('Tải ảnh xuống thành công');
+      } else {
+        const a = document.createElement('a');
+        a.href = imgUrl;
+        a.target = '_blank';
+        a.download = 'anh_' + Date.now() + '.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } catch (err) {
+      console.warn('Download image failed, fallback direct link:', err);
+      const a = document.createElement('a');
+      a.href = imgUrl;
+      a.target = '_blank';
+      a.download = 'anh_' + Date.now() + '.jpg';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+  }
+
 
   // 2. Dán ảnh từ Clipboard vào ô upload
   async function pasteImageFromClipboard(targetType, squareEl) {
@@ -8821,16 +8983,19 @@ function _dvhcHighlight(text, query) {
 
       showContextMenu(e.clientX, e.clientY, [
         {
-          label: 'Sao chép ảnh',
+          label: 'Sao Chép ảnh',
           iconHtml: `<svg class="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>`,
           onClick: () => copyImageToClipboard(imgUrl)
         },
         {
-          label: 'Xem kích thước lớn',
-          iconHtml: `<svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m3-3H7"/></svg>`,
-          onClick: () => {
-            if (typeof showImageFull === 'function') showImageFull(imgUrl, false);
-          }
+          label: 'Sao chép link ảnh',
+          iconHtml: `<svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>`,
+          onClick: () => copyImageUrlToClipboard(imgUrl)
+        },
+        {
+          label: 'Tải ảnh xuống',
+          iconHtml: `<svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>`,
+          onClick: () => downloadImageFile(imgUrl)
         }
       ]);
     }

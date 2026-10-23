@@ -1286,9 +1286,15 @@
   }
 
   body.qcag-mobile-mode .qcag-chat-author-name {
+    display: inline-block;
     font-size: 11.5px;
     font-weight: 600;
+    font-style: normal !important;
     color: #cbd5e1;
+    white-space: nowrap;
+    overflow: visible !important;
+    padding-right: 8px !important;
+    line-height: 1.4 !important;
   }
 
   body.qcag-mobile-mode .qcag-chat-role-tag {

@@ -2455,13 +2455,16 @@ html:not(.theme-dark):not([data-theme="dark"]) .detail-comments-col .chat-empty-
 }
 
 .qcag-chat-author-name {
-  font-size: 10.5px;
+  display: inline-block;
+  font-size: 11.5px;
   font-weight: 600;
-  font-style: italic;
+  font-style: normal !important;
   color: #475569;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible !important;
+  padding-right: 8px !important;
+  line-height: 1.4 !important;
+  letter-spacing: 0.2px;
 }
 
 .theme-dark .qcag-chat-author-name,
