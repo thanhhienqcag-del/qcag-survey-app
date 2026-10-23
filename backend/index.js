@@ -1049,13 +1049,13 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(q2.tk_code, q2.request_tk_code, '') AS tk_code,
             COALESCE(q2.status, '') AS status,
             q2.created_at,
-            COALESCE(o2.code, q2.outlet_code, '') AS outlet_code,
+            COALESCE(o2.code, REGEXP_REPLACE(q2.outlet_id::text, '^out_', '')) AS outlet_code,
             COALESCE(o2.name, q2.outlet_name, '') AS outlet_name,
-            COALESCE(q2.address, o2.address, '') AS address,
-            COALESCE(q2.outlet_phone, o2.phone, '') AS outlet_phone,
-            COALESCE(q2.sale_name, u2.fullname, u2.name, '') AS sale_name,
-            COALESCE(q2.sale_code, u2.username, '') AS sale_code,
-            COALESCE(q2.sale_phone, u2.username, '') AS sale_phone,
+            COALESCE(o2.address, '') AS address,
+            COALESCE(o2.phone, '') AS outlet_phone,
+            COALESCE(u2.fullname, q2.created_by_name, '') AS sale_name,
+            COALESCE(u2.username, q2.sales_id, '') AS sale_code,
+            COALESCE(u2.username, '') AS sale_phone,
             COALESCE(q2.quote_code, '') AS quote_code,
             COALESCE(q2.total_amount, 0)::numeric AS total_amount,
             COALESCE(ord_lat2.order_no, '') AS order_number,
@@ -1073,9 +1073,9 @@ async function checkOutletActiveState(conn, inOutletCode) {
             ORDER BY ord2.created_at DESC LIMIT 1
         ) ord_lat2 ON true
         WHERE (
-            LOWER(TRIM(COALESCE(q2.outlet_id::text, q2.outlet_code, ''))) IN (?, ?)
+            LOWER(TRIM(COALESCE(q2.outlet_id::text, ''))) IN (?, ?)
             OR LOWER(TRIM(COALESCE(o2.code, ''))) = ?
-            OR REGEXP_REPLACE(LOWER(TRIM(COALESCE(q2.outlet_id::text, q2.outlet_code, ''))), '^out_', '') = ?
+            OR REGEXP_REPLACE(LOWER(TRIM(COALESCE(q2.outlet_id::text, ''))), '^out_', '') = ?
         )
         AND (q2.is_deleted = false OR q2.is_deleted IS NULL)
         AND (q2.status IS NULL OR q2.status NOT IN ('cancelled', 'bao_huy', 'rejected'))
@@ -2222,24 +2222,26 @@ app.get(['/pending-orders', '/api/ks/pending-orders', '/api/pending-orders'], as
         let quoteFilter = '';
         let orderFilter = '';
         const params = [];
+        const matchConditions = [];
 
         if (safeSaleCode) {
             params.push(safeSaleCode);
             const idx = params.length;
-            const matchCond = `(q.sales_id = $${idx} OR uq.username = $${idx} OR q.sales_id = 'USR_SALE_' || $${idx} OR q.sales_id = 'USR_PHONE_' || $${idx})`;
-            quoteFilter = ` AND (${matchCond})`;
-            orderFilter = ` WHERE EXISTS (
-                SELECT 1 FROM pending_order_quotes sub_poq
-                JOIN quotations q ON sub_poq.quotation_code = q.quote_code
-                LEFT JOIN outlets o ON (q.outlet_id = o.id OR q.outlet_id = o.code)
-                LEFT JOIN users uq ON (q.sales_id = uq.id OR q.sales_id = uq.username)
-                WHERE sub_poq.pending_order_id = po.id ${quoteFilter}
-            )`;
-        } else if (safePhoneSuffix) {
+            matchConditions.push(`q.sales_id = $${idx}`);
+            matchConditions.push(`uq.username = $${idx}`);
+            matchConditions.push(`q.sales_id = 'USR_SALE_' || $${idx}`);
+            matchConditions.push(`q.sales_id = 'USR_PHONE_' || $${idx}`);
+        }
+        if (safePhoneSuffix) {
             params.push(`%${safePhoneSuffix}`);
             const idx = params.length;
-            const matchCond = `(uq.phone LIKE $${idx} OR o.phone LIKE $${idx} OR q.sales_id LIKE $${idx})`;
-            quoteFilter = ` AND (${matchCond})`;
+            matchConditions.push(`uq.phone LIKE $${idx}`);
+            matchConditions.push(`o.phone LIKE $${idx}`);
+            matchConditions.push(`q.sales_id LIKE $${idx}`);
+        }
+
+        if (matchConditions.length > 0) {
+            quoteFilter = ` AND (${matchConditions.join(' OR ')})`;
             orderFilter = ` WHERE EXISTS (
                 SELECT 1 FROM pending_order_quotes sub_poq
                 JOIN quotations q ON sub_poq.quotation_code = q.quote_code
@@ -3970,16 +3972,22 @@ app.post("/api/ks/requests", async (req, res) => {
                 });
             }
 
-            // 2. Check if an active quotation already exists for this outlet
+            // 2. Check if an active quotation already exists for this outlet (loại trừ các báo giá đã ra đơn hàng hoặc hoàn tất)
             const [activeQuoteRows] = await pool.query(
-                `SELECT quote_code, tk_code, request_tk_code 
-                 FROM quotations 
-                 WHERE (outlet_id = ? OR outlet_id = ('OUT_' || ?)) 
-                   AND (is_exported = 0 OR is_exported IS NULL)
-                   AND (is_deleted = false OR is_deleted IS NULL)
-                   AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
+                `SELECT q.quote_code, q.tk_code, q.request_tk_code 
+                 FROM quotations q
+                 WHERE (q.outlet_id = ? OR q.outlet_id = ('OUT_' || ?) OR REGEXP_REPLACE(LOWER(q.outlet_id::text), '^out_', '') = LOWER(?)) 
+                   AND (q.is_exported = 0 OR q.is_exported IS NULL)
+                   AND (q.is_deleted = false OR q.is_deleted IS NULL)
+                   AND (q.status IS NULL OR q.status NOT IN ('cancelled', 'rejected', 'bao_huy', 'completed', 'done'))
+                   AND (q.spo_status IS NULL OR q.spo_status NOT IN ('Sales Admin Finish', 'Sign Maker Installed Signage'))
+                   AND NOT EXISTS (
+                       SELECT 1 FROM order_quotes oq 
+                       JOIN orders ord ON ord.id = oq.order_id AND (ord.is_deleted = false OR ord.is_deleted IS NULL)
+                       WHERE oq.quotation_code = q.quote_code
+                   )
                  LIMIT 1`,
-                [outletCode, outletCode]
+                [outletCode, outletCode, outletCode]
             );
             if (activeQuoteRows && activeQuoteRows.length > 0) {
                 const aq = activeQuoteRows[0];

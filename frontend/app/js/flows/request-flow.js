@@ -1745,189 +1745,259 @@ function hasSignageItems() {
   } catch (e) { return false; }
 }
 
-// ── Duplicate outlet detection & handlers ───────────────────────────
-function checkOutletDuplicate() {
+// ── Duplicate outlet detection & Realtime SSoT Lock Check ─────────
+function resolveApp2BackendUrl() {
+  if (typeof window !== 'undefined') {
+    if (window.API_BASE_URL) return String(window.API_BASE_URL).replace(/\/+$/, '');
+    if (window.__env && window.__env.BACKEND_URL) return String(window.__env.BACKEND_URL).replace(/\/+$/, '');
+  }
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isProdHost = host.includes('vercel.app') || host.includes('qcag');
+  return isProdHost 
+    ? 'https://ks-backend-493469512136.asia-southeast1.run.app'
+    : 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
+}
+
+function renderOutletCodeStatusBox(type, data) {
+  const box = document.getElementById('outletCodeStatusBox');
+  const ocEl = document.getElementById('outletCode');
+  const sb = document.getElementById('submitNewBtn');
+  if (!box) return;
+
+  if (type === 'checking') {
+    box.className = 'mt-2 p-2.5 rounded-xl text-xs flex items-center gap-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 animate-pulse';
+    box.innerHTML = `
+      <svg class="w-4 h-4 animate-spin text-sky-500 shrink-0" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+      </svg>
+      <span>Đang kiểm tra dữ liệu điểm bán trên hệ thống...</span>
+    `;
+    box.classList.remove('hidden');
+    return;
+  }
+
+  if (type === 'locked_pending' || type === 'locked_approved') {
+    const isApproved = type === 'locked_approved';
+    const tkOrQuote = data && data.hasQuote ? `Báo giá ${data.quoteCode}` : ((data && data.tkCode) ? `Yêu cầu ${data.tkCode}` : 'yêu cầu');
+    const saleInfo = (data && data.saleName ? `Sale: ${data.saleName}` : '') + (data && data.saleCode ? ` (${data.saleCode})` : '');
+    
+    box.className = 'mt-2 p-3 rounded-xl text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 space-y-2 shadow-sm';
+    box.innerHTML = `
+      <div class="flex items-start gap-2">
+        <svg class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div class="flex-1">
+          <div class="font-semibold text-amber-800 dark:text-amber-300">
+            ${isApproved ? 'Điểm bán đã duyệt sản xuất nhưng chưa ra đơn hàng!' : `Điểm bán đang có ${tkOrQuote} đang xử lý chưa ra đơn!`}
+          </div>
+          <div class="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
+            ${saleInfo ? `${saleInfo} • ` : ''}Chỉ được chỉnh sửa trên yêu cầu cũ, không tạo mới trùng lặp.
+          </div>
+        </div>
+      </div>
+      <div class="pt-1 flex items-center gap-2">
+        <button type="button" onclick="openDuplicateTargetRecord()" class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-medium text-xs shadow-sm transition-all flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+          </svg>
+          <span>Xem chi tiết / Sửa yêu cầu</span>
+        </button>
+      </div>
+    `;
+    box.classList.remove('hidden');
+
+    if (ocEl) {
+      ocEl.classList.add('border-amber-500', 'focus:ring-amber-500');
+      ocEl.classList.remove('border-emerald-500', 'focus:ring-emerald-500');
+    }
+    if (sb) {
+      sb.disabled = true;
+      sb.title = 'Điểm bán đang có yêu cầu chưa xuất đơn hàng!';
+    }
+    return;
+  }
+
+  if (type === 'confirm_new_phase') {
+    const orderStr = (data && data.latestOrder) ? `#${data.latestOrder}` : 'Đã hoàn tất';
+    box.className = 'mt-2 p-2.5 rounded-xl text-xs bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700/60 text-emerald-900 dark:text-emerald-200 shadow-sm';
+    box.innerHTML = `
+      <div class="flex items-start gap-2">
+        <svg class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <div class="flex-1">
+          <span class="font-semibold text-emerald-800 dark:text-emerald-300">Điểm bán đã có Đơn hàng ${orderStr} hoàn tất sản xuất.</span>
+          <span class="text-emerald-700 dark:text-emerald-400 block mt-0.5 text-[11px]">Được phép khảo sát làm thêm bảng hiệu mới cho điểm bán này.</span>
+        </div>
+      </div>
+    `;
+    box.classList.remove('hidden');
+
+    if (ocEl) {
+      ocEl.classList.remove('border-amber-500', 'focus:ring-amber-500');
+      ocEl.classList.add('border-emerald-500');
+    }
+    if (sb) {
+      sb.disabled = false;
+      sb.removeAttribute('title');
+    }
+    return;
+  }
+
+  // Clear / hidden
+  box.innerHTML = '';
+  box.classList.add('hidden');
+  if (ocEl) {
+    ocEl.classList.remove('border-amber-500', 'focus:ring-amber-500', 'border-emerald-500');
+  }
+  if (sb) {
+    sb.disabled = false;
+    sb.removeAttribute('title');
+  }
+}
+
+function openDuplicateTargetRecord() {
+  try {
+    const state = duplicateOutletState;
+    if (!state) return;
+    const rec = state.activeRequest || state.latestProduced || state.existingRequest || (state.backendLock && state.backendLock.record);
+    if (rec) {
+      const bId = rec.__backendId || rec.backend_id || rec.id;
+      if (bId) {
+        closeDuplicateOutletModalSilent();
+        showRequestDetail(bId);
+        return;
+      }
+      if (rec.quote_code) {
+        showToast(`Báo giá #${rec.quote_code} đã được tạo nội bộ trên hệ thống.`);
+        return;
+      }
+    }
+    showToast('Không tìm thấy bản ghi để mở chi tiết');
+  } catch (err) {
+    console.warn('[openDuplicateTargetRecord] error:', err);
+  }
+}
+
+async function checkOutletDuplicate() {
   const codeEl = document.getElementById('outletCode');
   if (!codeEl) return;
-  const code = (codeEl.value || '').trim();
-  // reset when empty or changed
-  if (!code) {
+  const raw = (codeEl.value || '').trim();
+  const code = raw.replace(/\D/g, '').slice(0, 8);
+
+  // reset when empty or not full 8 digits
+  if (!code || code.length < 8) {
+    renderOutletCodeStatusBox('clear');
     duplicateOutletState = null;
     userConfirmedNewForOutlet = false;
     otherOutletState = null;
     userConfirmedTakeover = false;
+    window._lastCheckedOutletCode = '';
     return;
   }
-  // Only check duplicates for real outlet codes (exactly 8 digits).
-  // If user selected 'New Outlet' we don't warn until they provide a real code.
+
+  // If user already confirmed "Hạng mục mới" for this outlet code, retain confirmation
+  if (userConfirmedNewForOutlet && duplicateOutletState && duplicateOutletState.outletCode === code) {
+    renderOutletCodeStatusBox('confirm_new_phase', duplicateOutletState.backendLock || { latestOrder: 'Đã hoàn tất' });
+    return;
+  }
+
+  // Avoid spamming API for same code
+  if (window._lastCheckedOutletCode === code && duplicateOutletState && duplicateOutletState.outletCode === code) {
+    return;
+  }
+  window._lastCheckedOutletCode = code;
+
+  // Realtime B-Tree SSoT Lock Check via Neon Database
   try {
-    if (code === 'New Outlet') {
-      duplicateOutletState = null;
-      userConfirmedNewForOutlet = false;
+    renderOutletCodeStatusBox('checking');
+    const base = resolveApp2BackendUrl();
+    const res = await fetch(`${base}/api/outlets/${encodeURIComponent(code)}/lock-state`);
+    if (!res.ok) {
+      renderOutletCodeStatusBox('clear');
       return;
     }
-    if (!/^\d{8}$/.test(code)) {
-      // not a full code yet — clear state and don't show modal
-      duplicateOutletState = null;
-      userConfirmedNewForOutlet = false;
-      return;
-    }
-    // If the user already confirmed "Hạng mục mới" for this outlet, and
-    // the code hasn't changed, keep that confirmation and skip re-showing the modal.
-    if (userConfirmedNewForOutlet && duplicateOutletState && duplicateOutletState.outletCode === code) {
-      return;
-    }
-    // Similarly, if user already confirmed takeover for this outlet, skip re-check.
-    if (userConfirmedTakeover && otherOutletState && otherOutletState.outletCode === code) {
+    const data = await res.json();
+    if (!data || (!data.ok && !data.success)) {
+      renderOutletCodeStatusBox('clear');
       return;
     }
 
-    // Only consider requests that belong to the current session (same logic as list rendering)
-    function isOwnedByCurrentSession(r) {
-      try {
-        const reqOwner = JSON.parse(r.requester || '{}');
-        if (!currentSession || !currentSession.saleCode) return false;
-        return (reqOwner.saleCode && reqOwner.saleCode === currentSession.saleCode);
-      } catch (e) { return false; }
-    }
+    const rec = data.record || {};
 
-    function isReqProducedHelper(r) {
-      if (!r) return false;
-      if (typeof window._checkRequestLockState === 'function') {
-        const lock = window._checkRequestLockState(r);
-        if (lock && (lock.isProduced || lock.isInProduction || lock.isDone)) return true;
-      }
-      const q = r.bridge || (window._quoteDataMap && window._quoteDataMap[r.__backendId]);
-      if (q) {
-        const ordNo = String(q.order_number || q.orderNumber || '').trim();
-        if (ordNo && ordNo !== '---' && ordNo !== 'null' && ordNo !== 'Chưa có code') return true;
-        const qSt = String(q.qcag_status || q.qcagStatus || '').toLowerCase();
-        if (qSt.includes('đã ra đơn') || qSt.includes('sản xuất') || qSt.includes('hoàn thành')) return true;
-      }
-      return false;
-    }
-
-    const matches = (allRequests || [])
-      .filter(r => (r.type === 'new') && ((r.outletCode || '').toString().toLowerCase() === code.toLowerCase()) && isOwnedByCurrentSession(r) && !r.isCancelled && r.status !== 'cancelled' && r.status !== 'bao_huy')
-      .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    if (matches && matches.length > 0) {
-      const pendingMatches = matches.filter(r => !isReqProducedHelper(r));
-      const producedMatches = matches.filter(r => isReqProducedHelper(r));
-
-      if (pendingMatches.length > 0) {
-        // LUỒNG 1: Có yêu cầu CHƯA RA ĐƠN -> Chặn tạo mới, chỉ cho phép chỉnh sửa trên yêu cầu cũ
-        const activeReq = pendingMatches[0];
-        duplicateOutletState = {
-          mode: 'pending',
+    if (data.state === 'locked_pending' || data.state === 'locked_approved') {
+      // Check if owned by another sale
+      const currentSale = currentSession && currentSession.saleCode ? String(currentSession.saleCode).trim().toLowerCase() : '';
+      const recSale = (data.saleCode || rec.sale_code || '').trim().toLowerCase();
+      if (recSale && currentSale && recSale !== currentSale) {
+        otherOutletState = {
           outletCode: code,
-          activeRequest: activeReq,
-          allPending: pendingMatches,
-          existingRequest: activeReq,
-          existingRequests: matches
+          matches: [rec],
+          ownerName: data.saleName || rec.sale_name || 'Sale khác'
         };
-        userConfirmedNewForOutlet = false;
-        otherOutletState = null;
         userConfirmedTakeover = false;
-        showDuplicateOutletModal(matches);
-      } else {
-        // LUỒNG 2: Tất cả các yêu cầu trước đó ĐÃ RA ĐƠN / SẢN XUẤT -> Cho phép hỏi làm thêm bảng hiệu
-        const latestProduced = producedMatches[0];
-        duplicateOutletState = {
-          mode: 'produced',
-          outletCode: code,
-          latestProduced: latestProduced,
-          existingRequest: latestProduced,
-          existingRequests: matches
-        };
-        userConfirmedNewForOutlet = false;
-        otherOutletState = null;
-        userConfirmedTakeover = false;
-        showDuplicateOutletModal(matches);
+        renderOutletCodeStatusBox(data.state, data);
+        showOtherOutletModal([rec]);
+        return;
       }
+
+      duplicateOutletState = {
+        mode: 'pending',
+        outletCode: code,
+        backendLock: data,
+        activeRequest: rec,
+        existingRequest: rec,
+        allPending: [rec]
+      };
+      userConfirmedNewForOutlet = false;
+      renderOutletCodeStatusBox(data.state, data);
+      showDuplicateOutletModal([rec]);
+
+    } else if (data.state === 'confirm_new_phase') {
+      duplicateOutletState = {
+        mode: 'produced',
+        outletCode: code,
+        backendLock: data,
+        latestProduced: rec,
+        existingRequest: rec,
+        existingRequests: [rec]
+      };
+      userConfirmedNewForOutlet = false;
+      renderOutletCodeStatusBox('confirm_new_phase', data);
+
+      // Auto pre-fill name/address/phone from previous records if empty
+      const nameEl = document.getElementById('outletName');
+      if (nameEl && !nameEl.value.trim() && (data.outletName || rec.outlet_name)) {
+        nameEl.value = (data.outletName || rec.outlet_name);
+      }
+      const addrEl = document.getElementById('address');
+      if (addrEl && !addrEl.value.trim() && (data.address || rec.address)) {
+        addrEl.value = (data.address || rec.address);
+      }
+      const phoneEl = document.getElementById('phone');
+      if (phoneEl && !phoneEl.value.trim() && (data.outletPhone || rec.outlet_phone)) {
+        phoneEl.value = (data.outletPhone || rec.outlet_phone);
+      }
+
+      showDuplicateOutletModal([rec]);
+
     } else {
+      // Unlocked / Clean
+      renderOutletCodeStatusBox('clear');
       duplicateOutletState = null;
       userConfirmedNewForOutlet = false;
-      // No own requests — check if another sale created this outlet in the current year
-      const currentYear = new Date().getFullYear();
-      const otherMatches = (allRequests || []).filter(r => {
-        if (r.type !== 'new') return false;
-        if ((r.outletCode || '').toString().toLowerCase() !== code.toLowerCase()) return false;
-        try {
-          const reqOwner = JSON.parse(r.requester || '{}');
-          if (!reqOwner.saleCode) return false;
-          if (currentSession && currentSession.saleCode && reqOwner.saleCode === currentSession.saleCode) return false;
-          return true;
-        } catch (e) { return false; }
-      }).filter(r => {
-        try { return new Date(r.createdAt).getFullYear() === currentYear; } catch (e) { return false; }
-      }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      if (otherMatches.length > 0) {
-        otherOutletState = { outletCode: code, matches: otherMatches };
-        userConfirmedTakeover = false;
-        showOtherOutletModal(otherMatches);
-      } else {
-        otherOutletState = null;
-        userConfirmedTakeover = false;
-        // Kiểm tra đối soát trực tiếp từ Database Neon Backend (kể cả khi quán được tạo ở App 1 hoặc chưa sync RAM)
-        checkOutletLockStateBackendApp2(code);
-      }
     }
-  } catch (e) {}
+  } catch (err) {
+    console.warn('[REALTIME_LOCK_CHECK] fetch error:', err);
+    renderOutletCodeStatusBox('clear');
+  }
 }
 
 async function checkOutletLockStateBackendApp2(code) {
-  if (!code || !/^\d{8}$/.test(code)) return;
-  try {
-    const base = (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL) || '').replace(/\/+$/, '');
-    const res = await fetch(`${base}/api/outlets/${encodeURIComponent(code)}/lock-state`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data && (data.ok || data.success)) {
-      if (data.state === 'locked_pending' || data.state === 'locked_approved') {
-        const isApproved = data.state === 'locked_approved';
-        const rec = data.record || {};
-        // Kiểm tra xem có phải quán của Sale khác không
-        const currentSale = currentSession && currentSession.saleCode ? String(currentSession.saleCode).trim().toLowerCase() : '';
-        const recSale = (data.saleCode || rec.sale_code || '').trim().toLowerCase();
-        if (recSale && currentSale && recSale !== currentSale) {
-          otherOutletState = {
-            outletCode: code,
-            matches: [rec],
-            ownerName: data.saleName || rec.sale_name || 'Sale khác'
-          };
-          userConfirmedTakeover = false;
-          showOtherOutletModal([rec]);
-          return;
-        }
-
-        duplicateOutletState = {
-          mode: 'pending',
-          outletCode: code,
-          backendLock: data,
-          existingRequest: rec,
-          allPending: [rec]
-        };
-        userConfirmedNewForOutlet = false;
-        showDuplicateOutletModal([rec]);
-      } else if (data.state === 'confirm_new_phase') {
-        const rec = data.record || {};
-        duplicateOutletState = {
-          mode: 'produced',
-          outletCode: code,
-          backendLock: data,
-          latestProduced: rec,
-          existingRequest: rec,
-          existingRequests: [rec]
-        };
-        userConfirmedNewForOutlet = false;
-        showDuplicateOutletModal([rec]);
-      }
-    }
-  } catch (err) {
-    console.warn('[APP2_BACKEND_LOCK_CHECK] error:', err);
-  }
+  return checkOutletDuplicate();
 }
 
 async function pasteToOutletCode() {
@@ -2147,19 +2217,21 @@ function fillOutletFieldsFromExisting(ex) {
   if (!ex) return;
   try {
     const setIf = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val == null ? '' : val); };
-    setIf('outletCode', ex.outletCode || '');
-    setIf('outletName', ex.outletName || '');
+    setIf('outletCode', ex.outletCode || ex.outlet_code || '');
+    setIf('outletName', ex.outletName || ex.outlet_name || '');
     setIf('address', ex.address || '');
-    setIf('phone', ex.phone || '');
-    if (ex.outletLat) setIf('outletLat', ex.outletLat);
-    if (ex.outletLng) setIf('outletLng', ex.outletLng);
-    if (ex.outletLat && ex.outletLng) {
+    setIf('phone', ex.phone || ex.outlet_phone || '');
+    const lat = ex.outletLat || ex.latitude;
+    const lng = ex.outletLng || ex.longitude;
+    if (lat) setIf('outletLat', lat);
+    if (lng) setIf('outletLng', lng);
+    if (lat && lng) {
       window.isOutletLockedLocation = true;
     }
     // update location preview if possible
     try {
-      if (ex.outletLat && ex.outletLng && typeof setLocationPreview === 'function') {
-        setLocationPreview(ex.address || '', parseFloat(ex.outletLat), parseFloat(ex.outletLng));
+      if (lat && lng && typeof setLocationPreview === 'function') {
+        setLocationPreview(ex.address || '', parseFloat(lat), parseFloat(lng));
       } else {
         const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí';
       }

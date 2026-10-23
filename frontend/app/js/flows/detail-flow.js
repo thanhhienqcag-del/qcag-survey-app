@@ -1603,6 +1603,9 @@ window._applyRequestLockUI = _applyRequestLockUI;
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
       _fetchApp1QuoteListWithCache(true).catch(() => {});
     }
+  }, 500);
+})();
+
 // ── In-Place DOM Helper: Đẩy tin nhắn/yêu cầu sửa vào khung chat đang mở ──
 function _appendCommentToActiveChat(note, tkOrBid) {
   if (!note || !tkOrBid) return;
@@ -1715,11 +1718,21 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
     }
   } catch (e) {}
 
-  // 3. Fallback sang App 1 Staging backend qua B-Tree Index
+function _resolveApp1Base() {
+  const isStaging = (typeof window !== 'undefined' && (window.location.hostname.includes('staging') || window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')));
+  return isStaging
+    ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
+    : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+}
+
+  // 3. Fallback sang App 1 backend qua B-Tree Index
   if (!foundQuote) {
     try {
-      const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
-      const res1 = await fetch(`${app1Base}/quotations?${queryStr}`).catch(() => null);
+      const app1Base = _resolveApp1Base();
+      const controller1 = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer1 = controller1 ? setTimeout(() => controller1.abort(), 2500) : null;
+      const res1 = await fetch(`${app1Base}/quotations?${queryStr}`, { signal: controller1 ? controller1.signal : undefined }).catch(() => null);
+      if (timer1) clearTimeout(timer1);
       if (res1 && res1.ok) {
         const data1 = await res1.json().catch(() => null);
         if (Array.isArray(data1) && data1.length > 0) {
@@ -1766,7 +1779,7 @@ async function _fetchApp1QuoteListWithCache(force = false) {
   }
 
   _quoteFetchInFlight = (async () => {
-    const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
+    const app1Base = _resolveApp1Base();
     let allQuotes = [];
 
     const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
@@ -1799,9 +1812,12 @@ async function _fetchApp1QuoteListWithCache(force = false) {
       if (sessionCode) url2 += '&sale_code=' + encodeURIComponent(sessionCode);
       if (sessionPhone) url2 += '&sale_phone=' + encodeURIComponent(sessionPhone);
       if (sessionName) url2 += '&sale_name=' + encodeURIComponent(sessionName);
-      const res2 = await fetch(url2);
-      if (res2.ok) {
-        const json2 = await res2.json();
+      const controller2 = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer2 = controller2 ? setTimeout(() => controller2.abort(), 3000) : null;
+      const res2 = await fetch(url2, { signal: controller2 ? controller2.signal : undefined }).catch(() => null);
+      if (timer2) clearTimeout(timer2);
+      if (res2 && res2.ok) {
+        const json2 = await res2.json().catch(() => null);
         if (Array.isArray(json2)) {
           allQuotes.push(...json2);
         }

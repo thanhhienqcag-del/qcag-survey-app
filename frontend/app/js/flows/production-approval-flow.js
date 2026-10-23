@@ -68,38 +68,39 @@ function isSaleMatch(item, session) {
     const itemPhone = String(item.salePhone || item.phone || '').replace(/\D/g, '');
     const itemSaleName = item.saleName || item.sale_name || '';
 
-    // 1. Strict Match by saleCode:
-    // If BOTH session and item have a sale code, they MUST match exactly.
-    // NEVER fall back to phone or name match when sale codes conflict.
-    if (sessionCode && itemCode) {
-        return sessionCode === itemCode;
+    const cleanSessionCode = sessionCode.replace(/^USR_(SALE|PHONE)_/i, '').trim();
+    const cleanItemCode = itemCode.replace(/^USR_(SALE|PHONE)_/i, '').trim();
+
+    // 1. Direct code match (exact or without USR_ prefix)
+    if (cleanSessionCode && cleanItemCode && cleanSessionCode === cleanItemCode) {
+        return true;
     }
 
-    // 2. If one side has saleCode but the other is missing it:
-    if (sessionCode && !itemCode) {
-        if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8) {
-            return sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8));
-        }
-        if (sessionName && itemSaleName) {
-            return isNameMatch(itemSaleName, sessionName) || isNameMatch(sessionName, itemSaleName);
-        }
-        return false;
+    // 2. Phone match (Phone is unique to each sale, compare last 8 digits)
+    const sPhoneEnd = sessionPhone.length >= 8 ? sessionPhone.slice(-8) : sessionPhone;
+    const iPhoneEnd = itemPhone.length >= 8 ? itemPhone.slice(-8) : itemPhone;
+    if (sPhoneEnd && iPhoneEnd && (sPhoneEnd === iPhoneEnd || sessionPhone.endsWith(iPhoneEnd) || itemPhone.endsWith(sPhoneEnd))) {
+        return true;
     }
 
-    if (!sessionCode && itemCode) {
-        if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8) {
-            return sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8));
+    // 3. If itemCode or cleanItemCode is a phone number that matches session phone
+    if (cleanItemCode && sPhoneEnd) {
+        const itemCodeDigits = cleanItemCode.replace(/\D/g, '');
+        if (itemCodeDigits && itemCodeDigits.endsWith(sPhoneEnd)) {
+            return true;
         }
-        if (sessionName && itemSaleName) {
-            return isNameMatch(itemSaleName, sessionName) || isNameMatch(sessionName, itemSaleName);
-        }
-        return false;
     }
 
-    // 3. Fallback only when NEITHER has saleCode
-    if (sessionPhone && sessionPhone.length >= 8 && itemPhone && itemPhone.length >= 8) {
-        if (sessionPhone.endsWith(itemPhone.slice(-8)) || itemPhone.endsWith(sessionPhone.slice(-8))) return true;
+    // 4. Linked survey request (__ksReq) match
+    if (item.__ksReq) {
+        const ksReqId = String(item.__ksReq.requester_id || item.__ksReq.requesterId || '').replace(/^USR_(SALE|PHONE)_/i, '').trim();
+        const ksPhone = String(item.__ksReq.phone || item.__ksReq.salePhone || item.__ksReq.sale_phone || '').replace(/\D/g, '');
+        if (cleanSessionCode && ksReqId && cleanSessionCode === ksReqId) return true;
+        if (sPhoneEnd && ksPhone && ksPhone.endsWith(sPhoneEnd)) return true;
+        if (sessionName && item.__ksReq.requester && isNameMatch(sessionName, item.__ksReq.requester)) return true;
     }
+
+    // 5. Name match fallback
     if (sessionName && itemSaleName) {
         if (isNameMatch(itemSaleName, sessionName) || isNameMatch(sessionName, itemSaleName)) return true;
     }
@@ -1070,30 +1071,61 @@ async function fetchProductionApprovals() {
     const sessionAtStart = currentSession;
     let allExtracted = [];
 
-    // 1. Fetch App 1 Backend pending orders (full orders with quote images)
-    const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
+    // 1. Fetch pending orders (App 1 Backend or App 2 Backend fallback)
+    const isStaging = (typeof window !== 'undefined' && (window.location.hostname.includes('staging') || window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')));
+    const app1Base = isStaging
+        ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
+        : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+
+    const defaultApp2Backend = isStaging
+        ? 'https://ks-backend-staging-493469512136.asia-southeast1.run.app'
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
+        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
+        : defaultApp2Backend;
+
     try {
         const sessionCode = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.saleCode || currentSession.userCode || '') : '';
         const sessionPhone = (typeof currentSession !== 'undefined' && currentSession) ? (currentSession.phone || '') : '';
-        let url1 = app1Base + '/pending-orders';
         const params = [];
         if (sessionCode) params.push('sale_code=' + encodeURIComponent(sessionCode));
         if (sessionPhone) params.push('sale_phone=' + encodeURIComponent(sessionPhone));
         if (!_productionApprovalActive) params.push('summary=1');
-        if (params.length) url1 += '?' + params.join('&');
+        const queryStr = params.length ? '?' + params.join('&') : '';
 
-        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), 2500) : null;
-        const res = await fetch(url1, { signal: controller ? controller.signal : undefined }).catch(() => null);
-        if (timer) clearTimeout(timer);
-        if (res && res.ok) {
-            const json = await res.json().catch(() => null);
-            if (json && json.ok && Array.isArray(json.data)) {
-                allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(json.data));
+        // Try App 1 first
+        let gotData = false;
+        try {
+            const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = controller ? setTimeout(() => controller.abort(), 2500) : null;
+            const res = await fetch(app1Base + '/pending-orders' + queryStr, { signal: controller ? controller.signal : undefined }).catch(() => null);
+            if (timer) clearTimeout(timer);
+            if (res && res.ok) {
+                const json = await res.json().catch(() => null);
+                if (json && json.ok && Array.isArray(json.data) && json.data.length > 0) {
+                    allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(json.data));
+                    gotData = true;
+                }
             }
+        } catch (_) { }
+
+        // Fallback to App 2 backend if App 1 didn't yield quotes
+        if (!gotData) {
+            try {
+                const controller2 = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                const timer2 = controller2 ? setTimeout(() => controller2.abort(), 2500) : null;
+                const res2 = await fetch(app2Base + '/api/ks/pending-orders' + queryStr, { signal: controller2 ? controller2.signal : undefined }).catch(() => null);
+                if (timer2) clearTimeout(timer2);
+                if (res2 && res2.ok) {
+                    const json2 = await res2.json().catch(() => null);
+                    if (json2 && json2.ok && Array.isArray(json2.data) && json2.data.length > 0) {
+                        allExtracted = allExtracted.concat(extractQuotesFromPendingOrdersPayload(json2.data));
+                    }
+                }
+            } catch (_) { }
         }
     } catch (e) {
-        // App 1 pending-orders fetch timed out or offline
+        // Pending-orders fetch error
     }
 
     // 2. Check localStorage backups (chỉ khi modal mở hoặc chưa có dữ liệu nào)
@@ -1109,10 +1141,6 @@ async function fetchProductionApprovals() {
     }
 
     // 3. Fetch App 2 Backend production approvals
-    const defaultApp2Backend = 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
-    const app2Base = (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL)))
-        ? String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '')
-        : defaultApp2Backend;
     try {
         const res2 = await fetch(app2Base + '/api/ks/requests/production-approvals');
         if (res2.ok) {
