@@ -541,7 +541,6 @@ body.modal-open #mapModal {
 
 #confirmModal,
 #duplicateOutletModal,
-#duplicateItemsModal,
 #otherOutletModal,
 #logoutModal,
 #deleteModal,
@@ -553,7 +552,6 @@ body.modal-open #mapModal {
 
 #confirmModal > div,
 #duplicateOutletModal > div,
-#duplicateItemsModal > div,
 #otherOutletModal > div,
 #logoutModal > div,
 #deleteModal > div {
@@ -573,9 +571,108 @@ body:has(#confirmModal:not(.hidden)) #tab3 > .mt-6,
 body:has(#confirmModal:not(.hidden)) #wTab1 > .mt-6,
 body:has(#confirmModal:not(.hidden)) #wTab2 > .mt-6,
 body:has(#duplicateOutletModal:not(.hidden)) #tab1 > .mt-6,
-body:has(#duplicateItemsModal:not(.hidden)) #tab1 > .mt-6,
 body:has(#otherOutletModal:not(.hidden)) #tab1 > .mt-6 {
   display: none !important;
+}
+
+/* ============================================================
+   DUPLICATE OUTLET MODALS — DUAL THEME (LIGHT FLAT & DARK NEON)
+   ============================================================ */
+
+/* Light Theme: Clean Flat, solid borders, subtle elevation */
+[data-theme="light"] #dupPrimaryBtn,
+.theme-light #dupPrimaryBtn {
+  background-color: #d97706 !important;
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] #dupPrimaryBtn:hover,
+.theme-light #dupPrimaryBtn:hover {
+  background-color: #b45309 !important;
+}
+[data-theme="light"] #dupSecondaryBtn,
+.theme-light #dupSecondaryBtn {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
+[data-theme="light"] #btnOtherOutletConfirm,
+.theme-light #btnOtherOutletConfirm {
+  background-color: #059669 !important;
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+}
+[data-theme="light"] #btnOtherOutletConfirm:hover,
+.theme-light #btnOtherOutletConfirm:hover {
+  background-color: #047857 !important;
+}
+[data-theme="light"] #btnOtherOutletCancel,
+.theme-light #btnOtherOutletCancel {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
+/* Dark Theme: NEON GLOW (Amber & Emerald) */
+[data-theme="dark"] #dupPrimaryBtn,
+.theme-dark #dupPrimaryBtn {
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  color: #fcd34d !important;
+  border: 1px solid rgba(245, 158, 11, 0.5) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.35) !important;
+}
+[data-theme="dark"] #dupPrimaryBtn:hover,
+.theme-dark #dupPrimaryBtn:hover {
+  background-color: rgba(245, 158, 11, 0.25) !important;
+  border-color: rgba(245, 158, 11, 0.8) !important;
+  color: #fef08a !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.5) !important;
+}
+[data-theme="dark"] #dupSecondaryBtn,
+.theme-dark #dupSecondaryBtn {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #334155 !important;
+  box-shadow: none !important;
+}
+[data-theme="dark"] #dupSecondaryBtn:hover,
+.theme-dark #dupSecondaryBtn:hover {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
+}
+
+[data-theme="dark"] #btnOtherOutletConfirm,
+.theme-dark #btnOtherOutletConfirm {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  color: #6ee7b7 !important;
+  border: 1px solid rgba(52, 211, 153, 0.5) !important;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.35) !important;
+}
+[data-theme="dark"] #btnOtherOutletConfirm:hover,
+.theme-dark #btnOtherOutletConfirm:hover {
+  background-color: rgba(16, 185, 129, 0.25) !important;
+  border-color: rgba(52, 211, 153, 0.8) !important;
+  color: #a7f3d0 !important;
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5) !important;
+}
+[data-theme="dark"] #btnOtherOutletCancel,
+.theme-dark #btnOtherOutletCancel {
+  background-color: rgba(30, 41, 59, 0.7) !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #334155 !important;
+  box-shadow: none !important;
+}
+[data-theme="dark"] #btnOtherOutletCancel:hover,
+.theme-dark #btnOtherOutletCancel:hover {
+  background-color: rgba(51, 65, 85, 0.8) !important;
+  color: #f8fafc !important;
+  border-color: #475569 !important;
 }
 
 /* Ensure primary action buttons in Tab 2 keep dark appearance in dark mode */

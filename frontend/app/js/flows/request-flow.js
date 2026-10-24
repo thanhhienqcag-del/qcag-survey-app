@@ -1790,36 +1790,8 @@ function renderOutletCodeStatusBox(type, data) {
   }
 
   if (type === 'locked_pending' || type === 'locked_approved') {
-    const isApproved = type === 'locked_approved';
-    const tkOrQuote = data && data.hasQuote ? `Báo giá ${data.quoteCode}` : ((data && data.tkCode) ? `Yêu cầu ${data.tkCode}` : 'yêu cầu');
-    const saleInfo = (data && data.saleName ? `Sale: ${data.saleName}` : '') + (data && data.saleCode ? ` (${data.saleCode})` : '');
-    
-    box.className = 'mt-2 p-3 rounded-xl text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-900 dark:text-amber-200 space-y-2 shadow-sm';
-    box.innerHTML = `
-      <div class="flex items-start gap-2">
-        <svg class="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-        </svg>
-        <div class="flex-1">
-          <div class="font-semibold text-amber-800 dark:text-amber-300">
-            ${isApproved ? 'Điểm bán đã duyệt sản xuất nhưng chưa ra đơn hàng!' : `Điểm bán đang có ${tkOrQuote} đang xử lý chưa ra đơn!`}
-          </div>
-          <div class="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-relaxed">
-            ${saleInfo ? `${saleInfo} • ` : ''}Chỉ được chỉnh sửa trên yêu cầu cũ, không tạo mới trùng lặp.
-          </div>
-        </div>
-      </div>
-      <div class="pt-1 flex items-center gap-2">
-        <button type="button" onclick="openDuplicateTargetRecord()" class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-medium text-xs shadow-sm transition-all flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-          </svg>
-          <span>Xem chi tiết / Sửa yêu cầu</span>
-        </button>
-      </div>
-    `;
-    box.classList.remove('hidden');
+    box.className = 'hidden';
+    box.innerHTML = '';
 
     if (ocEl) {
       ocEl.classList.add('border-amber-500', 'focus:ring-amber-500');
@@ -2127,59 +2099,85 @@ function showDuplicateOutletModal(existingOrArray) {
     // ══════════════════════════════════════════════════════════════════
     // LUỒNG: YÊU CẦU CHƯA SẢN XUẤT (Chặn tạo mới, chỉ cho sửa trên yêu cầu cũ)
     // ══════════════════════════════════════════════════════════════════
+    const lockData = (duplicateOutletState && duplicateOutletState.backendLock) || {};
+    const rec = (activeReq && Object.keys(activeReq).length > 0) ? activeReq : (lockData.record || {});
+    const tk = rec.tk_code || rec.tkCode || lockData.tkCode || 'Chưa cấp mã TK';
+    const qCode = rec.quote_code || rec.quoteCode || lockData.quoteCode || '';
+    const tkOrQuote = qCode ? `Báo giá ${qCode}` : (tk && tk !== 'Chưa cấp mã TK' ? `Yêu cầu ${tk}` : 'yêu cầu');
+    const isApproved = lockData.state === 'locked_approved';
+    const saleName = lockData.saleName || rec.sale_name || rec.saleName || '';
+    const saleCode = lockData.saleCode || rec.sale_code || rec.saleCode || '';
+    const saleInfo = saleName ? `Sale: ${saleName}${saleCode ? ` (${saleCode})` : ''}` : '';
+    const oName = rec.outlet_name || rec.outletName || (duplicateOutletState && duplicateOutletState.outletName) || '';
+    const createdDate = rec.created_at || rec.createdAt;
+    const createdStr = createdDate ? new Date(createdDate).toLocaleString('vi-VN') : '';
+
     if (iconEl) {
       iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-amber-500/10 text-amber-500 border border-amber-500/20';
       iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
     }
-    if (titleEl) titleEl.textContent = 'Yêu cầu chưa sản xuất';
+    if (titleEl) {
+      titleEl.textContent = isApproved ? 'Điểm bán đã duyệt sản xuất' : `Điểm bán đang có ${tkOrQuote} chưa ra đơn!`;
+    }
     if (msgEl) {
-      msgEl.innerHTML = 'Outlet này đã tạo yêu cầu và chưa sản xuất.<br><span class="text-amber-500 dark:text-amber-400 font-semibold">Bạn chỉ được chỉnh sửa trên yêu cầu cũ.</span>';
+      msgEl.innerHTML = `
+        <div class="space-y-1">
+          ${saleInfo ? `<div class="font-semibold text-amber-800 dark:text-amber-300 text-xs">${escapeHtml(saleInfo)}</div>` : ''}
+          <div class="text-xs text-slate-600 dark:text-slate-400">Chỉ được chỉnh sửa trên yêu cầu cũ, không tạo mới trùng lặp.</div>
+        </div>
+      `;
     }
     if (confirmQ) {
-      const tk = (activeReq && (activeReq.tkCode || activeReq.tk_code)) || 'Chưa cấp mã TK';
-      const createdStr = (activeReq && activeReq.createdAt) ? new Date(activeReq.createdAt).toLocaleString('vi-VN') : '';
       confirmQ.innerHTML = `
-        <div class="mt-2 py-2 px-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-300 flex items-center justify-between">
-          <span><strong>Mã TK:</strong> ${escapeHtml(tk)}</span>
-          <span>${escapeHtml(createdStr)}</span>
+        <div class="mt-3 p-3 bg-amber-500/10 dark:bg-amber-500/15 rounded-xl border border-amber-500/20 dark:border-amber-500/30 text-xs text-amber-800 dark:text-amber-300 space-y-1.5 text-left">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold">Mã TK: <span class="font-mono text-amber-600 dark:text-amber-400">${escapeHtml(tk)}</span></span>
+            ${qCode ? `<span class="px-2 py-0.5 rounded font-mono font-semibold bg-amber-500/20 text-amber-900 dark:text-amber-200">#${escapeHtml(qCode)}</span>` : ''}
+          </div>
+          ${oName ? `<div class="truncate text-slate-700 dark:text-slate-300"><strong>Điểm bán:</strong> ${escapeHtml(oName)}</div>` : ''}
+          ${createdStr ? `<div class="text-[11px] text-slate-500 dark:text-slate-400 text-right">Khởi tạo: ${escapeHtml(createdStr)}</div>` : ''}
         </div>
       `;
     }
 
-    // Nút 1: Yêu cầu chỉnh sửa (Primary)
+    const targetId = (rec && (rec.__backendId || rec.backend_id || rec.id || rec.tk_code || rec.tkCode || rec.outlet_code || rec.outletCode)) || (duplicateOutletState && duplicateOutletState.outletCode);
+
+    // Nút 1: Yêu cầu chỉnh sửa (Primary - Light Solid & Dark Neon) -> Mở trực tiếp yêu cầu chỉnh sửa!
     if (btnPrimary) {
-      btnPrimary.className = 'w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+      btnPrimary.className = 'w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl shadow-sm border border-transparent dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:text-amber-300 dark:hover:text-amber-200 dark:border-amber-400/50 dark:hover:border-amber-400/80 dark:shadow-[0_0_15px_rgba(245,158,11,0.35)] dark:hover:shadow-[0_0_20px_rgba(245,158,11,0.5)] transition-all active:scale-[0.98] flex items-center justify-center gap-2';
       btnPrimary.innerHTML = `
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         <span>Yêu cầu chỉnh sửa</span>
       `;
-      btnPrimary.onclick = function() {
-        const reqToOpen = activeReq;
+      btnPrimary.onclick = async function() {
         closeDuplicateOutletModalSilent();
-        if (reqToOpen && reqToOpen.__backendId) {
-          showRequestDetail(reqToOpen.__backendId);
+        if (targetId) {
+          await showRequestDetail(targetId);
           setTimeout(() => {
             if (typeof openEditRequestSheet === 'function') {
               window._editRequestOrigin = 'detail';
               openEditRequestSheet();
             }
           }, 350);
+        } else {
+          showToast('Không tìm thấy yêu cầu để chỉnh sửa');
         }
       };
     }
 
-    // Nút 2: Xem chi tiết yêu cầu (Secondary)
+    // Nút 2: Xem chi tiết yêu cầu (Secondary - Light Flat & Dark Subtle Border)
     if (btnSecondary) {
-      btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+      btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl border border-slate-300 dark:bg-slate-800/80 dark:hover:bg-slate-800 dark:text-slate-200 dark:border-slate-700 dark:hover:border-slate-600 transition-all active:scale-[0.98] flex items-center justify-center gap-2';
       btnSecondary.innerHTML = `
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
         <span>Xem chi tiết yêu cầu</span>
       `;
-      btnSecondary.onclick = function() {
-        const reqToOpen = activeReq;
+      btnSecondary.onclick = async function() {
         closeDuplicateOutletModalSilent();
-        if (reqToOpen && reqToOpen.__backendId) {
-          showRequestDetail(reqToOpen.__backendId);
+        if (targetId) {
+          await showRequestDetail(targetId);
+        } else {
+          showToast('Không tìm thấy yêu cầu để xem chi tiết');
         }
       };
     }
@@ -2262,31 +2260,11 @@ function closeDuplicateOutletModal() {
     if (modal) modal.classList.add('hidden');
     try { disableModalBackdrop(); } catch (e) {}
 
-    // Nếu đang ở trạng thái Pending (Chưa sản xuất) mà bấm Đóng [X] -> Bắt buộc xóa mã Outlet để tránh lọt qua Tab 2!
+    // Giữ nguyên trạng thái cảnh báo trên ô nhập liệu và khóa nút chuyển tab để chống bypass,
+    // nhưng không tự ý xóa trắng dữ liệu người dùng vừa nhập để tránh gây khó chịu
     const isPending = duplicateOutletState && duplicateOutletState.mode === 'pending';
-
-    duplicateOutletState = null;
-    userConfirmedNewForOutlet = false;
-    otherOutletState = null;
-    userConfirmedTakeover = false;
-    window._lastCheckedOutletCode = '';
-    renderOutletCodeStatusBox('clear');
-
-    if (isPending) {
-      window.isOutletLockedLocation = false;
-      try { document.getElementById('outletCode').value = ''; } catch (e) {}
-      try { document.getElementById('outletName').value = ''; } catch (e) {}
-      try { document.getElementById('address').value = ''; } catch (e) {}
-      try { document.getElementById('phone').value = ''; } catch (e) {}
-      try { document.getElementById('outletLat').value = ''; } catch (e) {}
-      try { document.getElementById('outletLng').value = ''; } catch (e) {}
-      try { const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí'; } catch (e) {}
-      try {
-        const nt = document.getElementById('newOutletToggle');
-        if (nt && nt.classList.contains('toggle-on')) toggleNewOutlet();
-      } catch (e) {}
-      try { const pb = document.getElementById('outletPasteBtn'); if (pb) pb.style.display = ''; } catch (e) {}
-      showToast('Outlet này đang có yêu cầu chưa sản xuất. Đã xóa mã Outlet.');
+    if (isPending && duplicateOutletState.backendLock) {
+      renderOutletCodeStatusBox('locked_pending', duplicateOutletState.backendLock);
     }
   } catch (e) {}
   try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}

@@ -370,8 +370,35 @@ async function addDetailComment(backendId) {
 // ── Request detail view ────────────────────────────────────────────────
 
 async function showRequestDetail(id) {
-  const request = allRequests.find(r => r.__backendId === id);
-  if (!request) return;
+  if (!id) return;
+  const idStr = String(id).trim();
+  let request = (allRequests || []).find(r => r && (
+    r.__backendId === id ||
+    String(r.__backendId || '').trim() === idStr ||
+    r.backend_id === id ||
+    String(r.backend_id || '').trim() === idStr ||
+    String(r.id || '') === idStr ||
+    (r.tkCode && String(r.tkCode).trim() === idStr) ||
+    (r.tk_code && String(r.tk_code).trim() === idStr) ||
+    (r.outletCode && String(r.outletCode).trim() === idStr) ||
+    (r.outlet_code && String(r.outlet_code).trim() === idStr)
+  ));
+
+  if (!request && window.dataSdk && typeof window.dataSdk.getOne === 'function') {
+    try {
+      const r = await window.dataSdk.getOne(id);
+      if (r && r.isOk && r.data) {
+        request = r.data;
+        if (!request.__backendId) request.__backendId = request.backend_id || request.backendId || id;
+        allRequests.unshift(request);
+      }
+    } catch (e) { /* use local data as fallback */ }
+  }
+
+  if (!request) {
+    showToast('Không tìm thấy dữ liệu yêu cầu để hiển thị');
+    return;
+  }
   // ownership enforcement: only the creator can view details
   if (!isRequestOwnedByCurrentSession(request)) {
     showToast('Không có quyền xem yêu cầu này');
