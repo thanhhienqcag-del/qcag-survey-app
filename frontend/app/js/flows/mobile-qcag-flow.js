@@ -111,67 +111,10 @@
     return { label: 'Đang xử lý', cls: 'processing' };
   }
 
-  function _calculateWaitDays(dateRef) {
-    if (!dateRef) return 0;
-    if (typeof qcagCalculateWaitDays === 'function') {
-      return qcagCalculateWaitDays(dateRef);
-    }
-    var d = new Date(dateRef);
-    if (isNaN(d.getTime())) return 0;
-    var startOfDayRef = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    var now = new Date();
-    var startOfDayNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    var diffDays = Math.round((startOfDayNow - startOfDayRef) / 86400000);
-    return Math.max(0, diffDays);
-  }
-
-  function _getEditRequestDate(req) {
-    if (!req) return null;
-    if (typeof qcagDesktopGetEditRequestDate === 'function') {
-      return qcagDesktopGetEditRequestDate(req);
-    }
-    if (req.editingRequestedAt) return req.editingRequestedAt;
-    if (req.editRequestedAt) return req.editRequestedAt;
-    var comments = _parseJson(req.comments, []);
-    if (Array.isArray(comments) && comments.length > 0) {
-      for (var i = comments.length - 1; i >= 0; i--) {
-        var c = comments[i] || {};
-        var cType = String(c.commentType || c.type || '').toLowerCase();
-        if (
-          cType === 'edit-request' ||
-          cType === 'request-edit' ||
-          cType === 'pending-edit' ||
-          cType.includes('sửa') ||
-          cType.includes('chỉnh sửa') ||
-          c.isEditRequest === true ||
-          c.edit_request === true
-        ) {
-          var time = c.createdAt || c.timestamp || c.time || c.date;
-          if (time) return time;
-        }
-      }
-    }
-    return req.updatedAt || req.updated_at || null;
-  }
-
   function _getWaitBadgeHtml(req) {
-    var isDoneItem = _isDone(req);
-    if (isDoneItem) return '';
-    var isPendingEdit = _hasPendingEdit(req);
-    var editDate = isPendingEdit ? _getEditRequestDate(req) : null;
-    var dateRef = (isPendingEdit && editDate) ? editDate : req.createdAt;
-    if (!dateRef) return '';
-
-    var waitDays = _calculateWaitDays(dateRef);
-    var waitColor = waitDays <= 1 ? 'wait-green' : waitDays <= 3 ? 'wait-orange' : 'wait-red';
-    var waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : waitDays + ' ngày');
-    var editSepHtml = isPendingEdit ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
-
-    return '<span class="qcag-wait-badge ' + waitColor + '" title="' + (isPendingEdit ? 'Chờ từ lúc yêu cầu chỉnh sửa' : 'Thời gian chờ xử lý') + '">' +
-      '<svg class="qcag-wait-badge-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
-      '<span class="qcag-wait-label">' + escapeHtml(waitLabel) + '</span>' +
-      editSepHtml +
-    '</span>';
+    if (_isDone(req)) return '';
+    var waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
+    return waitInfo ? waitInfo.badgeHtml : '';
   }
 
   function _calculateCounts() {

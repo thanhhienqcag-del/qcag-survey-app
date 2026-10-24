@@ -2801,36 +2801,9 @@ function renderQCAGDesktopList(forceRebuild = false) {
     let waitingBadgeHtml = '';
     let deleteBtnHtml = '';
     if (!isDoneItem && !isTaskMode) {
-      const isPendingEdit = qcagDesktopIsPendingEditRequest(req);
-      let dateRef = req.createdAt;
-      let hasHadDesign = false;
-      if (isPendingEdit) {
-        const designImgs = qcagDesktopParseJson(req && (req.designImages || req.design_images), []);
-        hasHadDesign = Boolean(
-          req.hasHadDesign ||
-          req.designCreatedAt ||
-          req.designCreatedBy ||
-          (Array.isArray(designImgs) && designImgs.length > 0)
-        );
-
-        if (hasHadDesign && req.editingRequestedAt) {
-          // Đã có thiết kế ít nhất 1 lần: tính từ ngày yêu cầu sửa đầu tiên của đợt này
-          dateRef = req.editingRequestedAt;
-        } else {
-          // Đang chờ thiết kế nhiều ngày, sau đó sale bổ sung/yêu cầu sửa: tính từ ngày tạo request
-          dateRef = req.createdAt;
-        }
-      }
-
-      if (dateRef) {
-        const waitDays = qcagCalculateWaitDays(dateRef);
-        const waitColor = waitDays <= 1 ? 'wait-green' : waitDays <= 3 ? 'wait-orange' : 'wait-red';
-        const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : waitDays + ' ngày');
-        const editSepHtml = isPendingEdit ? `<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>` : '';
-        const waitTitle = isPendingEdit
-          ? (hasHadDesign ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
-          : 'Thời gian chờ xử lý';
-        waitingBadgeHtml = `<span class="qcag-wait-badge ${waitColor}" title="${escapeHtml(waitTitle)}"><svg class="qcag-wait-badge-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span class="qcag-wait-label">${escapeHtml(waitLabel)}</span>${editSepHtml}</span>`;
+      const waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
+      if (waitInfo) {
+        waitingBadgeHtml = waitInfo.badgeHtml;
       }
     }
 

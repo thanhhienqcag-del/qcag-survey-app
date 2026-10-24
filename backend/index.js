@@ -4254,7 +4254,7 @@ app.post("/api/ks/requests", async (req, res) => {
                     updated_at = EXCLUDED.updated_at
                 RETURNING id
             `, [
-                outletId, cleanCode, outletName, phone, addr, addr, lat, lng,
+                outletId, cleanCode, outletName, phone, addr, null, lat, lng,
                 outletArea,
                 isNewOutlet, now, now
             ]);
