@@ -3300,11 +3300,45 @@ async function uploadDesign(input) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
       hideLoadingOverlay();
-      showToast('Đã upload thiết kế');
+      showToast('✓ Đã upload thiết kế', 'done', 2500);
       showRequestDetail(currentDetailRequest.__backendId);
+
+      // Gửi push notification cho Sale kèm phản hồi trạng thái
+      try {
+        const reqObj = (() => { try { return JSON.parse(currentDetailRequest.requester || '{}'); } catch (_) { return {}; } })();
+        const requesterPhone = reqObj.phone || null;
+        const requesterSaleCode = reqObj.saleCode || null;
+        const outletLabel = currentDetailRequest.outletName || currentDetailRequest.outletCode || 'Outlet';
+        const pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+          ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
+          : '/api/ks/push/send';
+        fetch(pushEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: 'QCAG uploaded to MQ',
+            body: `Outlet "${outletLabel}" đã có MQ, vui lòng mở app để xem chi tiết`,
+            data: { backendId: currentDetailRequest.__backendId },
+            phone: requesterPhone,
+            saleCode: requesterSaleCode,
+          })
+        })
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (res.sent > 0) {
+              const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
+              showToast(`✓ Đã upload thiết kế • Đã báo Sale${devText}`, 'done', 3500);
+            } else {
+              showToast('✓ Đã upload thiết kế • Sale chưa bật nhận thông báo', 'done', 4000);
+            }
+          }
+        })
+        .catch(function (e) { console.warn('[push/uploadDesign]', e); });
+      } catch (_) {}
     } else {
       hideLoadingOverlay();
-      showToast('Lỗi upload thiết kế');
+      showToast('Lỗi upload thiết kế', 'error');
     }
   } else {
     const idx = allRequests.findIndex(r => r.__backendId === currentDetailRequest.__backendId);

@@ -6020,13 +6020,14 @@ async function qcagDesktopMarkProcessed() {
       qcagUpdateTaskCardChecklistBadge(updated);
     }
 
-    showToast(isPendingEdit ? '✓ Đã xác nhận chỉnh sửa' : '✓ Đã hoàn thành', 3000);
+    const actionLabel = isPendingEdit ? 'Đã chỉnh sửa MQ' : 'Đã hoàn thành MQ';
+    showToast(`✓ ${actionLabel}`, 'done', 2500);
 
     // Persist: gửi slim PATCH payload lên backend
     if (window.dataSdk) {
       const result = await window.dataSdk.update(patchPayload);
       if (!result || !result.isOk) {
-        showToast('Không thể cập nhật request lên cloud');
+        showToast('Không thể cập nhật request lên cloud', 'error');
         // Rollback optimistic update on failure
         const idxRb = allRequests.findIndex(r => r.__backendId === _rollbackRequest.__backendId);
         if (idxRb !== -1) allRequests[idxRb] = _rollbackRequest;
@@ -6039,7 +6040,7 @@ async function qcagDesktopMarkProcessed() {
       }
     }
 
-    // Push notification to Sale Heineken (fire and forget)
+    // Push notification to Sale Heineken (kèm phản hồi trạng thái nhận thông báo của Sale)
     try {
       const reqObj = (() => { try { return JSON.parse(currentDetailRequest.requester || '{}'); } catch (_) { return {}; } })();
       const requesterPhone = reqObj.phone || null;
@@ -6064,7 +6065,23 @@ async function qcagDesktopMarkProcessed() {
           phone: requesterPhone,
           saleCode: requesterSaleCode,
         })
-      }).catch(function (e) { console.warn('[push] confirm push error (non-fatal):', e); });
+      })
+      .then(function (r) { return r && r.ok ? r.json() : null; })
+      .then(function (res) {
+        if (res && res.ok) {
+          if (res.sent > 0) {
+            const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
+            showToast(`✓ ${actionLabel} • Đã báo Sale${devText}`, 'done', 3500);
+          } else {
+            showToast(`✓ ${actionLabel} • Sale chưa bật nhận thông báo`, 'done', 4000);
+          }
+        } else {
+          showToast(`✓ ${actionLabel} • Chưa gửi được thông báo tới Sale`, 'done', 3500);
+        }
+      })
+      .catch(function (e) {
+        console.warn('[push] confirm push error (non-fatal):', e);
+      });
     } catch (pushErr) {
       console.warn('[push] confirm-done push error (non-fatal):', pushErr);
     }

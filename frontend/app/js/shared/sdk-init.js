@@ -278,11 +278,10 @@ window.__ksOnInvalidate = function (payload) {
     if (payload.quote_ready) {
       var qOutlet = payload.outlet_name || (payload.data && (payload.data.outletName || payload.data.outletCode)) || 'Điểm bán';
       var qAmt = payload.amount_formatted ? (' — ' + payload.amount_formatted) : '';
-      if (typeof showToast === 'function') {
-        showToast('✓ Điểm bán ' + qOutlet + ' đã có Báo Giá' + qAmt, 4000);
-      }
       if (typeof _ksShowDesktopBanner === 'function' && payload.data && payload.data.__backendId) {
         _ksShowDesktopBanner('Đã có Báo Giá', 'Điểm bán ' + qOutlet + ' đã có báo giá' + qAmt, payload.data.__backendId, 'done');
+      } else if (typeof showToast === 'function') {
+        showToast('✓ Điểm bán ' + qOutlet + ' đã có Báo Giá' + qAmt, 4000);
       }
     }
     if (resType === 'quotations' && !payload.quote_ready) return;
