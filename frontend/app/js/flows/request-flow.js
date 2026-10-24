@@ -1033,21 +1033,15 @@ function attachValidationClearing() {
       el.addEventListener('input', saver);
       el.addEventListener('change', saver);
     });
-    // Gắn kiểm tra trùng Outlet realtime ngay khi gõ đủ 8 số hoặc blur/paste
+    // Gắn kiểm tra trùng Outlet realtime khi blur hoặc paste
     const ocEl = document.getElementById('outletCode');
     if (ocEl && !ocEl._boundRealtimeLock) {
       ocEl._boundRealtimeLock = true;
       const runRealtimeDuplicateCheck = () => {
         try { checkOutletDuplicate(); } catch (e) {}
       };
-      ocEl.addEventListener('input', () => {
-        const val = (ocEl.value || '').trim();
-        if (/^\d{8}$/.test(val)) {
-          runRealtimeDuplicateCheck();
-        }
-      });
       ocEl.addEventListener('blur', runRealtimeDuplicateCheck);
-      ocEl.addEventListener('paste', () => setTimeout(runRealtimeDuplicateCheck, 50));
+      ocEl.addEventListener('paste', () => setTimeout(runRealtimeDuplicateCheck, 0));
     }
   } catch (e) {}
 }
@@ -1151,7 +1145,7 @@ function isTab2Complete() {
   } catch (e) { return false; }
 }
 
-function validateTab1() {
+async function validateTab1() {
   clearNewRequestFieldErrors();
   const code = document.getElementById('outletCode').value.trim();
   const name = document.getElementById('outletName').value.trim();
@@ -1211,6 +1205,31 @@ function validateTab1() {
     }
   } catch (e) {}
   if (hasError) return;
+
+  // Realtime Lock Check via Neon DB — bắt buộc await 100% trước khi cho chuyển Tab!
+  if (code !== 'New Outlet') {
+    const nextBtn = document.querySelector('#tab1 .req-footer-actions button');
+    let origText = nextBtn ? nextBtn.innerHTML : '';
+    if (nextBtn) {
+      nextBtn.disabled = true;
+      nextBtn.innerHTML = `
+        <svg class="w-4 h-4 animate-spin shrink-0 inline-block mr-2" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+        <span>Đang kiểm tra mã...</span>
+      `;
+    }
+    try {
+      await checkOutletDuplicate();
+    } finally {
+      if (nextBtn) {
+        nextBtn.disabled = false;
+        nextBtn.innerHTML = origText;
+      }
+    }
+  }
+
   // Save outlet draft so next request pre-fills step 1 and skips it
   try {
     const prevDraft = JSON.parse(localStorage.getItem(OUTLET_DRAFT_KEY) || '{}');
@@ -1229,8 +1248,8 @@ function validateTab1() {
     localStorage.setItem(OUTLET_DRAFT_KEY, JSON.stringify(draft));
     _justLoggedIn = false; // after confirming step 1, subsequent requests skip it
   } catch (e) {}
+
   // If outlet matches an existing request, require explicit confirmation or block if pending
-  checkOutletDuplicate();
   if (duplicateOutletState && duplicateOutletState.mode === 'pending') {
     showToast('Outlet này đang có yêu cầu chưa sản xuất. Bạn chỉ được chỉnh sửa trên yêu cầu cũ!');
     showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
@@ -1445,21 +1464,6 @@ async function submitNewRequest() {
     showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
     return;
   }
-
-  // If user previously confirmed "Hạng mục mới" for this outlet, ensure items are not identical to the latest existing request
-  try {
-    if (duplicateOutletState && userConfirmedNewForOutlet && duplicateOutletState.existingRequest) {
-      const prevItems = JSON.parse(duplicateOutletState.existingRequest.items || '[]');
-      if (areItemsEquivalent(prevItems, currentRequestItems)) {
-        // Block submission and prompt user to edit or open old request
-        showDuplicateItemsModal();
-        btn.disabled = false;
-        btn.textContent = 'Xác nhận yêu cầu';
-        _isNewRequestSubmitting = false;
-        return;
-      }
-    }
-  } catch (e) {}
 
   // Save items to outlet draft for next request pre-fill
   try {
@@ -1698,6 +1702,14 @@ function resetNewRequestForm() {
     const sb = document.getElementById('submitNewBtn');
     if (sb) { sb.disabled = false; sb.textContent = 'Xác nhận yêu cầu'; }
   } catch (e) {}
+  // Reset lock & duplicate states completely
+  duplicateOutletState = null;
+  userConfirmedNewForOutlet = false;
+  otherOutletState = null;
+  userConfirmedTakeover = false;
+  window._lastCheckedOutletCode = '';
+  renderOutletCodeStatusBox('clear');
+
   switchTab(1);
   initNewRequestRegionUI();
   try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
@@ -1882,51 +1894,68 @@ function openDuplicateTargetRecord() {
   }
 }
 
+var _outletDuplicateAbortController = null;
+var _outletDuplicateSeq = 0;
+
 async function checkOutletDuplicate() {
   const codeEl = document.getElementById('outletCode');
-  if (!codeEl) return;
+  if (!codeEl) return null;
   const raw = (codeEl.value || '').trim();
   const code = raw.replace(/\D/g, '').slice(0, 8);
 
   // reset when empty or not full 8 digits
   if (!code || code.length < 8) {
+    if (_outletDuplicateAbortController) {
+      try { _outletDuplicateAbortController.abort(); } catch (e) {}
+      _outletDuplicateAbortController = null;
+    }
     renderOutletCodeStatusBox('clear');
     duplicateOutletState = null;
     userConfirmedNewForOutlet = false;
     otherOutletState = null;
     userConfirmedTakeover = false;
     window._lastCheckedOutletCode = '';
-    return;
+    return null;
   }
 
   // If user already confirmed "Hạng mục mới" for this outlet code, retain confirmation
   if (userConfirmedNewForOutlet && duplicateOutletState && duplicateOutletState.outletCode === code) {
     renderOutletCodeStatusBox('confirm_new_phase', duplicateOutletState.backendLock || { latestOrder: 'Đã hoàn tất' });
-    return;
+    return duplicateOutletState;
   }
 
-  // Avoid spamming API for same code
-  if (window._lastCheckedOutletCode === code && duplicateOutletState && duplicateOutletState.outletCode === code) {
-    return;
+  // Increment sequence and abort pending in-flight fetch
+  const currentSeq = ++_outletDuplicateSeq;
+  if (_outletDuplicateAbortController) {
+    try { _outletDuplicateAbortController.abort(); } catch (e) {}
   }
-  window._lastCheckedOutletCode = code;
+  _outletDuplicateAbortController = new AbortController();
 
   // Realtime B-Tree SSoT Lock Check via Neon Database
   try {
     renderOutletCodeStatusBox('checking');
     const base = resolveApp2BackendUrl();
-    const res = await fetch(`${base}/api/outlets/${encodeURIComponent(code)}/lock-state`);
+    const res = await fetch(`${base}/api/outlets/${encodeURIComponent(code)}/lock-state`, {
+      signal: _outletDuplicateAbortController.signal,
+      headers: { 'Cache-Control': 'no-cache, no-store' }
+    });
+
+    if (currentSeq !== _outletDuplicateSeq) return null;
+
     if (!res.ok) {
       renderOutletCodeStatusBox('clear');
-      return;
+      return null;
     }
     const data = await res.json();
+    if (currentSeq !== _outletDuplicateSeq) return null;
+
     if (!data || (!data.ok && !data.success)) {
       renderOutletCodeStatusBox('clear');
-      return;
+      return null;
     }
 
     const rec = data.record || {};
+    window._lastCheckedOutletCode = code;
 
     if (data.state === 'locked_pending' || data.state === 'locked_approved') {
       // Check if owned by another sale
@@ -1941,7 +1970,7 @@ async function checkOutletDuplicate() {
         userConfirmedTakeover = false;
         renderOutletCodeStatusBox(data.state, data);
         showOtherOutletModal([rec]);
-        return;
+        return otherOutletState;
       }
 
       duplicateOutletState = {
@@ -1955,6 +1984,7 @@ async function checkOutletDuplicate() {
       userConfirmedNewForOutlet = false;
       renderOutletCodeStatusBox(data.state, data);
       showDuplicateOutletModal([rec]);
+      return duplicateOutletState;
 
     } else if (data.state === 'confirm_new_phase') {
       duplicateOutletState = {
@@ -1965,34 +1995,32 @@ async function checkOutletDuplicate() {
         existingRequest: rec,
         existingRequests: [rec]
       };
-      userConfirmedNewForOutlet = false;
+      // Tự động cho phép khảo sát thêm hạng mục mới, không bật Modal phiền người dùng!
+      userConfirmedNewForOutlet = true;
       renderOutletCodeStatusBox('confirm_new_phase', data);
 
-      // Auto pre-fill name/address/phone from previous records if empty
-      const nameEl = document.getElementById('outletName');
-      if (nameEl && !nameEl.value.trim() && (data.outletName || rec.outlet_name)) {
-        nameEl.value = (data.outletName || rec.outlet_name);
-      }
-      const addrEl = document.getElementById('address');
-      if (addrEl && !addrEl.value.trim() && (data.address || rec.address)) {
-        addrEl.value = (data.address || rec.address);
-      }
-      const phoneEl = document.getElementById('phone');
-      if (phoneEl && !phoneEl.value.trim() && (data.outletPhone || rec.outlet_phone)) {
-        phoneEl.value = (data.outletPhone || rec.outlet_phone);
-      }
+      // Auto pre-fill name/address/phone/coords/region from existing records
+      fillOutletFieldsFromExisting({ ...rec, ...data });
 
-      showDuplicateOutletModal([rec]);
+      showToast('Điểm bán đã từng sản xuất. Đã tự động nạp thông tin điểm bán.');
+      return duplicateOutletState;
 
     } else {
       // Unlocked / Clean
       renderOutletCodeStatusBox('clear');
       duplicateOutletState = null;
       userConfirmedNewForOutlet = false;
+      if (data && (data.outletName || data.address)) {
+        fillOutletFieldsFromExisting(data);
+        showToast('Đã tự động nạp thông tin điểm bán từ hệ thống.');
+      }
+      return null;
     }
   } catch (err) {
+    if (err && err.name === 'AbortError') return null;
     console.warn('[REALTIME_LOCK_CHECK] fetch error:', err);
     renderOutletCodeStatusBox('clear');
+    return null;
   }
 }
 
@@ -2016,7 +2044,13 @@ async function pasteToOutletCode() {
         return;
       }
       el.value = trimmed;
-      try { sanitizeOutletCodeInput(el); } catch (e) { try { checkOutletDuplicate(); } catch (e) {} }
+      // Reset flags cleanly on paste
+      window._lastCheckedOutletCode = '';
+      duplicateOutletState = null;
+      userConfirmedNewForOutlet = false;
+      otherOutletState = null;
+      userConfirmedTakeover = false;
+      try { checkOutletDuplicate(); } catch (e) {}
       showToast('Đã dán');
     }
   } catch (e) {
@@ -2088,122 +2122,66 @@ function showDuplicateOutletModal(existingOrArray) {
       ? (duplicateOutletState.activeRequest || duplicateOutletState.existingRequest)
       : (duplicateOutletState && duplicateOutletState.latestProduced ? duplicateOutletState.latestProduced : (duplicateOutletState && duplicateOutletState.existingRequest));
 
-    if (isPendingMode) {
-      // ══════════════════════════════════════════════════════════════════
-      // LUỒNG 1: YÊU CẦU CHƯA SẢN XUẤT (Chặn tạo mới, chỉ cho sửa trên yêu cầu cũ)
-      // ══════════════════════════════════════════════════════════════════
-      if (iconEl) {
-        iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-amber-500/10 text-amber-500 border border-amber-500/20';
-        iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
-      }
-      if (titleEl) titleEl.textContent = 'Yêu cầu chưa sản xuất';
-      if (msgEl) {
-        msgEl.innerHTML = 'Outlet này đã tạo yêu cầu và chưa sản xuất.<br><span class="text-amber-500 dark:text-amber-400 font-semibold">Bạn chỉ được chỉnh sửa trên yêu cầu cũ.</span>';
-      }
-      if (confirmQ) {
-        const tk = (activeReq && (activeReq.tkCode || activeReq.tk_code)) || 'Chưa cấp mã TK';
-        const createdStr = (activeReq && activeReq.createdAt) ? new Date(activeReq.createdAt).toLocaleString('vi-VN') : '';
-        confirmQ.innerHTML = `
-          <div class="mt-2 py-2 px-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-300 flex items-center justify-between">
-            <span><strong>Mã TK:</strong> ${escapeHtml(tk)}</span>
-            <span>${escapeHtml(createdStr)}</span>
-          </div>
-        `;
-      }
+    if (!isPendingMode) return;
 
-      // Nút 1: Yêu cầu chỉnh sửa (Primary)
-      if (btnPrimary) {
-        btnPrimary.className = 'w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
-        btnPrimary.innerHTML = `
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-          <span>Yêu cầu chỉnh sửa</span>
-        `;
-        btnPrimary.onclick = function() {
-          const reqToOpen = activeReq;
-          closeDuplicateOutletModalSilent();
-          if (reqToOpen && reqToOpen.__backendId) {
-            showRequestDetail(reqToOpen.__backendId);
-            setTimeout(() => {
-              if (typeof openEditRequestSheet === 'function') {
-                window._editRequestOrigin = 'detail';
-                openEditRequestSheet();
-              }
-            }, 350);
-          }
-        };
-      }
+    // ══════════════════════════════════════════════════════════════════
+    // LUỒNG: YÊU CẦU CHƯA SẢN XUẤT (Chặn tạo mới, chỉ cho sửa trên yêu cầu cũ)
+    // ══════════════════════════════════════════════════════════════════
+    if (iconEl) {
+      iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-amber-500/10 text-amber-500 border border-amber-500/20';
+      iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+    }
+    if (titleEl) titleEl.textContent = 'Yêu cầu chưa sản xuất';
+    if (msgEl) {
+      msgEl.innerHTML = 'Outlet này đã tạo yêu cầu và chưa sản xuất.<br><span class="text-amber-500 dark:text-amber-400 font-semibold">Bạn chỉ được chỉnh sửa trên yêu cầu cũ.</span>';
+    }
+    if (confirmQ) {
+      const tk = (activeReq && (activeReq.tkCode || activeReq.tk_code)) || 'Chưa cấp mã TK';
+      const createdStr = (activeReq && activeReq.createdAt) ? new Date(activeReq.createdAt).toLocaleString('vi-VN') : '';
+      confirmQ.innerHTML = `
+        <div class="mt-2 py-2 px-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-xs text-amber-600 dark:text-amber-300 flex items-center justify-between">
+          <span><strong>Mã TK:</strong> ${escapeHtml(tk)}</span>
+          <span>${escapeHtml(createdStr)}</span>
+        </div>
+      `;
+    }
 
-      // Nút 2: Xem chi tiết yêu cầu (Secondary)
-      if (btnSecondary) {
-        btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
-        btnSecondary.innerHTML = `
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-          <span>Xem chi tiết yêu cầu</span>
-        `;
-        btnSecondary.onclick = function() {
-          const reqToOpen = activeReq;
-          closeDuplicateOutletModalSilent();
-          if (reqToOpen && reqToOpen.__backendId) {
-            showRequestDetail(reqToOpen.__backendId);
-          }
-        };
-      }
+    // Nút 1: Yêu cầu chỉnh sửa (Primary)
+    if (btnPrimary) {
+      btnPrimary.className = 'w-full py-3.5 px-4 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+      btnPrimary.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span>Yêu cầu chỉnh sửa</span>
+      `;
+      btnPrimary.onclick = function() {
+        const reqToOpen = activeReq;
+        closeDuplicateOutletModalSilent();
+        if (reqToOpen && reqToOpen.__backendId) {
+          showRequestDetail(reqToOpen.__backendId);
+          setTimeout(() => {
+            if (typeof openEditRequestSheet === 'function') {
+              window._editRequestOrigin = 'detail';
+              openEditRequestSheet();
+            }
+          }, 350);
+        }
+      };
+    }
 
-    } else {
-      // ══════════════════════════════════════════════════════════════════
-      // LUỒNG 2: OUTLET ĐÃ ĐƯỢC SẢN XUẤT (Cho phép làm thêm bảng hiệu mới)
-      // ══════════════════════════════════════════════════════════════════
-      const latestProd = (duplicateOutletState && duplicateOutletState.latestProduced) || activeReq;
-      let orderNo = '';
-      if (typeof window._checkRequestLockState === 'function' && latestProd) {
-        orderNo = window._checkRequestLockState(latestProd).orderNo || '';
-      }
-      if (!orderNo && latestProd && latestProd.bridge) {
-        orderNo = latestProd.bridge.order_number || '';
-      }
-
-      if (iconEl) {
-        iconEl.className = 'w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
-        iconEl.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
-      }
-      if (titleEl) titleEl.textContent = 'Outlet đã sản xuất';
-      if (msgEl) {
-        msgEl.innerHTML = 'Outlet này đã được sản xuất.<br><strong class="text-slate-800 dark:text-slate-100">Bạn có chắc sẽ làm thêm bảng hiệu cho outlet này?</strong>';
-      }
-      if (confirmQ) {
-        confirmQ.innerHTML = orderNo ? `
-          <div class="mt-2 py-2 px-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-300 flex items-center justify-between">
-            <span><strong>Đơn hàng trước:</strong> #${escapeHtml(orderNo)}</span>
-            <span>Đã hoàn tất sản xuất</span>
-          </div>
-        ` : '';
-      }
-
-      // Nút 1: Xem chi tiết yêu cầu (Secondary)
-      if (btnSecondary) {
-        btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
-        btnSecondary.innerHTML = `
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-          <span>Xem chi tiết yêu cầu</span>
-        `;
-        btnSecondary.onclick = function() {
-          const reqToOpen = latestProd;
-          closeDuplicateOutletModalSilent();
-          if (reqToOpen && reqToOpen.__backendId) {
-            showRequestDetail(reqToOpen.__backendId);
-          }
-        };
-      }
-
-      // Nút 2: Hạng mục mới (Primary)
-      if (btnPrimary) {
-        btnPrimary.className = 'w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2';
-        btnPrimary.innerHTML = `
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-          <span>Hạng mục mới</span>
-        `;
-        btnPrimary.onclick = continueWithNewOutlet;
-      }
+    // Nút 2: Xem chi tiết yêu cầu (Secondary)
+    if (btnSecondary) {
+      btnSecondary.className = 'w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-200 font-semibold rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2';
+      btnSecondary.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+        <span>Xem chi tiết yêu cầu</span>
+      `;
+      btnSecondary.onclick = function() {
+        const reqToOpen = activeReq;
+        closeDuplicateOutletModalSilent();
+        if (reqToOpen && reqToOpen.__backendId) {
+          showRequestDetail(reqToOpen.__backendId);
+        }
+      };
     }
 
     modal.classList.remove('hidden');
@@ -2216,11 +2194,14 @@ function showDuplicateOutletModal(existingOrArray) {
 function fillOutletFieldsFromExisting(ex) {
   if (!ex) return;
   try {
-    const setIf = (id, val) => { const el = document.getElementById(id); if (el) el.value = (val == null ? '' : val); };
+    const setIf = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val != null && String(val).trim()) el.value = String(val).trim();
+    };
     setIf('outletCode', ex.outletCode || ex.outlet_code || '');
     setIf('outletName', ex.outletName || ex.outlet_name || '');
     setIf('address', ex.address || '');
-    setIf('phone', ex.phone || ex.outlet_phone || '');
+    setIf('phone', ex.phone || ex.outletPhone || ex.outlet_phone || '');
     const lat = ex.outletLat || ex.latitude;
     const lng = ex.outletLng || ex.longitude;
     if (lat) setIf('outletLat', lat);
@@ -2228,12 +2209,19 @@ function fillOutletFieldsFromExisting(ex) {
     if (lat && lng) {
       window.isOutletLockedLocation = true;
     }
+    if (ex.region) {
+      const regInput = document.getElementById('newReqSelectedRegion');
+      if (regInput) regInput.value = ex.region;
+      document.querySelectorAll('.req-region-btn').forEach(b => {
+        b.classList.toggle('selected', b.textContent.trim() === ex.region);
+      });
+    }
     // update location preview if possible
     try {
       if (lat && lng && typeof setLocationPreview === 'function') {
         setLocationPreview(ex.address || '', parseFloat(lat), parseFloat(lng));
       } else {
-        const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = 'Chưa có vị trí';
+        const lp = document.getElementById('locationPreview'); if (lp && (!lat || !lng)) lp.textContent = 'Chưa có vị trí';
       }
     } catch (e) {}
     try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
@@ -2281,6 +2269,8 @@ function closeDuplicateOutletModal() {
     userConfirmedNewForOutlet = false;
     otherOutletState = null;
     userConfirmedTakeover = false;
+    window._lastCheckedOutletCode = '';
+    renderOutletCodeStatusBox('clear');
 
     if (isPending) {
       window.isOutletLockedLocation = false;
@@ -2302,80 +2292,12 @@ function closeDuplicateOutletModal() {
   try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
 }
 
-function continueWithNewOutlet() {
-  const modal = document.getElementById('duplicateOutletModal');
-  if (modal) modal.classList.add('hidden');
-  try { disableModalBackdrop(); } catch (e) {}
-
-  userConfirmedNewForOutlet = true;
-  otherOutletState = null;
-  userConfirmedTakeover = false;
-
-  // Tự động điền lại thông tin Outlet từ yêu cầu đã sản xuất trước đó vào Tab 1
-  try {
-    const ex = duplicateOutletState && (duplicateOutletState.latestProduced || duplicateOutletState.existingRequest);
-    if (ex) {
-      window._lastOutletOldContent = (ex.content || ex.signContent || '').trim();
-      fillOutletFieldsFromExisting(ex);
-      showToast('Đã nạp thông tin Outlet. Vui lòng bấm Tiếp tục để chọn hạng mục.');
-    }
-  } catch (e) {}
-}
-
-function areItemsEquivalent(a, b) {
-  try {
-    if (!Array.isArray(a) || !Array.isArray(b)) return false;
-    if (a.length !== b.length) return false;
-    for (let i = 0; i < a.length; i++) {
-      const ai = a[i] || {};
-      const bi = b[i] || {};
-      // compare core fields
-      if ((ai.type || '') !== (bi.type || '')) return false;
-      if ((ai.brand || '') !== (bi.brand || '')) return false;
-      if (Boolean(ai.useOldSize) !== Boolean(bi.useOldSize)) return false;
-      const aw = parseFloat(ai.width || 0) || 0;
-      const ah = parseFloat(ai.height || 0) || 0;
-      const bw = parseFloat(bi.width || 0) || 0;
-      const bh = parseFloat(bi.height || 0) || 0;
-      if (Math.abs(aw - bw) > 0.0001) return false;
-      if (Math.abs(ah - bh) > 0.0001) return false;
-      if ((parseInt(ai.poles || 0,10) || 0) !== (parseInt(bi.poles || 0,10) || 0)) return false;
-      if ((ai.action || '') !== (bi.action || '')) return false;
-      if ((ai.otherContent || '') !== (bi.otherContent || '')) return false;
-      if ((ai.note || '') !== (bi.note || '')) return false;
-    }
-    return true;
-  } catch (e) { return false; }
-}
-
-function showDuplicateItemsModal() {
-  try { blurActiveInput(); } catch (e) {}
-  const modal = document.getElementById('duplicateItemsModal');
-  if (!modal) return;
-  modal.classList.remove('hidden');
-  try { enableModalBackdrop(); } catch (e) {}
-}
-
-function openExistingRequestFromDuplicateItemsModal() {
-  const modal = document.getElementById('duplicateItemsModal');
-  if (modal) modal.classList.add('hidden');
-  try { disableModalBackdrop(); } catch (e) {}
-  if (duplicateOutletState && duplicateOutletState.existingRequest) {
-    const id = duplicateOutletState.existingRequest.__backendId;
-    if (id) showRequestDetail(id);
-  }
-}
-
-function closeDuplicateItemsModal() {
-  const modal = document.getElementById('duplicateItemsModal');
-  if (modal) modal.classList.add('hidden');
-  try { disableModalBackdrop(); } catch (e) {}
-}
 
 // ── Other-sale outlet takeover ────────────────────────────────────────
 
 function showOtherOutletModal(matches) {
   try { blurActiveInput(); } catch (e) {}
+  try { enableModalBackdrop(); } catch (e) {}
   const modal = document.getElementById('otherOutletModal');
   const msg = document.getElementById('otherOutletMessage');
   if (!modal || !msg || !matches || !matches.length) return;
@@ -2408,6 +2330,7 @@ function showOtherOutletModal(matches) {
 async function confirmTakeoverOutlet() {
   const modal = document.getElementById('otherOutletModal');
   if (modal) modal.classList.add('hidden');
+  try { disableModalBackdrop(); } catch (e) {}
 
   if (!otherOutletState || !otherOutletState.matches || !currentSession) {
     userConfirmedTakeover = true;
@@ -2477,8 +2400,13 @@ async function confirmTakeoverOutlet() {
 function cancelTakeoverOutlet() {
   const modal = document.getElementById('otherOutletModal');
   if (modal) modal.classList.add('hidden');
+  try { disableModalBackdrop(); } catch (e) {}
   otherOutletState = null;
   userConfirmedTakeover = false;
+  window._lastCheckedOutletCode = '';
+  duplicateOutletState = null;
+  userConfirmedNewForOutlet = false;
+  renderOutletCodeStatusBox('clear');
   // Clear outlet code so user can try a different one
   try {
     const codeEl = document.getElementById('outletCode');

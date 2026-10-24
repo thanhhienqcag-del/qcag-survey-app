@@ -1008,8 +1008,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             r.created_at,
             COALESCE(o.code, '') AS outlet_code,
             COALESCE(o.name, '') AS outlet_name,
-            COALESCE(o.address, '') AS address,
+            COALESCE(o.address, NULLIF(TRIM(CONCAT_WS(', ', NULLIF(o.house_number, ''), NULLIF(o.street, ''), NULLIF(o.ward, ''), NULLIF(o.district, ''), NULLIF(o.province, ''))), ''), o.street, '') AS address,
             COALESCE(o.phone, '') AS outlet_phone,
+            COALESCE(o.latitude::text, '') AS latitude,
+            COALESCE(o.longitude::text, '') AS longitude,
+            COALESCE(u.region, o.area, '') AS region,
             COALESCE(u.fullname, '') AS sale_name,
             COALESCE(u.username, '') AS sale_code,
             COALESCE(u.username, '') AS sale_phone,
@@ -1051,8 +1054,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             q2.created_at,
             COALESCE(o2.code, REGEXP_REPLACE(q2.outlet_id::text, '^out_', '')) AS outlet_code,
             COALESCE(o2.name, q2.outlet_name, '') AS outlet_name,
-            COALESCE(o2.address, '') AS address,
+            COALESCE(o2.address, NULLIF(TRIM(CONCAT_WS(', ', NULLIF(o2.house_number, ''), NULLIF(o2.street, ''), NULLIF(o2.ward, ''), NULLIF(o2.district, ''), NULLIF(o2.province, ''))), ''), o2.street, '') AS address,
             COALESCE(o2.phone, '') AS outlet_phone,
+            COALESCE(o2.latitude::text, '') AS latitude,
+            COALESCE(o2.longitude::text, '') AS longitude,
+            COALESCE(u2.region, o2.area, '') AS region,
             COALESCE(u2.fullname, q2.created_by_name, '') AS sale_name,
             COALESCE(u2.username, q2.sales_id, '') AS sale_code,
             COALESCE(u2.username, '') AS sale_phone,
@@ -1088,6 +1094,29 @@ async function checkOutletActiveState(conn, inOutletCode) {
     `, [cleanCode, targetOutletId, cleanCode, cleanCode, cleanCode, targetOutletId, cleanCode, cleanCode]);
 
     if (!rows || rows.length === 0) {
+        try {
+            const [[outRec]] = await conn.query(`
+                SELECT code, name, 
+                       COALESCE(address, NULLIF(TRIM(CONCAT_WS(', ', NULLIF(house_number, ''), NULLIF(street, ''), NULLIF(ward, ''), NULLIF(district, ''), NULLIF(province, ''))), ''), street, '') AS address,
+                       phone, latitude::text AS latitude, longitude::text AS longitude, area AS region
+                FROM outlets
+                WHERE LOWER(TRIM(code)) = ? OR LOWER(TRIM(id::text)) = ?
+                LIMIT 1
+            `, [cleanCode.toLowerCase(), targetOutletId.toLowerCase()]);
+            if (outRec) {
+                return {
+                    state: 'unlocked',
+                    reason: 'known_outlet_clean',
+                    outletCode: outRec.code || cleanCode,
+                    outletName: outRec.name || '',
+                    address: outRec.address || '',
+                    outletPhone: outRec.phone || '',
+                    latitude: outRec.latitude || '',
+                    longitude: outRec.longitude || '',
+                    region: outRec.region || ''
+                };
+            }
+        } catch (e) {}
         return { state: 'unlocked', reason: 'clean_outlet' };
     }
 
@@ -1104,6 +1133,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             reason: 'production_approved_no_po',
             outletCode: cleanCode,
             outletName: approvedNoPo.outlet_name,
+            address: approvedNoPo.address,
+            outletPhone: approvedNoPo.outlet_phone,
+            latitude: approvedNoPo.latitude,
+            longitude: approvedNoPo.longitude,
+            region: approvedNoPo.region,
             tkCode: approvedNoPo.tk_code,
             quoteCode: approvedNoPo.quote_code,
             hasQuote,
@@ -1111,7 +1145,6 @@ async function checkOutletActiveState(conn, inOutletCode) {
             saleName: approvedNoPo.sale_name,
             saleCode: approvedNoPo.sale_code,
             salePhone: approvedNoPo.sale_phone,
-            address: approvedNoPo.address,
             totalAmount: approvedNoPo.total_amount,
             canMerge: false,
             canOverride: true,
@@ -1132,6 +1165,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             reason: 'active_request_or_quote_not_produced',
             outletCode: cleanCode,
             outletName: pendingActive.outlet_name,
+            address: pendingActive.address,
+            outletPhone: pendingActive.outlet_phone,
+            latitude: pendingActive.latitude,
+            longitude: pendingActive.longitude,
+            region: pendingActive.region,
             tkCode: pendingActive.tk_code,
             quoteCode: pendingActive.quote_code,
             hasQuote,
@@ -1139,7 +1177,6 @@ async function checkOutletActiveState(conn, inOutletCode) {
             saleName: pendingActive.sale_name,
             saleCode: pendingActive.sale_code,
             salePhone: pendingActive.sale_phone,
-            address: pendingActive.address,
             totalAmount: pendingActive.total_amount,
             createdAt: pendingActive.created_at,
             canMerge: true,
@@ -1160,6 +1197,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             reason: 'all_previous_produced',
             outletCode: cleanCode,
             outletName: producedItem.outlet_name,
+            address: producedItem.address,
+            outletPhone: producedItem.outlet_phone,
+            latitude: producedItem.latitude,
+            longitude: producedItem.longitude,
+            region: producedItem.region,
             tkCode: producedItem.tk_code,
             quoteCode: producedItem.quote_code,
             hasQuote,
@@ -1178,6 +1220,9 @@ async function checkOutletActiveState(conn, inOutletCode) {
 app.get('/api/outlets/:code/lock-state', async (req, res) => {
     try {
         await ensureDbInitStarted();
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         const code = req.params.code ? String(req.params.code).trim() : '';
         if (!code) return res.json({ ok: true, success: true, state: 'unlocked', reason: 'empty_code' });
         const result = await checkOutletActiveState(pool, code);
@@ -4147,6 +4192,15 @@ app.post("/api/ks/requests", async (req, res) => {
             );
             if (foundOutlets && foundOutlets.length > 0) {
                 outletId = foundOutlets[0].id;
+                // Nếu Sale gửi định vị mới cho điểm bán có sẵn, luôn cập nhật tọa độ vào bảng outlets
+                const lat = b.outletLat && !isNaN(Number(b.outletLat)) ? Number(b.outletLat) : (b.latitude && !isNaN(Number(b.latitude)) ? Number(b.latitude) : null);
+                const lng = b.outletLng && !isNaN(Number(b.outletLng)) ? Number(b.outletLng) : (b.longitude && !isNaN(Number(b.longitude)) ? Number(b.longitude) : null);
+                if (lat != null || lng != null) {
+                    await pool.query(
+                        "UPDATE outlets SET latitude = COALESCE(?, latitude), longitude = COALESCE(?, longitude), updated_at = NOW() WHERE id = ?",
+                        [lat, lng, outletId]
+                    );
+                }
             }
         }
         if (!outletId) {

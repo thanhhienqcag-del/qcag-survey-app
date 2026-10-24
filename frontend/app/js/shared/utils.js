@@ -281,7 +281,11 @@ function sanitizeOutletCodeInput(el) {
   const raw = String(el.value || '');
   const digits = raw.replace(/\D/g, '').slice(0, 8);
   el.value = digits;
-  try { if (typeof checkOutletDuplicate === 'function') checkOutletDuplicate(); } catch (e) {}
+  try {
+    if (typeof checkOutletDuplicate === 'function') {
+      checkOutletDuplicate();
+    }
+  } catch (e) {}
 }
 
 function normalizeVietnamPhone(raw) {
