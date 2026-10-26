@@ -17,6 +17,54 @@
   <link rel="shortcut icon" href="./app/assets/logo-qcag-2.0.ico?v=20261010_final" type="image/x-icon">
   <script>
     (function () {
+      // Tự động đồng bộ phiên bản ngầm và dọn cache cũ trong nền (Zero User Friction)
+      try {
+        var APP_BUILD_VER = '3.0.3';
+        var prevBuild = localStorage.getItem('ks_app_build');
+        if (prevBuild && prevBuild !== APP_BUILD_VER) {
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (k) {
+                if (k.indexOf('v' + APP_BUILD_VER) === -1) {
+                  try { caches.delete(k); } catch (_) {}
+                }
+              });
+            });
+          }
+        }
+        localStorage.setItem('ks_app_build', APP_BUILD_VER);
+      } catch (_) {}
+
+      // Hàm reset cache toàn cầu có thể gọi bất kỳ lúc nào từ console hoặc nút bấm
+      window.resetAppCache = function (redirect) {
+        try {
+          try { localStorage.clear(); } catch (_) {}
+          try { sessionStorage.clear(); } catch (_) {}
+          if ('indexedDB' in window) {
+            try { indexedDB.deleteDatabase('ks_offline_db'); } catch (_) {}
+          }
+          var p1 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function (regs) {
+            return Promise.all(regs.map(function (r) { return r.unregister(); }));
+          }) : Promise.resolve();
+          var p2 = ('caches' in window) ? caches.keys().then(function (keys) {
+            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+          }) : Promise.resolve();
+          Promise.all([p1, p2]).then(function () {
+            if (redirect !== false) {
+              window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
+            }
+          }).catch(function () {
+            if (redirect !== false) {
+              window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
+            }
+          });
+        } catch (_) {
+          if (redirect !== false) {
+            window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
+          }
+        }
+      };
+
       try {
         var saved = localStorage.getItem('ks_theme');
         var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -59,7 +107,7 @@
       };
     }
   </script>
-  <script src="/api/env"></script>
+  <script src="/api/env" onerror="window.__env = window.__env || {};"></script>
   <script>
     // Runtime config — BACKEND_URL trỏ đến KS backend
     // Local dev  : thường là http://localhost:3000 hoặc http://localhost:3101
@@ -1361,7 +1409,6 @@
               <img src="app/assets/qcag-logo.svg" alt="QCAG"
                 class="w-auto max-h-8 md:max-h-10 lg:max-h-12 object-contain">
               <span class="font-semibold">Quảng Cáo An Giang</span>
-              <span class="text-xs">Nhân viên nội bộ</span>
             </button>
           </div>
         </div>
@@ -3566,25 +3613,25 @@
   <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-  <script src="app/js/core/state.js?v=3.0.2"></script>
-  <script src="app/js/shared/utils.js?v=3.0.2"></script>
-  <script src="app/js/shared/ui.js?v=3.0.2"></script>
-  <script src="app/js/shared/image-utils.js?v=3.0.2"></script>
-  <script src="app/js/shared/location.js?v=3.0.2"></script>
+  <script src="app/js/core/state.js?v=3.0.3"></script>
+  <script src="app/js/shared/utils.js?v=3.0.3"></script>
+  <script src="app/js/shared/ui.js?v=3.0.3"></script>
+  <script src="app/js/shared/image-utils.js?v=3.0.3"></script>
+  <script src="app/js/shared/location.js?v=3.0.3"></script>
   <script src="app/js/shared/sdk-init.js?v=3.0.8"></script>
-  <script src="app/js/flows/login-flow.js?v=3.0.2"></script>
+  <script src="app/js/flows/login-flow.js?v=3.0.3"></script>
   <script src="app/js/flows/request-flow.js?v=3.0.3"></script>
-  <script src="app/js/flows/warranty-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/list-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/detail-flow.js?v=3.0.7"></script>
+  <script src="app/js/flows/warranty-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/list-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/detail-flow.js?v=3.0.8"></script>
   <script src="app/js/flows/desktop-qcag-flow.js?v=3.0.5"></script>
-  <script src="app/js/flows/desktop-task-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/desktop-orders-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/app-stats-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/mobile-nav-flow.js?v=3.0.2"></script>
-  <script src="app/js/flows/mobile-qcag-flow.js?v=3.0.2"></script>
+  <script src="app/js/flows/desktop-task-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/desktop-orders-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/app-stats-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/mobile-nav-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/mobile-qcag-flow.js?v=3.0.3"></script>
   <script src="app/js/flows/production-approval-flow.js?v=3.0.7"></script>
-  <script src="app/js/core/router.js?v=3.0.2"></script>
+  <script src="app/js/core/router.js?v=3.0.3"></script>
 
   <!-- Trang Toàn Màn Hình: Xác Nhận Sản Xuất (Sale Heineken Mobile & Desktop) -->
   <div id="productionApprovalModal"
@@ -3711,59 +3758,56 @@
     </div>
   </div>
 
-  <script src="app/js/app.js?v=3.0.1"></script>
-  <!-- v3.0.1 | 2026-10-22 -->
+  <script src="app/js/app.js?v=3.0.3"></script>
+  <!-- v3.0.3 | 2026-10-26 -->
   <script>
-    // ── Service Worker registration + auto-update ───────────────────────────────
+    // ── Service Worker registration + proactive silent auto-update ───────────────
     (function () {
       if (!('serviceWorker' in navigator)) return;
 
-      // Banner HTML injected when a new SW is waiting
-      function showUpdateBanner(reg) {
-        if (document.getElementById('sw-update-banner')) return;
-        var banner = document.createElement('div');
-        banner.id = 'sw-update-banner';
-        banner.style.cssText = [
-          'position:fixed;bottom:0;left:0;right:0;z-index:99999',
-          'background:#1d4ed8;color:#fff;display:flex;align-items:center',
-          'justify-content:space-between;padding:12px 16px',
-          'font-family:sans-serif;font-size:14px;gap:12px'
-        ].join(';');
-        banner.innerHTML = '<span>🎉 Có phiên bản mới <b>v3.0.1</b> — nhấn để cập nhật!</span>'
-          + '<button id="sw-update-btn" style="background:#fff;color:#1d4ed8;border:none;'
-          + 'border-radius:8px;padding:6px 14px;font-weight:600;cursor:pointer;flex-shrink:0">Cập nhật</button>';
-        document.body.appendChild(banner);
-        document.getElementById('sw-update-btn').addEventListener('click', function () {
-          if (reg.waiting) {
+      function autoActivateSW(reg) {
+        try {
+          if (reg && reg.waiting) {
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
-        });
+        } catch (_) {}
       }
 
       var swUrl = new URL('sw.js', window.location.href).pathname;
       navigator.serviceWorker.register(swUrl).then(function (reg) {
-        // Already a new SW waiting (e.g. hard refresh after deploy)
-        if (reg.waiting) { showUpdateBanner(reg); }
+        // Tự động kích hoạt ngay nếu có Service Worker mới đang chờ
+        if (reg.waiting) { autoActivateSW(reg); }
 
-        // New SW found during page lifetime
+        // Tự động kích hoạt khi tải xong bản mới
         reg.addEventListener('updatefound', function () {
           var newWorker = reg.installing;
           if (!newWorker) return;
           newWorker.addEventListener('statechange', function () {
             if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              showUpdateBanner(reg);
+              autoActivateSW(reg);
             }
           });
         });
 
-        // Reload automatically once the new SW has taken control
+        // Tự động làm mới giao diện êm dịu khi bản mới nắm quyền điều khiển
+        var refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', function () {
-          window.location.reload();
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
         });
 
-        // Check for updates every 30 minutes while the tab is open
-        setInterval(function () { reg.update(); }, 30 * 60 * 1000);
-      });
+        // Tự động kiểm tra phiên bản mới mỗi khi người dùng mở lại tab/ứng dụng
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'visible') {
+            try { reg.update(); } catch (_) {}
+          }
+        });
+
+        // Kiểm tra ngầm định kỳ
+        setInterval(function () { try { reg.update(); } catch (_) {} }, 15 * 60 * 1000);
+      }).catch(function (_) {});
     })();
   </script>
 

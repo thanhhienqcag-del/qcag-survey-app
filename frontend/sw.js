@@ -2,7 +2,7 @@
 // Must be served at / for full PWA standalone push support on iOS 16.4+
 'use strict';
 
-const CACHE_NAME = 'qcag-v3.0.1';
+const CACHE_NAME = 'qcag-v3.0.3';
 
 // ── Install: immediately activate ──────────────────────────────────────────────
 self.addEventListener('install', function (event) {
@@ -90,7 +90,22 @@ self.addEventListener('notificationclick', function (event) {
   );
 });
 
-// ── Fetch: network-first, fallback to cache for HTML ─────────────────────────
+// ── Fetch: network-first with timeout, fallback to cache for HTML ───────────
+function fetchWithTimeout(request, timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    var timer = setTimeout(function () {
+      reject(new Error('SW fetch timeout'));
+    }, timeoutMs);
+    fetch(request).then(function (response) {
+      clearTimeout(timer);
+      resolve(response);
+    }).catch(function (err) {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
 self.addEventListener('fetch', function (event) {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
@@ -99,7 +114,7 @@ self.addEventListener('fetch', function (event) {
   if (url.pathname.startsWith('/api/') || url.origin !== location.origin) return;
 
   event.respondWith(
-    fetch(event.request).catch(function () {
+    fetchWithTimeout(event.request, 3500).catch(function () {
       return caches.match(event.request);
     })
   );
