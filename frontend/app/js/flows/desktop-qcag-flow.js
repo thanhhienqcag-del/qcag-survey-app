@@ -279,7 +279,7 @@ async function qcagDesktopTogglePush() {
     return;
   }
   if (Notification.permission === 'granted') {
-    showToast('✓ Thông báo đã được bật. Bạn sẽ nhận push khi có yêu cầu mới từ Heineken.');
+    showToast('Thông báo đã được kích hoạt. Bạn sẽ nhận push khi có yêu cầu mới từ Heineken.', 'done');
     // Re-subscribe silently (refreshes endpoint + keeps subscription fresh)
     try {
       if (window.pushHelpers && window.pushHelpers.initPush) {
@@ -295,7 +295,7 @@ async function qcagDesktopTogglePush() {
   try {
     const result = await Notification.requestPermission();
     if (result === 'granted') {
-      showToast('✓ Đã bật thông báo thành công!');
+      showToast('Đã kích hoạt thông báo thành công', 'done');
       if (window.pushHelpers && window.pushHelpers.initPush) {
         const phone = currentSession && currentSession.phone || null;
         const role = currentSession && currentSession.role || null;
@@ -835,7 +835,7 @@ function qcagDesktopOpenPickLocation() {
     }
 
     qcagDesktopRefreshMQInPlace(currentDetailRequest);
-    showToast('✓ Đã cập nhật định vị GPS thành công');
+    showToast('Đã cập nhật tọa độ định vị GPS thành công', 'done');
   };
 
   const lat = parseFloat(currentDetailRequest.outletLat);
@@ -2664,7 +2664,7 @@ function qcagDesktopAddTestPendingWarranty() {
     try { qcagDesktopCacheRequest(req); } catch (e) { }
     try { renderQCAGDesktopList(); } catch (e) { }
     try { qcagDesktopUpdateFilterCounts(); } catch (e) { }
-    try { if (typeof showToast === 'function') showToast('✓ Đã thêm yêu cầu bảo hành thử (pending).'); } catch (e) { }
+    try { if (typeof showToast === 'function') showToast('Đã thêm yêu cầu bảo hành thử nghiệm (chờ xử lý)', 'done'); } catch (e) { }
     return req;
   } catch (e) { return null; }
 }
@@ -3160,7 +3160,7 @@ async function qcagDesktopDeleteRequest(backendId) {
     const isTaskActive = !!((typeof _qcagCurrentTaskOrder !== 'undefined' && _qcagCurrentTaskOrder) || (typeof window !== 'undefined' && window._qcagCurrentTaskOrder));
     if (isTaskActive) {
       if (typeof showToast === 'function') {
-        showToast('⚠️ Không thể xóa yêu cầu khi đang trong gói nhiệm vụ sản xuất');
+        showToast('Không thể xóa yêu cầu khi đang trong gói nhiệm vụ sản xuất', 'warning');
       }
       return;
     }
@@ -6021,13 +6021,13 @@ async function qcagDesktopMarkProcessed() {
     }
 
     const actionLabel = isPendingEdit ? 'Đã chỉnh sửa MQ' : 'Đã hoàn thành MQ';
-    showToast(`✓ ${actionLabel}`, 'done', 2500);
+    showToast(actionLabel, 'done', 2500);
 
     // Persist: gửi slim PATCH payload lên backend
     if (window.dataSdk) {
       const result = await window.dataSdk.update(patchPayload);
       if (!result || !result.isOk) {
-        showToast('Không thể cập nhật request lên cloud', 'error');
+        showToast('Không thể cập nhật yêu cầu lên hệ thống', 'error');
         // Rollback optimistic update on failure
         const idxRb = allRequests.findIndex(r => r.__backendId === _rollbackRequest.__backendId);
         if (idxRb !== -1) allRequests[idxRb] = _rollbackRequest;
@@ -6071,12 +6071,12 @@ async function qcagDesktopMarkProcessed() {
         if (res && res.ok) {
           if (res.sent > 0) {
             const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
-            showToast(`✓ ${actionLabel} • Đã báo Sale${devText}`, 'done', 3500);
+            showToast(`${actionLabel} • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
           } else {
-            showToast(`✓ ${actionLabel} • Sale chưa bật nhận thông báo`, 'done', 4000);
+            showToast(`${actionLabel} • Sale chưa kích hoạt nhận thông báo`, 'done', 4000);
           }
         } else {
-          showToast(`✓ ${actionLabel} • Chưa gửi được thông báo tới Sale`, 'done', 3500);
+          showToast(`${actionLabel} • Chưa thể gửi thông báo tới Sale`, 'done', 3500);
         }
       })
       .catch(function (e) {

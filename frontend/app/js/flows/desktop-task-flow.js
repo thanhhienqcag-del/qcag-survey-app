@@ -401,7 +401,7 @@ async function fetchQcagPendingOrders() {
                 if (typeof qcagCloseTaskGridView === 'function') qcagCloseTaskGridView();
                 if (typeof qcagDesktopExitTaskMode === 'function') qcagDesktopExitTaskMode();
                 if (typeof showToast === 'function') {
-                    showToast('✓ Gói đơn hàng này đã được App 1 tạo thành Đơn hàng sản xuất và hoàn tất!');
+                    showToast('Gói đơn hàng đã được tạo thành Đơn hàng sản xuất và hoàn tất', 'done');
                 }
             }
         } else {
@@ -1275,7 +1275,7 @@ function qcagDesktopStartTaskMode(orderId) {
     }
 
     if (typeof showToast === 'function') {
-        showToast(`✓ Đang làm việc trên gói đơn: ${taskReqs.length} điểm`);
+        showToast(`Đang làm việc trên gói đơn: ${taskReqs.length} điểm`, 'info');
     }
 }
 
@@ -1920,9 +1920,9 @@ function qcagToggleTaskPointVerified(reqId) {
     if (typeof showToast === 'function') {
         const name = req ? (req.outletName || reqId) : reqId;
         if (nextState) {
-            showToast(`✓ Đã xác nhận kiểm tra: ${name}`);
+            showToast(`Đã xác nhận kiểm tra: ${name}`, 'done');
         } else {
-            showToast(`Đã hủy xác nhận: ${name}`);
+            showToast(`Đã hủy xác nhận: ${name}`, 'default');
         }
     }
 
@@ -2981,7 +2981,7 @@ function qcagTaskGridCheckAll(forceState) {
     renderTaskGridCards();
 
     if (typeof showToast === 'function') {
-        showToast(shouldCheckAll ? `✓ Đã duyệt toàn bộ ${reqs.length} thẻ in!` : `Đã bỏ chọn tất cả thẻ in.`);
+        showToast(shouldCheckAll ? `Đã duyệt toàn bộ ${reqs.length} thẻ in` : `Đã bỏ chọn tất cả thẻ in`, 'done');
     }
 }
 
@@ -2992,19 +2992,19 @@ function qcagTaskGridFinishTask() {
     // Chốt chặn an toàn (Zero-Bypass Guard)
     if (!v.canFinish) {
         if (v.rejectedCount > 0) {
-            if (typeof showToast === 'function') showToast(`❌ Không thể hoàn tất: Có ${v.rejectedCount} điểm bị Sale từ chối!`);
+            if (typeof showToast === 'function') showToast(`Không thể hoàn tất: Có ${v.rejectedCount} điểm bị Sale từ chối`, 'error');
             return;
         }
         if (v.pendingEditCount > 0) {
-            if (typeof showToast === 'function') showToast(`⚠️ Không thể hoàn tất: Có ${v.pendingEditCount} điểm đang chờ sửa Maquette!`);
+            if (typeof showToast === 'function') showToast(`Không thể hoàn tất: Có ${v.pendingEditCount} điểm đang chờ sửa Maquette`, 'warning');
             return;
         }
         if (v.missingImgCount > 0) {
-            if (typeof showToast === 'function') showToast(`⚠️ Không thể hoàn tất: Còn ${v.missingImgCount} điểm chưa upload ảnh Maquette!`);
+            if (typeof showToast === 'function') showToast(`Không thể hoàn tất: Còn ${v.missingImgCount} điểm chưa upload ảnh Maquette`, 'warning');
             return;
         }
         if (v.checkedCount < v.total) {
-            if (typeof showToast === 'function') showToast(`Cần tích chọn xác nhận đủ tất cả các thẻ file in (${v.checkedCount}/${v.total})!`);
+            if (typeof showToast === 'function') showToast(`Cần tích chọn xác nhận đủ tất cả các thẻ file in (${v.checkedCount}/${v.total})`, 'warning');
             return;
         }
     }
@@ -3041,7 +3041,7 @@ function qcagTaskGridFinishTask() {
     renderQcagTaskList();
 
     if (typeof showToast === 'function') {
-        showToast(`✓ Đã hoàn tất nhiệm vụ ${orderCode}! Đã đổi trạng thái ĐÃ XONG và bắn tín hiệu mở khóa xác nhận đơn hàng sang App 1.`);
+        showToast(`Đã hoàn tất nhiệm vụ ${orderCode} • Đã mở khóa xác nhận đơn hàng sang App 1`, 'done', 4000);
     }
 }
 

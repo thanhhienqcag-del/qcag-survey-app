@@ -1390,9 +1390,21 @@ async function submitNewRequest() {
       // Already compressed on pick
       _compressedStatusDataUrls.push(item);
     } else if (typeof item === 'string' && item.startsWith('blob:')) {
-      // Blob URL still present — compression + fallback both failed or are pending.
-      // Skip silently — this entry will be dropped.
-      console.warn('[submit] skipping unresolved blob URL:', item.slice(0, 40));
+      try {
+        const resp = await fetch(item);
+        const b = await resp.blob();
+        const dataUrl = await _compressImageFile(b, 1600, 0.85).catch(async () => {
+          return await new Promise((resolve) => {
+            const r = new FileReader();
+            r.onload = (ev) => resolve(ev.target.result);
+            r.onerror = () => resolve('');
+            r.readAsDataURL(b);
+          });
+        });
+        if (dataUrl) _compressedStatusDataUrls.push(dataUrl);
+      } catch (blobErr) {
+        console.warn('[submit] failed to resolve blob URL:', blobErr);
+      }
     } else if (item instanceof File || item instanceof Blob) {
       // Fallback: compress now (shouldn't happen normally)
       try {

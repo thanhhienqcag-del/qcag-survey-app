@@ -68,17 +68,32 @@ function _copyBrokenImageUrl(encodedUrl, event) {
 
 function _detectImageMimeByMagic(file) {
   return new Promise(function(resolve) {
+    if (!file) return resolve(null);
+    var ext = (file.name || '').toLowerCase();
+    var mime = (file.type || '').toLowerCase();
+    if (ext.endsWith('.heic') || ext.endsWith('.heif') || mime === 'image/heic' || mime === 'image/heif') {
+      return resolve('image/heic');
+    }
     var reader = new FileReader();
     reader.onload = function(e) {
-      var arr = new Uint8Array(e.target.result);
-      if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) { resolve('image/jpeg'); }
-      else if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) { resolve('image/png'); }
-      else if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 && arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) { resolve('image/webp'); }
-      else if (arr.length >= 12 && arr[4] === 0x66 && arr[5] === 0x74 && arr[6] === 0x79 && arr[7] === 0x70 && ((arr[8] === 0x68 && arr[9] === 0x65 && arr[10] === 0x69 && arr[11] === 0x63) || (arr[8] === 0x68 && arr[9] === 0x65 && arr[10] === 0x69 && arr[11] === 0x78))) { resolve('image/heic'); }
-      else { resolve(null); }
+      try {
+        var arr = new Uint8Array(e.target.result);
+        if (arr[0] === 0xFF && arr[1] === 0xD8 && arr[2] === 0xFF) { return resolve('image/jpeg'); }
+        if (arr[0] === 0x89 && arr[1] === 0x50 && arr[2] === 0x4E && arr[3] === 0x47) { return resolve('image/png'); }
+        if (arr[0] === 0x52 && arr[1] === 0x49 && arr[2] === 0x46 && arr[3] === 0x46 && arr[8] === 0x57 && arr[9] === 0x45 && arr[10] === 0x42 && arr[11] === 0x50) { return resolve('image/webp'); }
+        if (arr.length >= 12 && arr[4] === 0x66 && arr[5] === 0x74 && arr[6] === 0x79 && arr[7] === 0x70) {
+          var brand = String.fromCharCode(arr[8], arr[9], arr[10], arr[11]).toLowerCase();
+          if (['heic', 'heix', 'hevc', 'hevm', 'heim', 'heis', 'mif1', 'msf1'].indexOf(brand) !== -1) {
+            return resolve('image/heic');
+          }
+        }
+        resolve(file.type || null);
+      } catch (err) {
+        resolve(file.type || null);
+      }
     };
-    reader.onerror = function() { resolve(null); };
-    reader.readAsArrayBuffer(file.slice(0, 12));
+    reader.onerror = function() { resolve(file.type || null); };
+    reader.readAsArrayBuffer(file.slice(0, 16));
   });
 }
 
@@ -99,7 +114,7 @@ async function _convertHeicToJpeg(heicFile) {
     const result = await heic2any({
       blob: heicFile,
       toType: 'image/jpeg',
-      quality: 0.8,
+      quality: 0.82,
     });
     // heic2any can return an array if the HEIC contains multiple images
     return Array.isArray(result) ? result[0] : result;
@@ -110,12 +125,9 @@ async function _convertHeicToJpeg(heicFile) {
 }
 
 // ── Compress a File/Blob to a smaller data URL (WebP preferred, JPEG fallback) ──
-// Default: max 1600px on longest side, quality 0.82 (~100-300KB per image).
-// WebP is 30-50% smaller than JPEG at similar quality.
 function _compressImageFile(file, maxDim, quality, forceJpeg) {
-  // High-definition compression: default 1920px max dimension, quality 0.88 (crisp photos & clear MQ text/drawings)
   maxDim  = maxDim || 1920;
-  quality = quality || 0.88;
+  quality = quality || 0.85;
   return new Promise(function (resolve, reject) {
     function createObjectUrl(blob) {
       try {
@@ -129,10 +141,12 @@ function _compressImageFile(file, maxDim, quality, forceJpeg) {
       var url = createObjectUrl(blob);
       if (!url) return reject(new Error('Unable to create object URL')); 
       var img = new Image();
-      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Image decode error')); };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('Image decode error'));
+      };
       img.onload = function () {
         try {
-          URL.revokeObjectURL(url);
           var w = img.naturalWidth  || img.width;
           var h = img.naturalHeight || img.height;
           if (w > maxDim || h > maxDim) {
@@ -144,6 +158,10 @@ function _compressImageFile(file, maxDim, quality, forceJpeg) {
           canvas.width  = w;
           canvas.height = h;
           var ctx = canvas.getContext('2d');
+          if (!ctx) {
+            URL.revokeObjectURL(url);
+            return reject(new Error('Canvas 2D context unavailable'));
+          }
           ctx.drawImage(img, 0, 0, w, h);
           var dataUrl = '';
           if (forceJpeg) {
@@ -156,36 +174,38 @@ function _compressImageFile(file, maxDim, quality, forceJpeg) {
               dataUrl = canvas.toDataURL('image/jpeg', quality);
             }
           }
+          URL.revokeObjectURL(url);
           resolve(dataUrl);
         } catch (e) {
+          URL.revokeObjectURL(url);
           reject(e);
         }
       };
       img.src = url;
     }
 
-    Promise.resolve()
-      .then(function () { return _detectImageMimeByMagic(file); })
-      .then(function (detectedMime) {
-        if (detectedMime === 'image/heic') {
-          return _convertHeicToJpeg(file);
+    _detectImageMimeByMagic(file).then(function (detectedMime) {
+      if (detectedMime === 'image/heic') {
+        var testUrl = createObjectUrl(file);
+        if (testUrl) {
+          var testImg = new Image();
+          testImg.onload = function () {
+            URL.revokeObjectURL(testUrl);
+            processImageBlob(file);
+          };
+          testImg.onerror = function () {
+            URL.revokeObjectURL(testUrl);
+            _convertHeicToJpeg(file).then(processImageBlob).catch(reject);
+          };
+          testImg.src = testUrl;
+          return;
         }
-        if (detectedMime && detectedMime !== file.type) {
-          try {
-            return new File([file], file.name || 'image', { type: detectedMime });
-          } catch (e) {
-            return new Blob([file], { type: detectedMime });
-          }
-        }
-        return file;
-      })
-      .catch(function () {
-        return file;
-      })
-      .then(processImageBlob)
-      .catch(function (err) {
-        reject(err);
-      });
+        return _convertHeicToJpeg(file).then(processImageBlob).catch(reject);
+      }
+      processImageBlob(file);
+    }).catch(function () {
+      processImageBlob(file);
+    });
   });
 }
 
@@ -206,87 +226,77 @@ async function _compressImageFiles(files, maxDim, quality) {
 
 function _processImageFile(file) {
   return _detectImageMimeByMagic(file).then(function (realMime) {
-    // HEIC does not support standard EXIF extraction / piexif injection,
-    // so we force it to bypass the EXIF block.
-    var canCheckExif = (realMime !== 'image/heic');
-    return (canCheckExif ? checkHasExif(file) : Promise.resolve(false)).then(function (hasExif) {
-      if (hasExif) {
-        console.log('[EXIF] Photo contains EXIF data. Compressing as JPEG and keeping EXIF.');
-        return readRawDataUrl(file).then(function (rawDataUrl) {
-          // Nén ảnh nhưng giữ EXIF bằng piexifjs
-          // Phải bắt buộc xuất ra định dạng JPEG để piexifjs có thể chèn dữ liệu EXIF
-          return _compressImageFile(file, 1600, 0.82, true).then(function (compressedUrl) {
-            var uploadUrl = compressedUrl;
-            if (typeof piexif !== 'undefined') {
-              try {
-                // Đọc EXIF từ ảnh gốc (chưa nén)
-                var exifObj = piexif.load(rawDataUrl);
-                // Bỏ đi các dữ liệu hình thu nhỏ cũ nếu có để giảm kích thước
+    var isHeic = (realMime === 'image/heic');
+
+    if (isHeic) {
+      return _compressImageFile(file, 1600, 0.85).then(function (dataUrl) {
+        return { previewValue: dataUrl, uploadValue: dataUrl };
+      }).catch(function (heicErr) {
+        console.warn('[HEIC] Conversion fallback:', heicErr);
+        return new Promise(function (resolve) {
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            var raw = e.target.result || '';
+            var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
+            var label = file.name || 'ảnh';
+            resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
+          };
+          reader.onerror = function () {
+            try {
+              var u = URL.createObjectURL(file);
+              resolve({ previewValue: u, uploadValue: file });
+            } catch (_) {
+              resolve(null);
+            }
+          };
+          reader.readAsDataURL(file);
+        });
+      });
+    }
+
+    // Normal images (JPEG, PNG, WebP)
+    // Compress once to 1600px with high quality (0.85).
+    // The resulting compressedUrl (~150-300KB) is ALREADY optimized for both preview and upload!
+    return _compressImageFile(file, 1600, 0.85, true).then(function (compressedUrl) {
+      var uploadUrl = compressedUrl;
+
+      // Optional: attempt piexif injection ONLY if piexif is loaded and format is JPEG
+      if (typeof piexif !== 'undefined' && (realMime === 'image/jpeg' || (file.type && file.type === 'image/jpeg'))) {
+        try {
+          readRawDataUrl(file).then(function (rawDataUrl) {
+            try {
+              var exifObj = piexif.load(rawDataUrl);
+              if (exifObj) {
                 delete exifObj["thumbnail"];
-                
-                // Reset Orientation to 1 (Normal) because the browser's Canvas API
-                // has already physically rotated the pixels during drawImage compression.
-                // Keeping the original orientation value would cause double-rotation in rendering.
                 if (exifObj["0th"]) {
                   exifObj["0th"][piexif.ImageIFD.Orientation || 274] = 1;
                 }
-
                 var exifStr = piexif.dump(exifObj);
-                // Chèn EXIF vào ảnh đã nén
-                uploadUrl = piexif.insert(exifStr, compressedUrl);
-                console.log('[EXIF] EXIF data successfully injected into compressed image.');
-              } catch (e) {
-                console.warn('[EXIF] Failed to inject EXIF data:', e);
+                var injected = piexif.insert(exifStr, compressedUrl);
+                if (injected && injected.startsWith('data:image/jpeg')) {
+                  uploadUrl = injected;
+                }
               }
-            } else {
-              console.warn('[EXIF] piexif library not found, EXIF cannot be retained.');
+            } catch (e) {
+              console.warn('[EXIF] piexif skipped:', (e && e.message) || e);
             }
-            
-            // Generate a smaller preview to keep UI fast
-            return _compressImageFile(file, 800, 0.75).then(function (previewUrl) {
-              return { previewValue: previewUrl, uploadValue: uploadUrl };
-            }).catch(function () {
-              return { previewValue: uploadUrl, uploadValue: uploadUrl };
-            });
-          }).catch(function () {
-            // Fallback to raw if compression fails
-            return { previewValue: rawDataUrl, uploadValue: rawDataUrl };
-          });
-        });
+          }).catch(function () {});
+        } catch (_) {}
       }
 
-      if (_isBrowserRenderable(realMime) || realMime === 'image/heic') {
-        return _compressImageFile(file, 1600, 0.82).then(function (dataUrl) {
-          return { previewValue: dataUrl, uploadValue: dataUrl };
-        }).catch(function () {
-          return new Promise(function (resolve) {
-            var reader = new FileReader();
-            reader.onload = function (e) {
-              var raw = e.target.result || '';
-              if (realMime === 'image/heic') {
-                var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
-                var label = file.name || 'ảnh';
-                resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
-              } else {
-                resolve({ previewValue: raw, uploadValue: raw });
-              }
-            };
-            reader.onerror = function () { resolve(null); };
-            reader.readAsDataURL(file);
-          });
-        });
-      }
-
-      return new Promise(function (resolve) {
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          var raw = e.target.result || '';
-          var uploadValue = raw.replace(/^data:[^;]+/, 'data:image/heic');
-          var label = file.name || 'ảnh';
-          resolve({ previewValue: _HEIC_SENTINEL_PREFIX + label, uploadValue: uploadValue });
-        };
-        reader.onerror = function () { resolve(null); };
-        reader.readAsDataURL(file);
+      // Return compressedUrl directly as previewValue — NEVER do a second canvas compression!
+      return { previewValue: compressedUrl, uploadValue: uploadUrl };
+    }).catch(function (compressErr) {
+      console.warn('[compress] _compressImageFile failed, falling back to raw:', compressErr);
+      return readRawDataUrl(file).then(function (rawDataUrl) {
+        return { previewValue: rawDataUrl, uploadValue: rawDataUrl };
+      }).catch(function () {
+        try {
+          var u = URL.createObjectURL(file);
+          return { previewValue: u, uploadValue: file };
+        } catch (_) {
+          return null;
+        }
       });
     });
   });
@@ -299,106 +309,149 @@ function handleOldContentImages(input) {
   if (input) input.value = '';
 }
 
-function handleStatusImages(input) {
-  const files = Array.from(input.files);
-  if (files.length === 0) return;
+async function handleStatusImages(input) {
+  if (!input || !input.files || input.files.length === 0) return;
+  const rawFiles = Array.from(input.files);
 
-  // Read file data BEFORE clearing input — some Android browsers invalidate
-  // File references when input.value is reset.
-  var filesToProcess = [];
-  for (var i = 0; i < files.length; i++) {
-    filesToProcess.push(files[i]);
+  // Background location extraction from GPS / EXIF (does not block image processing)
+  try {
+    processBatchLocations(rawFiles);
+  } catch (locErr) {
+    console.warn('[GPS] processBatchLocations error:', locErr);
   }
-  input.value = '';
 
-  processBatchLocations(filesToProcess);
+  // Sequentially process each selected file with guaranteed instant preview
+  for (let i = 0; i < rawFiles.length; i++) {
+    const file = rawFiles[i];
+    const slotIndex = statusImages.length;
 
-  filesToProcess.forEach(function (file) {
-
-    var idx = statusImages.length;
-    statusImages.push(_HEIC_SENTINEL_PREFIX + (file.name || 'ảnh'));
+    // 1. Immediately create a lightweight object URL so the user INSTANTLY sees preview
+    let instantPreview = '';
+    try {
+      instantPreview = URL.createObjectURL(file);
+    } catch (_) {
+      instantPreview = _HEIC_SENTINEL_PREFIX + (file.name || 'ảnh');
+    }
+    statusImages.push(instantPreview);
     _statusImageFiles.push('');
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
 
-    _processImageFile(file).then(function (result) {
-      if (!result) {
-        console.warn('[handleStatusImages] Cannot read file at index', idx);
-        statusImages.splice(idx, 1);
-        _statusImageFiles.splice(idx, 1);
-        renderImagePreviews('statusImagesPreview', statusImages, 'status');
-        return;
+    // 2. Process & compress in background
+    try {
+      const result = await _processImageFile(file);
+      if (result && (result.previewValue || result.uploadValue)) {
+        if (instantPreview && instantPreview.startsWith('blob:') && result.previewValue !== instantPreview) {
+          try { URL.revokeObjectURL(instantPreview); } catch (_) {}
+        }
+        statusImages[slotIndex] = result.previewValue || result.uploadValue;
+        _statusImageFiles[slotIndex] = result.uploadValue || result.previewValue;
+      } else {
+        const raw = await readRawDataUrl(file).catch(() => '');
+        if (raw) {
+          statusImages[slotIndex] = raw;
+          _statusImageFiles[slotIndex] = raw;
+        } else {
+          _statusImageFiles[slotIndex] = file;
+        }
       }
-      statusImages[idx]      = result.previewValue;
-      _statusImageFiles[idx] = result.uploadValue;
-      renderImagePreviews('statusImagesPreview', statusImages, 'status');
-    }).catch(function (err) {
-      console.warn('[handleStatusImages] _processImageFile error:', err);
-      statusImages.splice(idx, 1);
-      _statusImageFiles.splice(idx, 1);
-      renderImagePreviews('statusImagesPreview', statusImages, 'status');
-    });
-  });
+    } catch (procErr) {
+      console.warn('[handleStatusImages] error processing file, fallback to raw:', procErr);
+      try {
+        const raw = await readRawDataUrl(file);
+        statusImages[slotIndex] = raw;
+        _statusImageFiles[slotIndex] = raw;
+      } catch (_) {
+        _statusImageFiles[slotIndex] = file;
+      }
+    }
+
+    renderImagePreviews('statusImagesPreview', statusImages, 'status');
+  }
+
+  // 3. CRITICAL: Clear input.value ONLY AFTER all files are completely processed into memory.
+  // Never clear before reading, which would revoke Android SAF content URI permissions.
+  try { input.value = ''; } catch (_) {}
 }
 
-function handleWarrantyImages(input) {
-  const files = Array.from(input.files);
-  input.value = '';
-  files.forEach(function (file) {
-    var idx = warrantyImages.length;
-    warrantyImages.push(_HEIC_SENTINEL_PREFIX + (file.name || 'ảnh'));
+async function handleWarrantyImages(input) {
+  if (!input || !input.files || input.files.length === 0) return;
+  const rawFiles = Array.from(input.files);
+
+  for (let i = 0; i < rawFiles.length; i++) {
+    const file = rawFiles[i];
+    const slotIndex = warrantyImages.length;
+
+    let instantPreview = '';
+    try {
+      instantPreview = URL.createObjectURL(file);
+    } catch (_) {
+      instantPreview = _HEIC_SENTINEL_PREFIX + (file.name || 'ảnh');
+    }
+    warrantyImages.push(instantPreview);
     renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
 
-    _processImageFile(file).then(function (result) {
-      if (!result) {
-        warrantyImages.splice(idx, 1);
-        renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
-        return;
+    try {
+      const result = await _processImageFile(file);
+      if (result && (result.previewValue || result.uploadValue)) {
+        if (instantPreview && instantPreview.startsWith('blob:') && result.previewValue !== instantPreview) {
+          try { URL.revokeObjectURL(instantPreview); } catch (_) {}
+        }
+        warrantyImages[slotIndex] = result.previewValue || result.uploadValue;
+      } else {
+        const raw = await readRawDataUrl(file).catch(() => '');
+        if (raw) {
+          warrantyImages[slotIndex] = raw;
+        }
       }
-      warrantyImages[idx] = result.previewValue;
-      renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
-    }).catch(function (err) {
-      console.warn('[handleWarrantyImages] _processImageFile error:', err);
-      warrantyImages.splice(idx, 1);
-      renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
-    });
-  });
+    } catch (procErr) {
+      console.warn('[handleWarrantyImages] error processing file:', procErr);
+      try {
+        const raw = await readRawDataUrl(file);
+        warrantyImages[slotIndex] = raw;
+      } catch (_) {}
+    }
+
+    renderImagePreviews('warrantyImagesPreview', warrantyImages, 'warranty');
+  }
+
+  try { input.value = ''; } catch (_) {}
 }
 
 function renderImagePreviews(containerId, images, type) {
   const container = document.getElementById(containerId);
+  if (!container) return;
   container.innerHTML = images.map(function (img, idx) {
     var isHeic = typeof img === 'string' && img.indexOf(_HEIC_SENTINEL_PREFIX) === 0;
     var label = isHeic ? img.slice(_HEIC_SENTINEL_PREFIX.length) : '';
-    var isProcessing = isHeic && label.indexOf('ảnh') !== -1;
+    var isProcessing = isHeic && (label.indexOf('ảnh') !== -1 || label.indexOf('Đang') !== -1);
     var mediaHtml;
 
     if (isHeic) {
       mediaHtml = '<div style="' +
-        'width:100%;height:80px;background:#1e293b;border-radius:8px;' +
+        'width:80px;height:80px;background:#1e293b;border-radius:8px;' +
         'display:flex;flex-direction:column;align-items:center;justify-content:center;' +
-        'gap:4px;padding:8px;box-sizing:border-box;border:1px solid #334155;">' +
-        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">' +
+        'gap:4px;padding:6px;box-sizing:border-box;border:1px solid #334155;">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5">' +
         '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
         '<circle cx="8.5" cy="8.5" r="1.5"/>' +
         '<polyline points="21 15 16 10 5 21"/>' +
         '</svg>' +
-        '<span style="font-size:10px;color:#94a3b8;text-align:center;word-break:break-all;max-width:90%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' +
+        '<span style="font-size:9px;color:#94a3b8;text-align:center;word-break:break-all;max-width:90%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">' +
         (isProcessing ? 'Đang xử lý...' : _escapeHtmlAttr(label)) +
         '</span>' +
-        '<span style="font-size:9px;color:#64748b;">Sẽ được chuyển đổi khi gửi</span>' +
         '</div>';
     } else {
-      mediaHtml = '<img src="' + img + '" class="image-preview rounded-lg object-cover" onerror="_imgBrokenFallback(this)">';
+      mediaHtml = '<img src="' + img + '" class="image-preview rounded-lg object-cover" style="width:80px;height:80px;display:block;" onerror="_imgBrokenFallback(this)">';
     }
 
-    return '<div class="relative">' +
+    return '<div class="relative inline-block" style="width:80px;height:80px;">' +
       mediaHtml +
-      '<button onclick="removeImage(\'' + type + '\', ' + idx + ')" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center">' +
-        '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
+      '<button type="button" onclick="removeImage(\'' + type + '\', ' + idx + ')" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow z-10">' +
+        '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">' +
           '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>' +
         '</svg>' +
       '</button>' +
-      '</div>';
+    '</div>';
   }).join('');
 }
 

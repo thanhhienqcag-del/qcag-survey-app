@@ -47,8 +47,6 @@ function loadAllRequestsFromStorage() {
 // ── Floating Drop-down Toast Notification System ─────────────────────
 // Shows a sleek, non-intrusive floating toast at the top center of the screen
 // Auto-dismisses after 3 seconds; clicking navigates to the request.
-var _ksBannerQueue = [];
-var _ksBannerVisible = false;
 var _ksRecentNotifs = {};
 
 function _ksShowDesktopBanner(title, body, backendId, type) {
@@ -63,66 +61,6 @@ function _ksShowDesktopBanner(title, body, backendId, type) {
     if (now - _ksRecentNotifs[k] > 10000) delete _ksRecentNotifs[k];
   }
 
-  _ksBannerQueue.push({ title: title, body: body, backendId: backendId, type: type || 'new' });
-  if (!_ksBannerVisible) _ksProcessBannerQueue();
-}
-
-function _ksProcessBannerQueue() {
-  if (_ksBannerQueue.length === 0) { _ksBannerVisible = false; return; }
-  _ksBannerVisible = true;
-  var item = _ksBannerQueue.shift();
-
-  // Remove any existing banner
-  var old = document.getElementById('ksDesktopBanner');
-  if (old) old.remove();
-
-  var typeStyles = {
-    'new': {
-      border: 'rgba(56, 189, 248, 0.45)',
-      badgeBg: 'rgba(56, 189, 248, 0.15)',
-      glow: 'rgba(56, 189, 248, 0.2)',
-      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>'
-    },
-    'warranty': {
-      border: 'rgba(251, 146, 60, 0.45)',
-      badgeBg: 'rgba(251, 146, 60, 0.15)',
-      glow: 'rgba(251, 146, 60, 0.2)',
-      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>'
-    },
-    'editing': {
-      border: 'rgba(251, 191, 36, 0.55)',
-      badgeBg: 'rgba(251, 191, 36, 0.15)',
-      glow: 'rgba(251, 191, 36, 0.25)',
-      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>'
-    },
-    'done': {
-      border: 'rgba(52, 211, 153, 0.45)',
-      badgeBg: 'rgba(52, 211, 153, 0.15)',
-      glow: 'rgba(52, 211, 153, 0.2)',
-      svg: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>'
-    },
-  };
-  var style = typeStyles[item.type] || typeStyles['new'];
-
-  var banner = document.createElement('div');
-  banner.id = 'ksDesktopBanner';
-  banner.style.cssText = 'position: fixed; top: 16px; left: 50%; transform: translate(-50%, -24px) scale(0.95); opacity: 0; z-index: 99999; display: flex; align-items: center; gap: 12px; max-width: min(92vw, 440px); width: max-content; padding: 9px 14px; border-radius: 9999px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1.5px solid ' + style.border + '; box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.5), 0 0 16px ' + style.glow + '; cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); pointer-events: auto; user-select: none; font-family: inherit;';
-  
-  banner.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:9999px;background:' + style.badgeBg + ';flex-shrink:0;">' + style.svg + '</div>' +
-    '<div style="min-width:0;flex:1;line-height:1.25;">' +
-      '<div style="font-size:13px;font-weight:700;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (item.title || '').replace(/</g, '&lt;') + '</div>' +
-      '<div style="font-size:11.5px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">' + (item.body || '').replace(/</g, '&lt;') + '</div>' +
-    '</div>' +
-    '<button id="ksDesktopBannerClose" style="display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:9999px;border:none;background:rgba(255,255,255,0.08);color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:4px;transition:background 0.2s;" title="Đóng">✕</button>';
-
-  document.body.appendChild(banner);
-  // Animate in
-  requestAnimationFrame(function () {
-    banner.style.transform = 'translate(-50%, 0) scale(1)';
-    banner.style.opacity = '1';
-  });
-
   // Play notification sound (short soft beep via Web Audio API)
   try {
     var audioCtx = window.__ksAudioCtx || (window.__ksAudioCtx = new (window.AudioContext || window.webkitAudioContext)());
@@ -136,37 +74,35 @@ function _ksProcessBannerQueue() {
     osc.stop(audioCtx.currentTime + 0.12);
   } catch (_) {}
 
-  // Click → navigate to request
-  banner.addEventListener('click', function (e) {
-    if (e.target && (e.target.id === 'ksDesktopBannerClose' || e.target.closest('#ksDesktopBannerClose'))) {
-      _ksDismissBanner(banner);
-      return;
-    }
-    if (item.backendId) {
-      try {
-        if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof showQCAGDesktopDetail === 'function') {
-          showQCAGDesktopDetail(item.backendId);
-        } else if (typeof showRequestDetail === 'function') {
-          showRequestDetail(item.backendId);
+  // Route directly to unified pill banner singleton toast
+  if (typeof showToast === 'function') {
+    showToast(title, body, type || 'new', 4500);
+
+    // Attach click-to-open behavior if backendId is provided
+    if (backendId) {
+      setTimeout(function () {
+        var toastEl = document.getElementById('ksUnifiedToast');
+        if (toastEl) {
+          toastEl.style.cursor = 'pointer';
+          toastEl.onclick = function (e) {
+            if (e.target && (e.target.id === 'ksUnifiedToastClose' || e.target.closest('#ksUnifiedToastClose'))) {
+              return;
+            }
+            try {
+              if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop() && typeof showQCAGDesktopDetail === 'function') {
+                showQCAGDesktopDetail(backendId);
+              } else if (typeof showRequestDetail === 'function') {
+                showRequestDetail(backendId);
+              }
+            } catch (_) {}
+            if (typeof _ksDismissUnifiedToast === 'function') {
+              _ksDismissUnifiedToast(toastEl);
+            }
+          };
         }
-      } catch (_) {}
+      }, 50);
     }
-    _ksDismissBanner(banner);
-  });
-
-  // Auto-dismiss after 3 seconds (3000ms)
-  setTimeout(function () { _ksDismissBanner(banner); }, 3000);
-}
-
-function _ksDismissBanner(banner) {
-  if (!banner || !banner.parentNode) { _ksBannerVisible = false; _ksProcessBannerQueue(); return; }
-  banner.style.transform = 'translate(-50%, -24px) scale(0.95)';
-  banner.style.opacity = '0';
-  setTimeout(function () {
-    try { banner.remove(); } catch (_) {}
-    _ksBannerVisible = false;
-    _ksProcessBannerQueue();
-  }, 250);
+  }
 }
 
 // Track known request IDs so we only show banners for genuinely new arrivals
@@ -281,7 +217,7 @@ window.__ksOnInvalidate = function (payload) {
       if (typeof _ksShowDesktopBanner === 'function' && payload.data && payload.data.__backendId) {
         _ksShowDesktopBanner('Đã có Báo Giá', 'Điểm bán ' + qOutlet + ' đã có báo giá' + qAmt, payload.data.__backendId, 'done');
       } else if (typeof showToast === 'function') {
-        showToast('✓ Điểm bán ' + qOutlet + ' đã có Báo Giá' + qAmt, 4000);
+        showToast('Đã có Báo Giá • Điểm bán ' + qOutlet + ' đã có báo giá' + qAmt, 'done', 4000);
       }
     }
     if (resType === 'quotations' && !payload.quote_ready) return;
@@ -333,9 +269,9 @@ window.__ksOnInvalidate = function (payload) {
 
         var oLabel = matchedReq.outletName || matchedReq.outletCode || 'Điểm bán';
         if (typeof _ksShowDesktopBanner === 'function') {
-          _ksShowDesktopBanner('Yêu cầu chỉnh sửa MQ', 'Outlet ' + oLabel + ' yêu cầu chỉnh sửa', matchedReq.__backendId || targetId, 'editing');
+          _ksShowDesktopBanner('Yêu cầu chỉnh sửa MQ', 'Điểm bán ' + oLabel + ' yêu cầu chỉnh sửa thiết kế', matchedReq.__backendId || targetId, 'editing');
         } else if (typeof showToast === 'function') {
-          showToast('⚠ Outlet ' + oLabel + ' vừa gửi yêu cầu chỉnh sửa', 3500);
+          showToast('Yêu cầu chỉnh sửa MQ • Điểm bán ' + oLabel + ' yêu cầu chỉnh sửa thiết kế', 'editing', 3500);
         }
       }
 
@@ -357,14 +293,14 @@ window.__ksOnInvalidate = function (payload) {
   var bid = data.__backendId;
   var prev = _ksKnownRequestIds[bid];
   var type = data.type || 'new';
-  var outletLabel = data.outletName || data.outletCode || 'Outlet';
+  var outletLabel = data.outletName || data.outletCode || 'Điểm bán';
 
   // ── 1. Request mới (action: 'create'): Hiển thị thông báo + Hiện THẺ LẬP TỨC ──
   if (action === 'create' && !prev) {
     if (type === 'warranty') {
-      _ksShowDesktopBanner('Yêu cầu bảo hành mới', 'Outlet ' + outletLabel, bid, 'warranty');
+      _ksShowDesktopBanner('Yêu cầu bảo hành mới', 'Điểm bán ' + outletLabel, bid, 'warranty');
     } else {
-      _ksShowDesktopBanner('Yêu cầu khảo sát mới', 'Outlet ' + outletLabel, bid, 'new');
+      _ksShowDesktopBanner('Yêu cầu khảo sát mới', 'Điểm bán ' + outletLabel, bid, 'new');
     }
     // Cập nhật snapshot
     _ksKnownRequestIds[bid] = { status: data.status || '', editingRequestedAt: data.editingRequestedAt || null, designImages: data.designImages || '[]' };
@@ -409,11 +345,11 @@ window.__ksOnInvalidate = function (payload) {
   if (prev) {
     // Editing requested (Sale asked for changes)
     if (data.editingRequestedAt && !prev.editingRequestedAt) {
-      _ksShowDesktopBanner('Yêu cầu chỉnh sửa MQ', 'Outlet ' + outletLabel + ' yêu cầu chỉnh sửa', bid, 'editing');
+      _ksShowDesktopBanner('Yêu cầu chỉnh sửa MQ', 'Điểm bán ' + outletLabel + ' yêu cầu chỉnh sửa thiết kế', bid, 'editing');
     }
     // QCAG completed MQ (status → done)
     if (data.status === 'done' && prev.status !== 'done') {
-      _ksShowDesktopBanner('MQ đã hoàn thành', 'Outlet ' + outletLabel + ' đã có mẫu quảng cáo', bid, 'done');
+      _ksShowDesktopBanner('MQ đã hoàn thành', 'Điểm bán ' + outletLabel + ' đã hoàn tất mẫu quảng cáo', bid, 'done');
     }
     // Update snapshot
     _ksKnownRequestIds[bid] = { status: data.status || '', editingRequestedAt: data.editingRequestedAt || null, designImages: data.designImages || '[]' };

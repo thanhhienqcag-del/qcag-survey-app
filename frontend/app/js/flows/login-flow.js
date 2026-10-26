@@ -409,7 +409,7 @@ async function homePushBtnClick() {
   try {
     const res = await window.pushHelpers.initPush(phone, role, saleCode);
     if (res && res.ok) {
-      showToast('✅ Thông báo đã được bật!');
+      showToast('Thông báo đã được kích hoạt thành công', 'done');
     } else {
       const e = res && res.error || 'Không thể bật thông báo';
       if (e !== 'Push not supported' && e !== 'Notifications not supported') showToast('Lỗi: ' + e);
@@ -474,7 +474,7 @@ async function homeInstallBtnClick() {
     _deferredInstallPrompt.prompt();
     const { outcome } = await _deferredInstallPrompt.userChoice;
     if (outcome === 'accepted') {
-      showToast('✅ Đang cài đặt app...');
+      showToast('Đang cài đặt ứng dụng...', 'info');
       _deferredInstallPrompt = null;
     }
     updateHomeInstallBtn();
@@ -482,7 +482,7 @@ async function homeInstallBtnClick() {
   }
 
   if (isIos) {
-    showToast('📲 Nhấn nút Chia sẻ ↑ → "Thêm vào màn hình chính" để cài app', 7000);
+    showToast('Nhấn nút Chia sẻ ↑ → "Thêm vào màn hình chính" để cài app', 7000);
   } else {
     showToast('Mở trang trong Chrome/Safari và thử lại để cài app');
   }

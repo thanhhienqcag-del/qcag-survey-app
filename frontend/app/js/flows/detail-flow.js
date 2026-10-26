@@ -3300,7 +3300,7 @@ async function uploadDesign(input) {
     const result = await window.dataSdk.update(updated);
     if (result.isOk) {
       hideLoadingOverlay();
-      showToast('✓ Đã upload thiết kế', 'done', 2500);
+      showToast('Đã tải lên thiết kế', 'done', 2500);
       showRequestDetail(currentDetailRequest.__backendId);
 
       // Gửi push notification cho Sale kèm phản hồi trạng thái
@@ -3326,11 +3326,11 @@ async function uploadDesign(input) {
         .then(function (r) { return r && r.ok ? r.json() : null; })
         .then(function (res) {
           if (res && res.ok) {
+            const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
             if (res.sent > 0) {
-              const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
-              showToast(`✓ Đã upload thiết kế • Đã báo Sale${devText}`, 'done', 3500);
+              showToast(`Đã tải lên thiết kế • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
             } else {
-              showToast('✓ Đã upload thiết kế • Sale chưa bật nhận thông báo', 'done', 4000);
+              showToast('Đã tải lên thiết kế • Sale chưa kích hoạt nhận thông báo', 'done', 4000);
             }
           }
         })
@@ -3338,7 +3338,7 @@ async function uploadDesign(input) {
       } catch (_) {}
     } else {
       hideLoadingOverlay();
-      showToast('Lỗi upload thiết kế', 'error');
+      showToast('Không thể tải lên thiết kế', 'error');
     }
   } else {
     const idx = allRequests.findIndex(r => r.__backendId === currentDetailRequest.__backendId);
@@ -4481,22 +4481,25 @@ function _removeEditRequestImage(idx) {
 async function handleEditRequestImagePick(input) {
   if (!input || !input.files) return;
   const files = Array.from(input.files);
-  input.value = '';
   for (const file of files) {
     // Compress immediately (WebP preferred)
     try {
-      const dataUrl = await _compressImageFile(file, 1600, 0.82);
+      const dataUrl = await _compressImageFile(file, 1600, 0.85);
       _editRequestPendingImages.push(dataUrl);
     } catch (_) {
-      const dataUrl = await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = e => resolve(e.target.result);
-        reader.readAsDataURL(file);
-      });
-      _editRequestPendingImages.push(dataUrl);
+      try {
+        const dataUrl = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = e => resolve(e.target.result);
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+        if (dataUrl) _editRequestPendingImages.push(dataUrl);
+      } catch (e) {}
     }
   }
   _renderEditRequestImgPreview();
+  try { input.value = ''; } catch (_) {}
 }
 
 function attachEditRequestPaste() {
