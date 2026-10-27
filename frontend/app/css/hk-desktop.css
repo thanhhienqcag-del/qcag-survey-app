@@ -5369,8 +5369,9 @@ html:not(.theme-dark):not([data-theme="dark"]) .hk-orders-table-wrap {
 
   /* ====================================================================
      TRANG XÁC NHẬN SẢN XUẤT TRÊN DESKTOP (80% SCALE FOCUSED VIEWPORT)
+     CHỈ ÁP DỤNG TRÊN MÀN HÌNH DESKTOP (>= 1024px)
      ==================================================================== */
-
+@media (min-width: 1024px) {
   /* 1. Full Page Background (Khung nền bao trọn 100vw x 100vh) */
   #productionApprovalModal {
     position: fixed !important;
@@ -7078,6 +7079,7 @@ html:not(.theme-dark):not([data-theme="dark"]) .hk-orders-table-wrap {
     opacity: 0.45 !important;
     color: #ffffff !important;
   }
+}
 
   .prod-complete-actions {
     display: flex;

@@ -18,7 +18,7 @@
   <script>
     (function () {
       // ── QCAG AUTO VERSION & SAFE SESSION PRESERVATION ──────────────────────────
-      var APP_BUILD_VER = '2026.10.27_V12_02';
+      var APP_BUILD_VER = '2026.10.27_V12_04';
       window.QCAG_SYSTEM_BUILD_VER = APP_BUILD_VER;
       try {
         localStorage.setItem('QCAG_SYSTEM_BUILD_VER', APP_BUILD_VER);
@@ -3625,15 +3625,19 @@
     class="prod-app-modal fixed inset-0 z-50 hidden flex flex-col h-full w-full overflow-hidden">
     <div class="prod-app-dialog flex flex-col h-full w-full">
       <!-- Page Top Header -->
-      <div class="prod-app-header relative px-4 lg:px-6 py-2 flex items-center justify-between">
-        <button onclick="closeProductionApprovalModal()" class="prod-app-back-btn z-10" aria-label="Quay lại">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="prod-app-header relative px-3 lg:px-6 py-2.5 flex items-center justify-between flex-shrink-0">
+        <button onclick="closeProductionApprovalModal()" class="prod-app-back-btn z-10 flex items-center gap-1.5 p-1 -ml-1 text-gray-300 hover:text-white" aria-label="Quay lại">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
           </svg>
-          <span>Quay lại</span>
+          <span class="text-xs font-semibold hidden sm:inline">Quay lại</span>
         </button>
+        <div class="prod-app-header-title text-center flex-1 px-2 lg:hidden">
+          <h2 class="text-sm font-bold text-gray-100 tracking-wide uppercase">Xác nhận sản xuất</h2>
+          <div class="text-[11px] text-gray-400">Duyệt & phát lệnh sản xuất</div>
+        </div>
         <button onclick="closeProductionApprovalModal()"
-          class="prod-app-close-btn z-10 flex items-center justify-center w-8 h-8 rounded-xl transition-all cursor-pointer flex-shrink-0"
+          class="prod-app-close-btn z-10 flex items-center justify-center w-8 h-8 rounded-xl transition-all cursor-pointer flex-shrink-0 text-gray-400 hover:text-white"
           aria-label="Đóng trang">
           <svg class="w-5 h-5 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M6 18L18 6M6 6l12 12" />
@@ -3641,19 +3645,19 @@
         </button>
       </div>
 
-      <!-- Toolbar 2 Blocks: Tách rời thành 2 Badge riêng biệt -->
+      <!-- Toolbar: Title Badge on Desktop, Tabs on both -->
       <div
-        class="prod-app-toolbar flex flex-col md:flex-row md:items-center md:justify-between px-4 lg:px-6 py-2.5 gap-4 select-none">
-        <!-- Block 1 (Trái): Badge Tiêu đề XÁC NHẬN SẢN XUẤT (căn giữa) -->
-        <div class="prod-app-title-badge flex flex-col items-center justify-center text-center">
+        class="prod-app-toolbar flex flex-col lg:flex-row lg:items-center lg:justify-between px-2 sm:px-4 lg:px-6 py-2 lg:py-2.5 gap-2 lg:gap-4 select-none flex-shrink-0">
+        <!-- Block 1 (Trái): Badge Tiêu đề XÁC NHẬN SẢN XUẤT (Desktop Only) -->
+        <div class="prod-app-title-badge hidden lg:flex flex-col items-center justify-center text-center">
           <h2 class="prod-app-title text-sm lg:text-base font-extrabold tracking-wide uppercase text-center">Xác nhận
             sản xuất</h2>
           <div class="prod-app-sub text-[11.5px] text-gray-400 mt-0.5 text-center">Duyệt và phát lệnh sản xuất cho các
             điểm bán có bản vẽ Maquette</div>
         </div>
 
-        <!-- Block 2 (Phải): Badge Cụm 3 button chia đều, dấu | -->
-        <div class="prod-app-tabs-badge flex items-center">
+        <!-- Block 2 (Phải): Badge Cụm 3 button chia đều -->
+        <div class="prod-app-tabs-badge flex items-center w-full lg:w-auto">
           <div class="prod-app-tabs flex items-center gap-1.5 w-full">
             <button id="prodAppTab_pending" onclick="setProductionApprovalTab('pending')" class="prod-app-tab active"
               data-tab="pending">

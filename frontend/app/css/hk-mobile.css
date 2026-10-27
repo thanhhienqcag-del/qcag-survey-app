@@ -2208,11 +2208,48 @@ html[data-theme='dark'] .quote-bridge-btn-empty-sub,
    ==================================================================== */
 
 /* Modal Container (Default Dark Fallback) */
+#productionApprovalModal,
 .prod-app-modal {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
   background: #0b1220 !important;
   color: #f8fafc !important;
   font-family: inherit;
+  z-index: 9999 !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
+
+#productionApprovalModal.hidden {
+  display: none !important;
+}
+
+#productionApprovalModal .prod-app-dialog,
+.prod-app-modal .prod-app-dialog {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: #0b1220 !important;
+  box-shadow: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
 .prod-app-header {
   background: #111827 !important;
   border-bottom: 1px solid #1f2937 !important;

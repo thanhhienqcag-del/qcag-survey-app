@@ -271,6 +271,20 @@ function findMatchingKsRequest(q, rawQuoteCode) {
 let _desktopMqPreviewList = [];
 let _desktopMqPreviewIndex = 0;
 
+function isProductionApprovalDesktop() {
+    if (typeof window === 'undefined') return false;
+    if (window.innerWidth < 1024) return false;
+    if (typeof window.getAppUIMode === 'function') {
+        const mode = window.getAppUIMode();
+        if (mode === 'hk-mobile' || mode === 'qcag-mobile') return false;
+    }
+    if (document.documentElement) {
+        const htmlMode = document.documentElement.getAttribute('data-app-mode');
+        if (htmlMode === 'hk-mobile' || htmlMode === 'qcag-mobile') return false;
+    }
+    return true;
+}
+
 /** Full-Screen MQ Image Lightbox Viewer with Split-Screen for Desktop and Responsive Mobile Mode */
 function openMqImagePreview(url, idKey, itemObj) {
     if (!url && !itemObj) return;
@@ -287,7 +301,7 @@ function openMqImagePreview(url, idKey, itemObj) {
 
     const item = itemObj || _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey) || {};
     const effectiveIdKey = idKey || item.__backendId || item.id;
-    const isDesktop = (window.innerWidth >= 1024);
+    const isDesktop = isProductionApprovalDesktop();
 
     // Prepare current list for Next / Prev navigation
     const currentTabItems = (typeof _productionApprovalItems !== 'undefined' && Array.isArray(_productionApprovalItems))
@@ -1454,7 +1468,7 @@ if (typeof window !== 'undefined' && !window.__prodApprovalKeyHandlerAttached) {
         if (!_productionApprovalActive) return;
         const modal = document.getElementById('productionApprovalModal');
         if (!modal || modal.classList.contains('hidden')) return;
-        if (window.innerWidth < 1024) return;
+        if (!isProductionApprovalDesktop()) return;
         if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
 
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -1739,8 +1753,8 @@ function renderProductionApprovalList() {
     else if (_productionApprovalTab === 'approved') displayList = approvedItems;
     else if (_productionApprovalTab === 'rejected') displayList = rejectedItems;
 
-    // Desktop Single-Item Focus Inspection Mode (Duyệt từng điểm một)
-    const isDesktop = (typeof window !== 'undefined') && ((window.innerWidth >= 1024) || (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches));
+    // Desktop Single-Item Focus Inspection Mode (Duyệt từng điểm một — CHỈ khi ở màn hình lớn Desktop >= 1024px)
+    const isDesktop = isProductionApprovalDesktop();
     if (isDesktop) {
         renderDesktopSingleApprovalView(container, displayList, pendingItems, approvedItems, rejectedItems);
         return;
@@ -1887,7 +1901,7 @@ function renderProductionApprovalList() {
 
 /** Direct Click handler for Mouse / Desktop pointer devices */
 function handleSwipeContainerClick(event, idKey, isModal) {
-    const isDesktop = (window.innerWidth >= 1024) || (window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+    const isDesktop = isProductionApprovalDesktop();
     if (isDesktop) {
         event.stopPropagation();
         if (isModal) closeMqImagePreview();
