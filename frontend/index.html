@@ -17,66 +17,17 @@
   <link rel="shortcut icon" href="./app/assets/logo-qcag-2.0.ico?v=20261010_final" type="image/x-icon">
   <script>
     (function () {
-      // ── QCAG AUTO VERSION & ZERO-TOUCH CACHE INITIATOR ────────────────────────────
-      var APP_BUILD_VER = '2026.10.27_V12_01';
+      // ── QCAG AUTO VERSION & SAFE SESSION PRESERVATION ──────────────────────────
+      var APP_BUILD_VER = '2026.10.27_V12_02';
       window.QCAG_SYSTEM_BUILD_VER = APP_BUILD_VER;
-
-      function performZeroTouchWipe(newVer) {
-        try {
-          // 1. Sao lưu thông tin đăng nhập và tùy chọn giao diện
-          var savedSession = localStorage.getItem('ks_session');
-          var savedHkProfile = localStorage.getItem('ks_hk_profile');
-          var savedQcagPwd = localStorage.getItem('ks_qcag_pwd');
-          var savedToken = localStorage.getItem('token');
-          var savedTheme = localStorage.getItem('ks_theme');
-          var savedRole = localStorage.getItem('ks_role');
-
-          // 2. Dọn sạch toàn bộ localStorage & sessionStorage cũ
-          try { localStorage.clear(); } catch (_) {}
-          try { sessionStorage.clear(); } catch (_) {}
-
-          // 3. Khôi phục lại phiên đăng nhập an toàn
-          if (savedSession) localStorage.setItem('ks_session', savedSession);
-          if (savedHkProfile) localStorage.setItem('ks_hk_profile', savedHkProfile);
-          if (savedQcagPwd) localStorage.setItem('ks_qcag_pwd', savedQcagPwd);
-          if (savedToken) localStorage.setItem('token', savedToken);
-          if (savedTheme) localStorage.setItem('ks_theme', savedTheme);
-          if (savedRole) localStorage.setItem('ks_role', savedRole);
-          localStorage.setItem('ks_app_build', newVer);
-          localStorage.setItem('QCAG_SYSTEM_BUILD_VER', newVer);
-
-          // 4. Xóa sạch IndexedDB cache
-          if ('indexedDB' in window) {
-            try { indexedDB.deleteDatabase('ks_offline_db'); } catch (_) {}
-          }
-
-          // 5. Hủy toàn bộ ServiceWorker & CacheStorage cũ
-          var p1 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function (regs) {
-            return Promise.all(regs.map(function (r) { return r.unregister(); }));
-          }) : Promise.resolve();
-          var p2 = ('caches' in window) ? caches.keys().then(function (keys) {
-            return Promise.all(keys.map(function (k) { return caches.delete(k); }));
-          }) : Promise.resolve();
-
-          Promise.all([p1, p2]).then(function () {
-            window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
-          }).catch(function () {
-            window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
-          });
-        } catch (_) {
-          window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
-        }
-      }
-
-      // Kiểm tra ngay khi tải trang: nếu phiên bản cũ -> Tự động dọn & tải lại ngay
-      var prevBuild = localStorage.getItem('QCAG_SYSTEM_BUILD_VER') || localStorage.getItem('ks_app_build');
-      if (!prevBuild || prevBuild !== APP_BUILD_VER) {
-        performZeroTouchWipe(APP_BUILD_VER);
-        return;
-      }
+      try {
+        localStorage.setItem('QCAG_SYSTEM_BUILD_VER', APP_BUILD_VER);
+        localStorage.setItem('ks_app_build', APP_BUILD_VER);
+      } catch (_) {}
 
       window.resetAppCache = function (redirect) {
-        performZeroTouchWipe(APP_BUILD_VER);
+        if ('caches' in window) caches.keys().then(function (keys) { keys.forEach(function (k) { caches.delete(k); }); });
+        if (redirect !== false) window.location.reload();
       };
 
       // Tự động kiểm tra phiên bản mới ngầm khi người dùng quay lại tab (Heartbeat)
@@ -87,7 +38,8 @@
             .then(function (data) {
               if (data && data.version && data.version !== APP_BUILD_VER) {
                 console.log('[QCAG AUTO-UPDATE] Phát hiện phiên bản mới:', data.version);
-                performZeroTouchWipe(data.version);
+                try { localStorage.setItem('QCAG_SYSTEM_BUILD_VER', data.version); } catch (_) {}
+                window.location.reload();
               }
             }).catch(function () {});
         } catch (_) {}

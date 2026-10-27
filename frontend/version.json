@@ -1,6 +1,6 @@
 {
-  "version": "2026.10.27_V12_01",
-  "buildTime": "2026-10-27T08:08:00+07:00",
+  "version": "2026.10.27_V12_02",
+  "buildTime": "2026-10-27T09:16:00+07:00",
   "environment": "production",
-  "note": "QCAG Database V12 Production Release"
+  "note": "QCAG Database V12 Production Release - Auto-Recovery and Stat Badges Fix"
 }

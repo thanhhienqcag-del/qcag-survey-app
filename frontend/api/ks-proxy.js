@@ -48,7 +48,7 @@ function getLocalDevCandidates(req) {
 
 function getBackendCandidates(req) {
   return unique([
-    'https://ks-backend-staging-493469512136.asia-southeast1.run.app',
+    'https://ks-backend-493469512136.asia-southeast1.run.app',
     process.env.BACKEND_URL,
     process.env.KS_BACKEND_URL,
     process.env.KS_BACKEND_FALLBACK_URL,

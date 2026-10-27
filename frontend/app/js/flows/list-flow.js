@@ -217,13 +217,9 @@ function updateHomeStats() {
   let waiting = 0, hasMq = 0, editing = 0;
   let warrantyPending = 0, warrantyDone = 0;
   // Only count requests owned by current session
-  const ownedRequests = allRequests.filter(r => {
-    try {
-      const reqOwner = JSON.parse(r.requester || '{}');
-      if (!currentSession || !currentSession.saleCode) return false;
-      return (reqOwner.saleCode && reqOwner.saleCode === currentSession.saleCode);
-    } catch (e) { return false; }
-  });
+  const ownedRequests = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
+    ? allRequests.filter(_isRequestOwnedBySession)
+    : [];
   const newRequests = ownedRequests.filter(r => r.type === 'new');
   newRequests.forEach(req => {
     const state = getRequestDesignState(req);
@@ -269,13 +265,9 @@ function updateHomeStats() {
 
 function updateRequestCount() {
   // Only count requests owned by current session
-  const owned = allRequests.filter(r => {
-    try {
-      const reqOwner = JSON.parse(r.requester || '{}');
-      if (!currentSession || !currentSession.saleCode) return false;
-      return (reqOwner.saleCode && reqOwner.saleCode === currentSession.saleCode);
-    } catch (e) { return false; }
-  });
+  const owned = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
+    ? allRequests.filter(_isRequestOwnedBySession)
+    : [];
   const newCount = owned.filter(r => r.type === 'new').length;
   const warrantyCount = owned.filter(r => r.type === 'warranty').length;
   try {

@@ -202,6 +202,7 @@ function loginHK2Submit() {
   }
 
   _justLoggedIn = true;
+  try { sessionStorage.removeItem('ks_logged_out'); } catch (_) {}
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
   if (typeof window.updateAppTitle === 'function') window.updateAppTitle('heineken');
   launchApp();
@@ -215,6 +216,7 @@ function loginQCAGSubmit() {
   if (pwd !== loginGetQCAGPassword()) { showToast('Mật khẩu không đúng'); return; }
   currentSession = { role: 'qcag', phone, name: qcName, fullname: qcName };
   _justLoggedIn = true;
+  try { sessionStorage.removeItem('ks_logged_out'); } catch (_) {}
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
   if (typeof window.updateAppTitle === 'function') window.updateAppTitle('qcag');
   // Only show blocking loading on QCAG desktop login; mobile flow stays unchanged.
@@ -249,6 +251,7 @@ function closeLogoutModal() {
 
 function executeLogout() {
   closeLogoutModal();
+  try { sessionStorage.setItem('ks_logged_out', '1'); } catch (_) {}
   const prevRole = currentSession && currentSession.role;
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('pending_orders_v1');

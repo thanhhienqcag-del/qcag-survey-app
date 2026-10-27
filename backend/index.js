@@ -1256,6 +1256,74 @@ app.post('/auth/register', async (req, res) => {
     res.json({ ok: true });
 });
 
+app.get(['/api/ks/push/lookup', '/push/lookup'], async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const endpoint = String((req.query && req.query.endpoint) || '').trim();
+        const phone = String((req.query && (req.query.phone || req.query.sale_phone)) || '').replace(/\D/g, '').trim();
+        const saleCode = String((req.query && (req.query.sale_code || req.query.saleCode || req.query.code)) || '').trim();
+
+        if (!endpoint && !phone && !saleCode) {
+            return res.status(400).json({ ok: false, error: 'missing_lookup_key' });
+        }
+
+        let row = null;
+        if (endpoint && endpoint.length >= 20) {
+            const endpointSuffix = endpoint.slice(-40);
+            const [rows] = await pool.query(
+                `SELECT p.phone, p.role, u.username, u.fullname, u.region, u.ss_name 
+                 FROM push_subscriptions p 
+                 LEFT JOIN users u ON (p.user_id = u.id OR p.phone = u.phone)
+                 WHERE p.subscription LIKE ? 
+                 ORDER BY p.updated_at DESC LIMIT 1`,
+                ['%' + endpointSuffix + '%']
+            );
+            if (rows && rows.length > 0) row = rows[0];
+        }
+
+        if (!row && phone && phone.length >= 8) {
+            const [rows] = await pool.query(
+                `SELECT u.username, u.phone, u.fullname, u.region, u.ss_name, u.role
+                 FROM users u
+                 WHERE u.phone = ? OR u.username = ? OR u.id = ?
+                 ORDER BY u.id DESC LIMIT 1`,
+                [phone, phone, 'USR_PHONE_' + phone]
+            );
+            if (rows && rows.length > 0) row = rows[0];
+        }
+
+        if (!row && saleCode && saleCode.length >= 6) {
+            const [rows] = await pool.query(
+                `SELECT u.username, u.phone, u.fullname, u.region, u.ss_name, u.role
+                 FROM users u
+                 WHERE u.username = ? OR u.id = ?
+                 ORDER BY u.id DESC LIMIT 1`,
+                [saleCode, 'USR_SALE_' + saleCode]
+            );
+            if (rows && rows.length > 0) row = rows[0];
+        }
+
+        if (row && (row.phone || row.username)) {
+            const codeClean = (row.username && !String(row.username).startsWith('USR_PHONE_')) ? row.username : (saleCode || '');
+            return res.json({
+                ok: true,
+                user: {
+                    phone: row.phone || phone || '',
+                    saleCode: codeClean,
+                    saleName: row.fullname || '',
+                    role: 'heineken',
+                    region: row.region || '',
+                    ssName: row.ss_name || ''
+                }
+            });
+        }
+
+        return res.json({ ok: false, not_found: true });
+    } catch (err) {
+        return res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    }
+});
+
 app.post('/auth/login', async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && req.body.username != null ? String(req.body.username).trim() : '';

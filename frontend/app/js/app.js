@@ -140,59 +140,86 @@ window.addEventListener('resize', () => {
 });
 
 // ── Boot ──────────────────────────────────────────────────────────────
-(function bootApp() {
+(async function bootApp() {
   try {
     window.applyAppUIMode();
     if (typeof window.updateAppTitle === 'function') {
       window.updateAppTitle();
     }
-    const ses = (() => {
+    const isExplicitLogout = sessionStorage.getItem('ks_logged_out') === '1';
+
+    let ses = (() => {
       try { return JSON.parse(localStorage.getItem('ks_session') || 'null'); } catch (e) { return null; }
     })();
-    if (ses) {
-      // Luôn yêu cầu tài khoản Heineken (cả Desktop lẫn Mobile) bắt đầu từ Bước 2 chọn chức vụ
-      if (ses.role === 'heineken') {
-        const loginEl = document.getElementById('loginScreen');
-        if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
-        // Prefill HK profile nếu có, hoặc khôi phục từ ses
-        let saved = (() => { try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; } })();
-        if ((!saved.phone || !saved.saleCode) && (ses.phone || ses.saleCode)) {
-          saved = {
-            phone: saved.phone || ses.phone || '',
-            saleCode: saved.saleCode || ses.saleCode || '',
-            saleName: saved.saleName || ses.saleName || ses.name || ''
-          };
-          try { localStorage.setItem('ks_hk_profile', JSON.stringify(saved)); } catch (_) {}
-        }
-        const pEl = document.getElementById('hkPhone');
-        const cEl = document.getElementById('hkSaleCode');
-        const nEl = document.getElementById('hkSaleName');
-        if (saved.phone && pEl) pEl.value = saved.phone;
-        if (saved.saleCode && cEl) cEl.value = saved.saleCode;
-        if (saved.saleName && nEl) nEl.value = saved.saleName;
 
-        // BẢO VỆ TUYỆT ĐỐI: Nếu thiếu Số điện thoại hoặc Mã nhân viên, bắt buộc quay lại Bước 1 để điền
-        if (!saved.phone || !saved.saleCode || !saved.saleName) {
-          if (typeof loginShowStep === 'function') loginShowStep('loginStepHK1');
-          return;
-        }
+    let saved = (() => {
+      try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; }
+    })();
 
-        // Prefill dữ liệu Bước 2 từ session khi đã có đầy đủ thông tin cá nhân
-        const determinedSaleType = ses.saleType || (ses.isTBA ? 'tba' : (ses.isNPP ? 'npp' : 'dsm_sr'));
-        if (typeof loginSelectSaleType === 'function') {
-          loginSelectSaleType(determinedSaleType);
+    // ── TỰ ĐỘNG KHÔI PHỤC PHIÊN VÀ NẠP CACHE (ZERO-TOUCH RECOVERY FOR SALES) ──
+    if (!isExplicitLogout) {
+      // Nếu chưa có session hoặc session bị thiếu thông tin cá nhân
+      if (!ses || !ses.phone || !ses.saleCode) {
+        let pushEndpoint = '';
+        try {
+          if ('serviceWorker' in navigator && 'PushManager' in window) {
+            const reg = await Promise.race([
+              navigator.serviceWorker.ready,
+              new Promise(r => setTimeout(r, 600))
+            ]);
+            if (reg && reg.pushManager) {
+              const sub = await reg.pushManager.getSubscription();
+              if (sub && sub.endpoint) pushEndpoint = sub.endpoint;
+            }
+          }
+        } catch (_) {}
+
+        const queryParts = [];
+        if (pushEndpoint) queryParts.push('endpoint=' + encodeURIComponent(pushEndpoint));
+        if (saved.phone) queryParts.push('phone=' + encodeURIComponent(saved.phone));
+        if (saved.saleCode) queryParts.push('sale_code=' + encodeURIComponent(saved.saleCode));
+
+        if (queryParts.length > 0) {
+          try {
+            const lookupRes = await Promise.race([
+              fetch('/api/ks/push/lookup?' + queryParts.join('&')),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+            ]);
+            if (lookupRes && lookupRes.ok) {
+              const lookupData = await lookupRes.json();
+              if (lookupData && lookupData.ok && lookupData.user) {
+                const u = lookupData.user;
+                ses = {
+                  role: u.role || 'heineken',
+                  phone: u.phone,
+                  saleCode: u.saleCode,
+                  saleName: u.saleName,
+                  region: u.region || '',
+                  ssName: u.ssName || '',
+                  saleType: u.region ? 'dsm_sr' : 'tba',
+                  isTBA: !u.region,
+                  isNPP: false
+                };
+                localStorage.setItem('ks_session', JSON.stringify(ses));
+                saved = { phone: u.phone, saleCode: u.saleCode, saleName: u.saleName };
+                localStorage.setItem('ks_hk_profile', JSON.stringify(saved));
+              }
+            }
+          } catch (_) {}
         }
-        if (determinedSaleType === 'dsm_sr') {
-          _loginSelectedRegion = ses.region || '';
-          document.querySelectorAll('.region-btn').forEach(b => b.classList.toggle('selected', b.textContent.trim() === _loginSelectedRegion));
-          const ssName = document.getElementById('hkSSName');
-          if (ssName) { ssName.disabled = false; ssName.classList.remove('tba-disabled'); ssName.value = ses.ssName || ''; }
-        }
-        if (typeof loginShowStep === 'function') loginShowStep('loginStepHK2');
-        return;
       }
+    }
 
-      // Tài khoản khác (QCAG): khôi phục session bình thường
+    // Prefill form inputs để sẵn sàng nếu người dùng cần chỉnh sửa
+    const pEl = document.getElementById('hkPhone');
+    const cEl = document.getElementById('hkSaleCode');
+    const nEl = document.getElementById('hkSaleName');
+    if (saved.phone && pEl) pEl.value = saved.phone;
+    if (saved.saleCode && cEl) cEl.value = saved.saleCode;
+    if (saved.saleName && nEl) nEl.value = saved.saleName;
+
+    if (ses && (ses.phone || ses.saleCode || ses.role === 'qcag')) {
+      // Đã có danh tính (tự động nhận diện hoặc session cũ): Vào thẳng ứng dụng!
       currentSession = ses;
       const loginEl = document.getElementById('loginScreen');
       if (loginEl) { loginEl.classList.add('hidden'); loginEl.classList.remove('flex'); }
@@ -204,17 +231,13 @@ window.addEventListener('resize', () => {
         showScreen('homeScreen');
       }
       initApp();
+      if (typeof fetchProductionApprovalBadgeCount === 'function') {
+        fetchProductionApprovalBadgeCount();
+      }
     } else {
-      // Chưa có session (chưa đăng nhập hoặc vừa đăng xuất): Hiển thị màn hình chọn công ty
-      const saved = (() => { try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; } })();
+      // Chưa có danh tính hoặc người dùng chủ động Đăng xuất: Hiển thị màn hình chọn công ty
       const loginEl = document.getElementById('loginScreen');
       if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
-      const pEl = document.getElementById('hkPhone');
-      const cEl = document.getElementById('hkSaleCode');
-      const nEl = document.getElementById('hkSaleName');
-      if (saved.phone && pEl) pEl.value = saved.phone;
-      if (saved.saleCode && cEl) cEl.value = saved.saleCode;
-      if (saved.saleName && nEl) nEl.value = saved.saleName;
       if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
     }
   } catch (err) {
