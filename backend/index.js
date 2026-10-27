@@ -3191,10 +3191,10 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at 
+      SELECT d.url, d.created_by, d.created_at 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
-      ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
+      ORDER BY d.created_at DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at

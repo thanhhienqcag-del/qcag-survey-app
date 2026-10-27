@@ -689,7 +689,20 @@ function qcagGetWaitBadgeInfo(req) {
       (Array.isArray(designImgs) && designImgs.length > 0)
     );
 
-    const editTime = req.editingRequestedAt || req.editing_requested_at;
+    let editTime = req.editingRequestedAt || req.editing_requested_at;
+    // Fallback: nếu chưa có editingRequestedAt nhưng trong comments có note sửa
+    if (!editTime && req.comments) {
+      try {
+        const parsedComments = Array.isArray(req.comments) ? req.comments : JSON.parse(req.comments || '[]');
+        if (Array.isArray(parsedComments) && parsedComments.length > 0) {
+          const editComments = parsedComments.filter(c => c && (c.type === 'edit-request' || c.type === 'edit_request' || (c.content && String(c.content).includes('yêu cầu sửa'))));
+          if (editComments.length > 0) {
+            editTime = editComments[editComments.length - 1].createdAt || editComments[editComments.length - 1].created_at;
+          }
+        }
+      } catch (_) {}
+    }
+
     if (hasHadDesign && editTime) {
       // Đã có thiết kế ít nhất 1 lần: tính từ ngày yêu cầu sửa đầu tiên của đợt này
       dateRef = editTime;
