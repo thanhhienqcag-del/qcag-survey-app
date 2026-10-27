@@ -25,15 +25,15 @@ function loginSelectCompany(company) {
     const saved = (() => {
       try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
     })();
-    if (saved.phone) document.getElementById('hkPhone').value = saved.phone;
-    if (saved.saleCode) document.getElementById('hkSaleCode').value = saved.saleCode;
-    if (saved.saleName) document.getElementById('hkSaleName').value = saved.saleName;
-    if (saved.phone && saved.saleCode && saved.saleName) {
-      loginSelectSaleType(_loginSelectedSaleType || 'dsm_sr');
-      loginShowStep('loginStepHK2');
-    } else {
-      loginShowStep('loginStepHK1');
-    }
+    const pEl = document.getElementById('hkPhone');
+    const cEl = document.getElementById('hkSaleCode');
+    const nEl = document.getElementById('hkSaleName');
+    if (saved.phone && pEl) pEl.value = saved.phone;
+    if (saved.saleCode && cEl) cEl.value = saved.saleCode;
+    if (saved.saleName && nEl) nEl.value = saved.saleName;
+
+    // YÊU CẦU: Khi chọn công ty Heineken, luôn luôn bắt đầu từ Bước 1 dù cache còn lưu data
+    loginShowStep('loginStepHK1');
   } else {
     loginShowStep('loginStepQCAG');
   }
@@ -275,15 +275,15 @@ function executeLogout() {
   const saved = (() => {
     try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
   })();
-  if (prevRole === 'heineken' && saved.phone && saved.saleCode && saved.saleName) {
-    if (saved.phone) document.getElementById('hkPhone').value = saved.phone;
-    if (saved.saleCode) document.getElementById('hkSaleCode').value = saved.saleCode;
-    if (saved.saleName) document.getElementById('hkSaleName').value = saved.saleName;
-    loginSelectSaleType(_loginSelectedSaleType || 'dsm_sr');
-    loginShowStep('loginStepHK2');
-  } else {
-    loginShowStep('loginStepCompany');
-  }
+  const pEl = document.getElementById('hkPhone');
+  const cEl = document.getElementById('hkSaleCode');
+  const nEl = document.getElementById('hkSaleName');
+  if (saved.phone && pEl) pEl.value = saved.phone;
+  if (saved.saleCode && cEl) cEl.value = saved.saleCode;
+  if (saved.saleName && nEl) nEl.value = saved.saleName;
+
+  // YÊU CẦU: Khi đăng xuất, luôn luôn đưa về màn hình chọn công ty
+  loginShowStep('loginStepCompany');
 }
 
 function launchApp() {

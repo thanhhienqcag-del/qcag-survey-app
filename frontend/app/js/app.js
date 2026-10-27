@@ -205,24 +205,17 @@ window.addEventListener('resize', () => {
       }
       initApp();
     } else {
-      // Chưa có session: nếu đã từng lưu profile Heineken thì mở thẳng Bước 2 chọn chức vụ
+      // Chưa có session (chưa đăng nhập hoặc vừa đăng xuất): Hiển thị màn hình chọn công ty
       const saved = (() => { try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; } })();
       const loginEl = document.getElementById('loginScreen');
       if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
       const pEl = document.getElementById('hkPhone');
       const cEl = document.getElementById('hkSaleCode');
       const nEl = document.getElementById('hkSaleName');
-      if (saved.phone && saved.saleCode && saved.saleName) {
-        if (saved.phone && pEl) pEl.value = saved.phone;
-        if (saved.saleCode && cEl) cEl.value = saved.saleCode;
-        if (saved.saleName && nEl) nEl.value = saved.saleName;
-        if (typeof loginSelectSaleType === 'function') {
-          loginSelectSaleType(_loginSelectedSaleType || 'dsm_sr');
-        }
-        if (typeof loginShowStep === 'function') loginShowStep('loginStepHK2');
-      } else {
-        if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
-      }
+      if (saved.phone && pEl) pEl.value = saved.phone;
+      if (saved.saleCode && cEl) cEl.value = saved.saleCode;
+      if (saved.saleName && nEl) nEl.value = saved.saleName;
+      if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
     }
   } catch (err) {
     console.error('[bootApp] Error during startup recovery:', err);
