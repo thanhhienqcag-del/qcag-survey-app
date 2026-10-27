@@ -95,8 +95,8 @@ self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Skip API calls, cross-origin requests, version.json, and HTML documents
-  if (url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json') || url.pathname.endsWith('.html') || url.pathname === '/') return;
+  // Skip localhost/127.0.0.1 for instant local testing, API calls, cross-origin requests, version.json, and HTML documents
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json') || url.pathname.endsWith('.html') || url.pathname === '/') return;
 
   event.respondWith(
     caches.match(event.request).then(function (cachedResponse) {

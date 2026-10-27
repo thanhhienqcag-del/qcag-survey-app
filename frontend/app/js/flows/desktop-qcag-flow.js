@@ -2231,9 +2231,8 @@ function getQCAGDesktopVisibleRequests() {
 
   // Filter by region (support tokens like S4 -> 's4', MOT8 -> 'mot8', npp -> 'npp', 24/S24 -> '24')
   if (_qcagDesktopRegionFilter && _qcagDesktopRegionFilter !== 'all') {
-    let token = String(_qcagDesktopRegionFilter || '').toLowerCase();
+    let token = String(_qcagDesktopRegionFilter || '').toLowerCase().trim();
     if (token === 's24' || token === '24') token = '24';
-    const pattern = new RegExp(token.replace(/[^a-z0-9]/g, ''), 'i');
 
     wrapped = wrapped.filter(w => {
       const r = w.sortKey;
@@ -2242,12 +2241,7 @@ function getQCAGDesktopVisibleRequests() {
         return regKey === 'npp';
       }
       if (regKey === 'npp') return false;
-      if (regKey) {
-        return regKey === token;
-      }
-      const requester = qcagDesktopParseJson(r.requester, {});
-      const regionRaw = String(r.outletArea || r.area || requester.region || r.region || '').trim();
-      return pattern.test(regionRaw);
+      return regKey === token;
     });
   }
 
@@ -2422,6 +2416,7 @@ function qcagDesktopSetTypeFilter(type) {
 
 function qcagDesktopSetRegionFilter(region) {
   _qcagDesktopListPage = 0;
+  _qcagDesktopListScrollSave = 0;
   _qcagDesktopRegionFilter = region || 'all';
   const curRegToken = (String(_qcagDesktopRegionFilter).toLowerCase() === 's24' || _qcagDesktopRegionFilter === '24') ? '24' : String(_qcagDesktopRegionFilter).toLowerCase();
 
@@ -2701,6 +2696,9 @@ function qcagCalculateWaitDays(dateRef) {
 var _qcagDesktopLastRenderFingerprint = '';
 
 function renderQCAGDesktopList(forceRebuild = false) {
+  if (forceRebuild) {
+    _qcagDesktopLastRenderFingerprint = '';
+  }
   qcagDesktopUpdateFilterCounts();
   const listEl = document.getElementById('qcagDesktopRequestList');
   if (!listEl || !shouldUseQCAGDesktop()) return;
@@ -2757,87 +2755,94 @@ function renderQCAGDesktopList(forceRebuild = false) {
   _qcagDesktopLastRenderFingerprint = listFingerprint;
 
   listEl.innerHTML = requests.map(req => {
-    const statusBadge = qcagDesktopStatusBadge(req);
-    const reqId = req.__backendId || req.id || req.tkCode || '';
-    const activeCls = (reqId && (reqId === _qcagDesktopCurrentId || req.__backendId === _qcagDesktopCurrentId || req.id === _qcagDesktopCurrentId || req.tkCode === _qcagDesktopCurrentId)) ? 'active' : '';
-    const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
-    const requester = qcagDesktopParseJson(req.requester, {});
-    const saleName = (requester.saleName || requester.phone || '-').toUpperCase();
-    const region = qcagFormatRegionDisplay(req.region || requester.region) || '-';
-    const requestCode = req.tkCode || '-'; // Sử dụng tkCode từ server trả về
+    try {
+      const statusBadge = qcagDesktopStatusBadge(req);
+      const reqId = req.__backendId || req.id || req.tkCode || '';
+      const activeCls = (reqId && (reqId === _qcagDesktopCurrentId || req.__backendId === _qcagDesktopCurrentId || req.id === _qcagDesktopCurrentId || req.tkCode === _qcagDesktopCurrentId)) ? 'active' : '';
+      const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
+      const requester = qcagDesktopParseJson(req.requester, {});
+      const saleName = (requester.saleName || requester.phone || '-').toUpperCase();
+      const region = qcagFormatRegionDisplay(req.region || requester.region) || '-';
+      const requestCode = req.tkCode || '-'; // Sử dụng tkCode từ server trả về
 
-    let isTaskDone = false;
-    let chkBadgeHtml = '';
-    let saleApprBadgeHtml = '';
+      let isTaskDone = false;
+      let chkBadgeHtml = '';
+      let saleApprBadgeHtml = '';
 
-    if (isTaskMode) {
-      if (typeof qcagIsTaskPointVerified === 'function' && qcagIsTaskPointVerified(req)) {
-        isTaskDone = true;
+      if (isTaskMode) {
+        if (typeof qcagIsTaskPointVerified === 'function' && qcagIsTaskPointVerified(req)) {
+          isTaskDone = true;
+        }
       }
-    }
 
-    if (isTaskMode) {
-      const saleApprFn = (typeof qcagGetSaleProductionApprovalStatus === 'function')
-        ? qcagGetSaleProductionApprovalStatus
-        : ((typeof window !== 'undefined' && typeof window.qcagGetSaleProductionApprovalStatus === 'function')
-          ? window.qcagGetSaleProductionApprovalStatus
-          : null);
-      const saleAppr = saleApprFn
-        ? saleApprFn(req)
-        : { key: 'pending', label: 'Chờ Sale', cls: 'status-pending' };
+      if (isTaskMode) {
+        const saleApprFn = (typeof qcagGetSaleProductionApprovalStatus === 'function')
+          ? qcagGetSaleProductionApprovalStatus
+          : ((typeof window !== 'undefined' && typeof window.qcagGetSaleProductionApprovalStatus === 'function')
+            ? window.qcagGetSaleProductionApprovalStatus
+            : null);
+        const saleAppr = saleApprFn
+          ? saleApprFn(req)
+          : { key: 'pending', label: 'Chờ Sale', cls: 'status-pending' };
 
-      // Badge duy nhất trên thẻ trong Task Mode là trạng thái duyệt từ Sale: Chờ Sale - Yêu cầu sửa - Từ chối - Đã duyệt
-      // Trạng thái "Đã kiểm tra" được thể hiện trực quan bằng viền xanh lá của cả khối thẻ (is-task-complete)
-      chkBadgeHtml = `<span class="qcag-status-badge qcag-sale-appr-badge ${saleAppr.cls}" style="font-size:10px;padding:2px 8px;">${escapeHtml(saleAppr.label)}</span>`;
-      saleApprBadgeHtml = '';
-    }
-
-    const stdTags = Array.isArray(req.standardTags) ? req.standardTags : (assignStandardTags(req) || []);
-    const displayBadge = qcagDesktopGetDisplayBadge(req);
-
-    // Waiting time badge & Nút Xóa: CHỈ hiển thị ở màn hình khảo sát thông thường, TUYỆT ĐỐI ẨN trong Task Mode
-    const isDoneItem = (statusBadge.cls === 'done');
-    let waitingBadgeHtml = '';
-    let deleteBtnHtml = '';
-    if (!isDoneItem && !isTaskMode) {
-      const waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
-      if (waitInfo) {
-        waitingBadgeHtml = waitInfo.badgeHtml;
+        // Badge duy nhất trên thẻ trong Task Mode là trạng thái duyệt từ Sale: Chờ Sale - Yêu cầu sửa - Từ chối - Đã duyệt
+        // Trạng thái "Đã kiểm tra" được thể hiện trực quan bằng viền xanh lá của cả khối thẻ (is-task-complete)
+        chkBadgeHtml = `<span class="qcag-status-badge qcag-sale-appr-badge ${saleAppr.cls}" style="font-size:10px;padding:2px 8px;">${escapeHtml(saleAppr.label)}</span>`;
+        saleApprBadgeHtml = '';
       }
-    }
 
-    if (!isDoneItem && !isTaskMode) {
-      deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${escapeHtml(reqId)}'))" title="Xóa yêu cầu"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
-    }
-    return `
-      <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
-        <div class="qcag-request-item-top">
-          <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}</div>
-          <div class="flex flex-col items-end gap-1">
-            ${isTaskMode ? (chkBadgeHtml || '') : `<span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>`}
-            ${isTaskMode ? (saleApprBadgeHtml || '') : ''}
-            ${req.deleteRequested ? `<span class="qcag-status-badge badge-del-pending" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35);font-size:10px;padding:1px 6px;display:inline-flex;align-items:center;gap:3px;" title="Sale Heineken đang xin xóa khảo sát"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>Chờ xóa</span>` : ''}
+      const stdTags = Array.isArray(req.standardTags) ? req.standardTags : (assignStandardTags(req) || []);
+      const displayBadge = qcagDesktopGetDisplayBadge(req);
+
+      // Waiting time badge & Nút Xóa: CHỈ hiển thị ở màn hình khảo sát thông thường, TUYỆT ĐỐI ẨN trong Task Mode
+      const isDoneItem = (statusBadge.cls === 'done');
+      let waitingBadgeHtml = '';
+      let deleteBtnHtml = '';
+      if (!isDoneItem && !isTaskMode) {
+        const waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
+        if (waitInfo) {
+          waitingBadgeHtml = waitInfo.badgeHtml;
+        }
+      }
+
+      if (!isDoneItem && !isTaskMode) {
+        deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${escapeHtml(reqId)}'))" title="Xóa yêu cầu"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
+      }
+      return `
+        <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
+          <div class="qcag-request-item-top">
+            <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}</div>
+            <div class="flex flex-col items-end gap-1">
+              ${isTaskMode ? (chkBadgeHtml || '') : `<span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>`}
+              ${isTaskMode ? (saleApprBadgeHtml || '') : ''}
+              ${req.deleteRequested ? `<span class="qcag-status-badge badge-del-pending" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.35);font-size:10px;padding:1px 6px;display:inline-flex;align-items:center;gap:3px;" title="Sale Heineken đang xin xóa khảo sát"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>Chờ xóa</span>` : ''}
+            </div>
+          </div>
+          <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(String(saleName || '-').toUpperCase())}</span> • ${escapeHtml(region)}</div>
+          <div class="qcag-request-ss">${(() => {
+          const sType = String((requester && requester.saleType) || '').toLowerCase();
+          const isNpp = sType === 'npp' || Boolean(requester && requester.isNPP);
+          const isTba = sType === 'tba' || Boolean(requester && requester.isTBA);
+          if (isTba) return '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
+          if (isNpp) return '<span class="qcag-ss-npp" style="color:#10b981;font-size:11px;font-weight:600;font-style:normal;">Kênh NPP</span>';
+          const ss = (requester && requester.ssName) || '';
+          return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
+        })()}</div>
+          <div class="qcag-request-footer">
+            <div class="qcag-request-footer-left">
+              <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
+              <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
+            </div>
+            ${waitingBadgeHtml}${deleteBtnHtml}
           </div>
         </div>
-        <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(String(saleName || '-').toUpperCase())}</span> • ${escapeHtml(region)}</div>
-        <div class="qcag-request-ss">${(() => {
-        const sType = String((requester && requester.saleType) || '').toLowerCase();
-        const isNpp = sType === 'npp' || Boolean(requester && requester.isNPP);
-        const isTba = sType === 'tba' || Boolean(requester && requester.isTBA);
-        if (isTba) return '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
-        if (isNpp) return '<span class="qcag-ss-npp" style="color:#10b981;font-size:11px;font-weight:600;font-style:normal;">Kênh NPP</span>';
-        const ss = (requester && requester.ssName) || '';
-        return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
-      })()}</div>
-        <div class="qcag-request-footer">
-          <div class="qcag-request-footer-left">
-            <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
-            <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
-          </div>
-          ${waitingBadgeHtml}${deleteBtnHtml}
-        </div>
-      </div>
-    `;
+      `;
+    } catch (err) {
+      console.warn('[renderQCAGDesktopList] card render error for req:', req, err);
+      const safeId = escapeHtml(req && (req.__backendId || req.id || req.tkCode || ''));
+      const safeName = escapeHtml(String((req && req.outletName) || '-').toUpperCase());
+      return `<div class="qcag-request-item" onclick="openQCAGDesktopRequest('${safeId}')"><div class="qcag-request-name">${safeName}</div></div>`;
+    }
   }).join('');
 
   // Cố định vị trí cuộn: giữ nguyên đúng vị trí người dùng đã cuộn

@@ -674,73 +674,94 @@ function qcagGetWaitBadgeInfo(req) {
 
   let dateRef = req.createdAt || req.created_at;
   let hasHadDesign = false;
+  let editTime = null;
 
-  if (isPendingEdit) {
-    let designImgs = [];
-    try {
-      const rawImgs = req.designImages || req.design_images;
-      designImgs = Array.isArray(rawImgs) ? rawImgs : (typeof rawImgs === 'string' && rawImgs.trim() ? JSON.parse(rawImgs) : []);
-    } catch (_) {}
-
-    hasHadDesign = Boolean(
-      req.hasHadDesign || req.has_had_design ||
-      req.designCreatedAt || req.design_created_at ||
-      req.designCreatedBy || req.design_created_by ||
-      (Array.isArray(designImgs) && designImgs.length > 0)
-    );
-
-    let editTime = req.editingRequestedAt || req.editing_requested_at;
-    // Fallback: nếu chưa có editingRequestedAt nhưng trong comments có note sửa
-    if (!editTime && req.comments) {
+  try {
+    if (isPendingEdit) {
+      let designImgs = [];
       try {
-        const parsedComments = Array.isArray(req.comments) ? req.comments : JSON.parse(req.comments || '[]');
-        if (Array.isArray(parsedComments) && parsedComments.length > 0) {
-          const editComments = parsedComments.filter(c => c && (
-            c.type === 'edit-request' || c.type === 'edit_request' ||
-            c.commentType === 'edit-request' || c.commentType === 'edit_request' ||
-            (c.content && String(c.content).includes('yêu cầu sửa'))
-          ));
-          if (editComments.length > 0) {
-            editTime = editComments[editComments.length - 1].createdAt || editComments[editComments.length - 1].created_at;
-          }
-        }
+        const rawImgs = req.designImages || req.design_images;
+        designImgs = Array.isArray(rawImgs) ? rawImgs : (typeof rawImgs === 'string' && rawImgs.trim() ? JSON.parse(rawImgs) : []);
       } catch (_) {}
+
+      hasHadDesign = Boolean(
+        req.hasHadDesign || req.has_had_design ||
+        req.designCreatedAt || req.design_created_at ||
+        req.designCreatedBy || req.design_created_by ||
+        (Array.isArray(designImgs) && designImgs.length > 0)
+      );
+
+      editTime = req.editingRequestedAt || req.editing_requested_at;
+      // Fallback: nếu chưa có editingRequestedAt nhưng trong comments có note sửa
+      if (!editTime && req.comments) {
+        try {
+          const parsedComments = Array.isArray(req.comments) ? req.comments : JSON.parse(req.comments || '[]');
+          if (Array.isArray(parsedComments) && parsedComments.length > 0) {
+            const editComments = parsedComments.filter(c => c && (
+              c.type === 'edit-request' || c.type === 'edit_request' ||
+              c.commentType === 'edit-request' || c.commentType === 'edit_request' ||
+              (c.content && String(c.content).includes('yêu cầu sửa'))
+            ));
+            if (editComments.length > 0) {
+              editTime = editComments[editComments.length - 1].createdAt || editComments[editComments.length - 1].created_at;
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (editTime) {
+        // Đang có yêu cầu sửa: tính từ ngày yêu cầu sửa của đợt này
+        dateRef = editTime;
+      } else {
+        // Chưa có mốc thời gian sửa: tính từ ngày tạo request ban đầu
+        dateRef = req.createdAt || req.created_at;
+      }
     }
 
-    if (editTime) {
-      // Đang có yêu cầu sửa: tính từ ngày yêu cầu sửa của đợt này
-      dateRef = editTime;
-    } else {
-      // Chưa có mốc thời gian sửa: tính từ ngày tạo request ban đầu
-      dateRef = req.createdAt || req.created_at;
-    }
+    if (!dateRef) return null;
+
+    const calcDaysFn = (typeof qcagCalculateWaitDays === 'function')
+      ? qcagCalculateWaitDays
+      : ((typeof window !== 'undefined' && typeof window.qcagCalculateWaitDays === 'function')
+        ? window.qcagCalculateWaitDays
+        : (ref) => {
+            const d = new Date(ref);
+            if (isNaN(d.getTime())) return 0;
+            const now = new Date();
+            const sRef = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            const sNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            return Math.max(0, Math.round((sNow - sRef) / 86400000));
+          });
+
+    const waitDays = calcDaysFn(dateRef);
+    const waitColor = waitDays <= 1 ? 'wait-green' : (waitDays <= 3 ? 'wait-orange' : 'wait-red');
+    const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : (waitDays + ' ngày'));
+    const editSepHtml = isPendingEdit ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
+    const waitTitle = isPendingEdit
+      ? (editTime ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
+      : 'Thời gian chờ xử lý';
+
+    const escapeFn = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, ''));
+
+    const badgeHtml = '<span class="qcag-wait-badge ' + waitColor + '" title="' + escapeFn(waitTitle) + '">' +
+      '<svg class="qcag-wait-badge-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
+      '<span class="qcag-wait-label">' + escapeFn(waitLabel) + '</span>' +
+      editSepHtml +
+    '</span>';
+
+    return {
+      waitDays,
+      waitColor,
+      waitLabel,
+      isPendingEdit,
+      hasHadDesign,
+      waitTitle,
+      badgeHtml
+    };
+  } catch (err) {
+    console.warn('[qcagGetWaitBadgeInfo] error:', err);
+    return null;
   }
-
-  if (!dateRef) return null;
-
-  const waitDays = qcagCalculateWaitDays(dateRef);
-  const waitColor = waitDays <= 1 ? 'wait-green' : (waitDays <= 3 ? 'wait-orange' : 'wait-red');
-  const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : (waitDays + ' ngày'));
-  const editSepHtml = isPendingEdit ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
-  const waitTitle = isPendingEdit
-    ? (editTime ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
-    : 'Thời gian chờ xử lý';
-
-  const badgeHtml = '<span class="qcag-wait-badge ' + waitColor + '" title="' + escapeHtml(waitTitle) + '">' +
-    '<svg class="qcag-wait-badge-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>' +
-    '<span class="qcag-wait-label">' + escapeHtml(waitLabel) + '</span>' +
-    editSepHtml +
-  '</span>';
-
-  return {
-    waitDays,
-    waitColor,
-    waitLabel,
-    isPendingEdit,
-    hasHadDesign,
-    waitTitle,
-    badgeHtml
-  };
 }
 window.qcagGetWaitBadgeInfo = qcagGetWaitBadgeInfo;
 
