@@ -29,26 +29,6 @@
         if ('caches' in window) caches.keys().then(function (keys) { keys.forEach(function (k) { caches.delete(k); }); });
         if (redirect !== false) window.location.reload();
       };
-
-      // Tự động kiểm tra phiên bản mới ngầm khi người dùng quay lại tab (Heartbeat)
-      function checkRemoteVersion() {
-        try {
-          fetch('/version.json?_t=' + Date.now(), { cache: 'no-store' })
-            .then(function (res) { return res.ok ? res.json() : null; })
-            .then(function (data) {
-              if (data && data.version && data.version !== APP_BUILD_VER) {
-                console.log('[QCAG AUTO-UPDATE] Phát hiện phiên bản mới:', data.version);
-                try { localStorage.setItem('QCAG_SYSTEM_BUILD_VER', data.version); } catch (_) {}
-                window.location.reload();
-              }
-            }).catch(function () {});
-        } catch (_) {}
-      }
-
-      document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') { checkRemoteVersion(); }
-      });
-      setInterval(checkRemoteVersion, 10 * 60 * 1000);
     })();
   </script>
   <script>
@@ -3752,53 +3732,11 @@
   <script src="app/js/app.js?v=3.0.3"></script>
   <!-- v3.0.3 | 2026-10-26 -->
   <script>
-    // ── Service Worker registration + proactive silent auto-update ───────────────
+    // ── Service Worker Registration (Standard PWA, Long Cache) ─────────────────
     (function () {
       if (!('serviceWorker' in navigator)) return;
-
-      function autoActivateSW(reg) {
-        try {
-          if (reg && reg.waiting) {
-            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-          }
-        } catch (_) {}
-      }
-
       var swUrl = new URL('sw.js', window.location.href).pathname;
-      navigator.serviceWorker.register(swUrl).then(function (reg) {
-        // Tự động kích hoạt ngay nếu có Service Worker mới đang chờ
-        if (reg.waiting) { autoActivateSW(reg); }
-
-        // Tự động kích hoạt khi tải xong bản mới
-        reg.addEventListener('updatefound', function () {
-          var newWorker = reg.installing;
-          if (!newWorker) return;
-          newWorker.addEventListener('statechange', function () {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              autoActivateSW(reg);
-            }
-          });
-        });
-
-        // Tự động làm mới giao diện êm dịu khi bản mới nắm quyền điều khiển
-        var refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', function () {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
-        });
-
-        // Tự động kiểm tra phiên bản mới mỗi khi người dùng mở lại tab/ứng dụng
-        document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'visible') {
-            try { reg.update(); } catch (_) {}
-          }
-        });
-
-        // Kiểm tra ngầm định kỳ
-        setInterval(function () { try { reg.update(); } catch (_) {} }, 15 * 60 * 1000);
-      }).catch(function (_) {});
+      navigator.serviceWorker.register(swUrl).catch(function () {});
     })();
   </script>
 

@@ -90,32 +90,28 @@ self.addEventListener('notificationclick', function (event) {
   );
 });
 
-// ── Fetch: network-first with timeout, fallback to cache for HTML ───────────
-function fetchWithTimeout(request, timeoutMs) {
-  return new Promise(function (resolve, reject) {
-    var timer = setTimeout(function () {
-      reject(new Error('SW fetch timeout'));
-    }, timeoutMs);
-    fetch(request).then(function (response) {
-      clearTimeout(timer);
-      resolve(response);
-    }).catch(function (err) {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
-}
-
+// ── Fetch: Cache-First cho static assets (JS, CSS, fonts, images) — 100% Long Cache ──
 self.addEventListener('fetch', function (event) {
-  // Only handle GET requests
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+
   // Skip API calls, cross-origin requests, version.json, and HTML documents
   if (url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json') || url.pathname.endsWith('.html') || url.pathname === '/') return;
 
   event.respondWith(
-    fetchWithTimeout(event.request, 3500).catch(function () {
-      return caches.match(event.request);
+    caches.match(event.request).then(function (cachedResponse) {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then(function (networkResponse) {
+        if (networkResponse && networkResponse.status === 200) {
+          var responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then(function (cache) {
+            cache.put(event.request, responseClone);
+          });
+        }
+        return networkResponse;
+      });
     })
   );
 });
