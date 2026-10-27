@@ -25,6 +25,22 @@
         localStorage.setItem('ks_app_build', APP_BUILD_VER);
       } catch (_) {}
 
+      // Khi chạy local dev (127.0.0.1 / localhost): Tự động gỡ sạch Service Worker và xóa toàn bộ CacheStorage
+      // để phím F5 / reload bình thường luôn luôn tải code mới nhất từ disk, không bị kẹt cache cũ và không bị lag 3.5s!
+      var isLocalDev = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '0.0.0.0');
+      if (isLocalDev) {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            for (var i = 0; i < regs.length; i++) regs[i].unregister();
+          }).catch(function () {});
+        }
+        if ('caches' in window) {
+          caches.keys().then(function (names) {
+            names.forEach(function (n) { caches.delete(n); });
+          }).catch(function () {});
+        }
+      }
+
       window.resetAppCache = function (redirect) {
         if ('caches' in window) caches.keys().then(function (keys) { keys.forEach(function (k) { caches.delete(k); }); });
         if (redirect !== false) window.location.reload();
@@ -3793,6 +3809,8 @@
     // ── Service Worker Registration (Standard PWA, Long Cache) ─────────────────
     (function () {
       if (!('serviceWorker' in navigator)) return;
+      var isLocalDev = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '0.0.0.0');
+      if (isLocalDev) return; // Không đăng ký SW trên localhost để reload luôn nhận code mới
       var swUrl = new URL('sw.js', window.location.href).pathname;
       navigator.serviceWorker.register(swUrl).catch(function () {});
     })();

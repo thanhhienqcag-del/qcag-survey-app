@@ -90,28 +90,25 @@ self.addEventListener('notificationclick', function (event) {
   );
 });
 
-// ── Fetch: Cache-First cho static assets (JS, CSS, fonts, images) — 100% Long Cache ──
+// ── Fetch: Network-First (Luôn ưu tiên code mới từ mạng; chỉ fallback cache khi offline) ──
 self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  // Skip localhost/127.0.0.1 for instant local testing, API calls, cross-origin requests, version.json, and HTML documents
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json') || url.pathname.endsWith('.html') || url.pathname === '/') return;
+  // Bỏ qua: localhost/127.0.0.1, API calls, cross-origin requests, version.json
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json')) return;
 
   event.respondWith(
-    caches.match(event.request).then(function (cachedResponse) {
-      if (cachedResponse) {
-        return cachedResponse;
+    fetch(event.request).then(function (networkResponse) {
+      if (networkResponse && networkResponse.status === 200) {
+        var responseClone = networkResponse.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          cache.put(event.request, responseClone);
+        });
       }
-      return fetch(event.request).then(function (networkResponse) {
-        if (networkResponse && networkResponse.status === 200) {
-          var responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(event.request, responseClone);
-          });
-        }
-        return networkResponse;
-      });
+      return networkResponse;
+    }).catch(function () {
+      return caches.match(event.request);
     })
   );
 });
