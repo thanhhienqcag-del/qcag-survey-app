@@ -25,6 +25,8 @@
         try {
           // 1. Sao lưu thông tin đăng nhập và tùy chọn giao diện
           var savedSession = localStorage.getItem('ks_session');
+          var savedHkProfile = localStorage.getItem('ks_hk_profile');
+          var savedQcagPwd = localStorage.getItem('ks_qcag_pwd');
           var savedToken = localStorage.getItem('token');
           var savedTheme = localStorage.getItem('ks_theme');
           var savedRole = localStorage.getItem('ks_role');
@@ -35,6 +37,8 @@
 
           // 3. Khôi phục lại phiên đăng nhập an toàn
           if (savedSession) localStorage.setItem('ks_session', savedSession);
+          if (savedHkProfile) localStorage.setItem('ks_hk_profile', savedHkProfile);
+          if (savedQcagPwd) localStorage.setItem('ks_qcag_pwd', savedQcagPwd);
           if (savedToken) localStorage.setItem('token', savedToken);
           if (savedTheme) localStorage.setItem('ks_theme', savedTheme);
           if (savedRole) localStorage.setItem('ks_role', savedRole);

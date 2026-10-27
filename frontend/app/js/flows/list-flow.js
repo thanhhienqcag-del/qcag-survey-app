@@ -707,11 +707,26 @@ function _isRequestOwnedBySession(r) {
       ? r.requester
       : JSON.parse(r.requester || '{}');
     if (!currentSession) return false;
-    const curCode = String(currentSession.saleCode || currentSession.userCode || '').trim().toLowerCase();
-    const ownerCode = String(reqOwner.saleCode || reqOwner.userCode || '').trim().toLowerCase();
+    let curCode = String(currentSession.saleCode || currentSession.userCode || '').trim().toLowerCase();
+    let curPhone = String(currentSession.phone || '').replace(/\D/g, '');
+
+    // Cứu cánh tự động nếu currentSession bị thiếu thông tin cá nhân
+    if (!curCode && !curPhone) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('ks_hk_profile') || '{}');
+        if (saved.saleCode || saved.phone) {
+          curCode = String(saved.saleCode || '').trim().toLowerCase();
+          curPhone = String(saved.phone || '').replace(/\D/g, '');
+          currentSession.saleCode = currentSession.saleCode || saved.saleCode;
+          currentSession.phone = currentSession.phone || saved.phone;
+          currentSession.saleName = currentSession.saleName || saved.saleName;
+        }
+      } catch (_) {}
+    }
+
+    const ownerCode = String(reqOwner.saleCode || reqOwner.userCode || r.sale_code || r.saleCode || '').trim().toLowerCase();
     if (curCode && ownerCode && curCode === ownerCode) return true;
-    const curPhone = String(currentSession.phone || '').replace(/\D/g, '');
-    const ownerPhone = String(reqOwner.phone || r.phone || '').replace(/\D/g, '');
+    const ownerPhone = String(reqOwner.phone || r.sale_phone || r.phone || '').replace(/\D/g, '');
     if (curPhone && ownerPhone && curPhone.length >= 9 && ownerPhone.length >= 9 && curPhone === ownerPhone) return true;
     return false;
   } catch (e) { return false; }
@@ -932,6 +947,22 @@ function renderRequestList() {
 
   if (filtered.length === 0) {
     emptyState.classList.remove('hidden');
+    const isHk = (currentSession && currentSession.role === 'heineken');
+    const hasId = currentSession && (currentSession.saleCode || currentSession.phone);
+    if (isHk && !hasId) {
+      emptyState.innerHTML = `
+        <div class="p-8 text-center max-w-sm mx-auto">
+          <div class="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-500/20">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+          </div>
+          <h4 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1.5">Chưa nhận diện Mã Sale</h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">Hệ thống vừa cập nhật phiên bản mới. Vui lòng xác nhận lại Số điện thoại & Mã nhân viên để tải lại toàn bộ khảo sát của bạn.</p>
+          <button onclick="logout()" class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm transition-all shadow-sm">
+            Cập nhật lại Mã Sale
+          </button>
+        </div>
+      `;
+    }
     container.innerHTML = '';
     if (pgEl) pgEl.innerHTML = renderPaginationHTML(1, 1);
     if (bpgEl) bpgEl.innerHTML = '';

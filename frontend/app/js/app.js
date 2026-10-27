@@ -154,15 +154,30 @@ window.addEventListener('resize', () => {
       if (ses.role === 'heineken') {
         const loginEl = document.getElementById('loginScreen');
         if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
-        // Prefill HK profile nếu có
-        const saved = (() => { try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; } })();
+        // Prefill HK profile nếu có, hoặc khôi phục từ ses
+        let saved = (() => { try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; } })();
+        if ((!saved.phone || !saved.saleCode) && (ses.phone || ses.saleCode)) {
+          saved = {
+            phone: saved.phone || ses.phone || '',
+            saleCode: saved.saleCode || ses.saleCode || '',
+            saleName: saved.saleName || ses.saleName || ses.name || ''
+          };
+          try { localStorage.setItem('ks_hk_profile', JSON.stringify(saved)); } catch (_) {}
+        }
         const pEl = document.getElementById('hkPhone');
         const cEl = document.getElementById('hkSaleCode');
         const nEl = document.getElementById('hkSaleName');
         if (saved.phone && pEl) pEl.value = saved.phone;
         if (saved.saleCode && cEl) cEl.value = saved.saleCode;
         if (saved.saleName && nEl) nEl.value = saved.saleName;
-        // Prefill dữ liệu Bước 2 từ session
+
+        // BẢO VỆ TUYỆT ĐỐI: Nếu thiếu Số điện thoại hoặc Mã nhân viên, bắt buộc quay lại Bước 1 để điền
+        if (!saved.phone || !saved.saleCode || !saved.saleName) {
+          if (typeof loginShowStep === 'function') loginShowStep('loginStepHK1');
+          return;
+        }
+
+        // Prefill dữ liệu Bước 2 từ session khi đã có đầy đủ thông tin cá nhân
         const determinedSaleType = ses.saleType || (ses.isTBA ? 'tba' : (ses.isNPP ? 'npp' : 'dsm_sr'));
         if (typeof loginSelectSaleType === 'function') {
           loginSelectSaleType(determinedSaleType);

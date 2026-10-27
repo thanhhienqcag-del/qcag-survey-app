@@ -129,9 +129,32 @@ function loginSelectRegion(btn, region) {
 }
 
 function loginHK2Submit() {
-  const saved = (() => {
+  let saved = (() => {
     try { return JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}'); } catch (e) { return {}; }
   })();
+
+  // Cứu dữ liệu từ input hoặc session nếu saved bị thiếu
+  if (!saved.phone || !saved.saleCode) {
+    const pVal = (document.getElementById('hkPhone') && document.getElementById('hkPhone').value.trim()) || '';
+    const cVal = (document.getElementById('hkSaleCode') && document.getElementById('hkSaleCode').value.trim()) || '';
+    const nVal = (document.getElementById('hkSaleName') && document.getElementById('hkSaleName').value.trim()) || '';
+    const ses = (() => { try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}'); } catch (_) { return {}; } })();
+    saved = {
+      phone: saved.phone || pVal || ses.phone || '',
+      saleCode: saved.saleCode || cVal || ses.saleCode || '',
+      saleName: saved.saleName || nVal || ses.saleName || ses.name || ''
+    };
+    if (saved.phone && saved.saleCode) {
+      try { localStorage.setItem(HK_PROFILE_KEY, JSON.stringify(saved)); } catch (_) {}
+    }
+  }
+
+  // Khóa an toàn: Nếu vẫn không có thông tin cá nhân, bắt buộc quay lại Bước 1
+  if (!saved.phone || !saved.saleCode) {
+    showToast('Vui lòng nhập đầy đủ Số điện thoại và Mã nhân viên');
+    loginShowStep('loginStepHK1');
+    return;
+  }
 
   if (!_loginSelectedSaleType) {
     showToast('Vui lòng chọn loại hình Sale');
