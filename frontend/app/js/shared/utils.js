@@ -695,7 +695,11 @@ function qcagGetWaitBadgeInfo(req) {
       try {
         const parsedComments = Array.isArray(req.comments) ? req.comments : JSON.parse(req.comments || '[]');
         if (Array.isArray(parsedComments) && parsedComments.length > 0) {
-          const editComments = parsedComments.filter(c => c && (c.type === 'edit-request' || c.type === 'edit_request' || (c.content && String(c.content).includes('yêu cầu sửa'))));
+          const editComments = parsedComments.filter(c => c && (
+            c.type === 'edit-request' || c.type === 'edit_request' ||
+            c.commentType === 'edit-request' || c.commentType === 'edit_request' ||
+            (c.content && String(c.content).includes('yêu cầu sửa'))
+          ));
           if (editComments.length > 0) {
             editTime = editComments[editComments.length - 1].createdAt || editComments[editComments.length - 1].created_at;
           }
@@ -703,11 +707,11 @@ function qcagGetWaitBadgeInfo(req) {
       } catch (_) {}
     }
 
-    if (hasHadDesign && editTime) {
-      // Đã có thiết kế ít nhất 1 lần: tính từ ngày yêu cầu sửa đầu tiên của đợt này
+    if (editTime) {
+      // Đang có yêu cầu sửa: tính từ ngày yêu cầu sửa của đợt này
       dateRef = editTime;
     } else {
-      // Chưa từng có thiết kế: tính từ ngày tạo request ban đầu
+      // Chưa có mốc thời gian sửa: tính từ ngày tạo request ban đầu
       dateRef = req.createdAt || req.created_at;
     }
   }
@@ -719,7 +723,7 @@ function qcagGetWaitBadgeInfo(req) {
   const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : (waitDays + ' ngày'));
   const editSepHtml = isPendingEdit ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
   const waitTitle = isPendingEdit
-    ? (hasHadDesign ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
+    ? (editTime ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
     : 'Thời gian chờ xử lý';
 
   const badgeHtml = '<span class="qcag-wait-badge ' + waitColor + '" title="' + escapeHtml(waitTitle) + '">' +

@@ -1,6 +1,6 @@
 {
-  "version": "2026.10.27_V12_04",
-  "buildTime": "2026-10-27T10:22:00+07:00",
+  "version": "2026.10.27_V12_06",
+  "buildTime": "2026-10-27T11:25:00+07:00",
   "environment": "production",
-  "note": "QCAG Database V12 Production Release - Mobile Production Approval Fix"
+  "note": "QCAG Database V12 Production Release - Day counter for edit requests fix"
 }

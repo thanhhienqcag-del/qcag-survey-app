@@ -397,6 +397,20 @@ function getCardQuoteBadge(req) {
   }
 
   // 4. Quote list finished loading and no quote found
+  let reqItems = [];
+  try {
+    reqItems = Array.isArray(req.items) ? req.items : JSON.parse(req.items || '[]');
+  } catch (e) { reqItems = []; }
+  const hasSurveyNeedSize = Array.isArray(reqItems) && reqItems.some(it => it && it.type !== 'Hạng mục khác' && !!it.survey && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+  if (hasSurveyNeedSize) {
+    return {
+      isLoading: false,
+      hasQuote: false,
+      label: 'Chờ khảo sát',
+      cls: 'bg-amber-500/20 text-amber-500 border border-amber-500/40 font-bold'
+    };
+  }
+
   return { isLoading: false, hasQuote: false, label: '', cls: '' };
 }
 
@@ -1099,7 +1113,7 @@ function renderRequestList() {
             <div class="mt-auto pt-1 flex flex-col gap-0.5 min-h-[16px]">
               ${badge.isLoading ? `
                 <span class="text-[9.5px] px-2 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block leading-tight font-mono tracking-widest">...</span>
-              ` : (badge.hasQuote || badge.isWarranty) ? `
+              ` : (badge.hasQuote || badge.isWarranty || badge.label) ? `
                 <span class="text-[9.5px] px-1.5 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block max-w-full leading-tight" style="text-overflow:ellipsis">${badge.label}</span>
               ` : ''}
               ${req.deleteRequested ? `<div class="hk-delete-pending-tag text-[9px] py-0.5">Đang chờ QCAG xóa</div>` : ''}
@@ -1156,7 +1170,7 @@ function renderRequestList() {
                <div class="mt-1.5 flex items-center gap-1.5 flex-wrap min-w-0">
                  ${badge.isLoading ? `
                    <span class="text-xs px-2 py-0.5 rounded-full ${badge.cls} shadow-sm whitespace-nowrap overflow-hidden inline-block font-mono tracking-widest">...</span>
-                 ` : (badge.hasQuote || badge.isWarranty) ? `
+                 ` : (badge.hasQuote || badge.isWarranty || badge.label) ? `
                    <span class="text-xs px-1.5 py-0.5 rounded-full ${badge.cls} whitespace-nowrap overflow-hidden inline-block" style="max-width:100%;text-overflow:ellipsis">${badge.label}</span>
                  ` : ''}
                  ${req.deleteRequested ? `<span class="hk-delete-pending-badge">Đang chờ QCAG xóa</span>` : ''}

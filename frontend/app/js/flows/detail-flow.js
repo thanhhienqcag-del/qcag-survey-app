@@ -651,6 +651,24 @@ async function showRequestDetail(id) {
                 ${items.map((item, idx) => {
                   const isOther = item.type === 'Hạng mục khác' || String(item.type || '').toLowerCase().includes('khác');
                   const requestText = isOther ? (item.otherContent || item.other_content || '') : (item.note || item.notes || '');
+                  const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
+                  let sizeMobileHtml = '-';
+                  if (!isOther) {
+                    if (item.survey) {
+                      if (item.surveySize && item.surveySize.width && item.surveySize.height) {
+                        const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.surveySize.width, item.surveySize.height) : `${item.surveySize.width}m x ${item.surveySize.height}m`;
+                        const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+                        sizeMobileHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap">${dim}${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
+                      } else {
+                        const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+                        sizeMobileHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
+                      }
+                    } else if (item.useOldSize) {
+                      sizeMobileHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
+                    } else {
+                      sizeMobileHtml = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`;
+                    }
+                  }
                   return `
                     <div class="hk-item-box rounded-xl p-3">
                       <div class="flex items-start justify-between">
@@ -662,7 +680,7 @@ async function showRequestDetail(id) {
                           <div class="hk-item-grid mt-2 text-sm text-gray-600 grid grid-cols-2 gap-2">
                             <div><span class="hk-item-label text-gray-500 text-xs">Brand</span><div class="hk-item-val font-medium">${!isOther ? (item.brand || '-') : '-'}</div></div>
                             <div><span class="hk-item-label text-gray-500 text-xs">Hình thức</span><div class="hk-item-val font-medium">${!isOther ? (item.action || '-') : '-'}</div></div>
-                            <div><span class="hk-item-label text-gray-500 text-xs">Kích thước</span><div class="hk-item-val font-medium">${!isOther ? (item.survey ? `<span class="qcag-survey-badge">Khảo sát</span>` : (item.useOldSize ? '<span class="qcag-oldsize-badge">KT cũ</span>' : (typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`))) : '-'}</div></div>
+                            <div><span class="hk-item-label text-gray-500 text-xs">Kích thước</span><div class="hk-item-val font-medium">${sizeMobileHtml}</div></div>
                             <div><span class="hk-item-label text-gray-500 text-xs">Yêu cầu</span><div class="hk-item-val text-sm text-gray-600">${requestText ? escapeHtml(requestText) : '-'}</div></div>
                           </div>
                         </div>
@@ -844,7 +862,24 @@ async function showRequestDetail(id) {
                     const brandText = !isOther ? (item.brand || '-') : '-';
                     const actionText = !isOther ? (item.action || '-') : '-';
                     const polesText = !isOther ? (item.poles ? (item.poles + ' trụ') : '0 trụ') : '-';
-                    const sizeHtml = !isOther ? (item.survey ? `<span class="qcag-survey-badge">Khảo sát</span>` : (item.useOldSize ? '<span class="qcag-oldsize-badge">KT cũ</span>' : `<span class="font-mono text-xs font-semibold">${typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`}</span>`)) : '-';
+                    const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
+                    let sizeHtml = '-';
+                    if (!isOther) {
+                      if (item.survey) {
+                        if (item.surveySize && item.surveySize.width && item.surveySize.height) {
+                          const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.surveySize.width, item.surveySize.height) : `${item.surveySize.width}m x ${item.surveySize.height}m`;
+                          const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+                          sizeHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap"><span class="font-mono text-xs font-semibold">${dim}</span>${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
+                        } else {
+                          const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+                          sizeHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
+                        }
+                      } else if (item.useOldSize) {
+                        sizeHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
+                      } else {
+                        sizeHtml = `<span class="font-mono text-xs font-semibold">${typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`}</span>`;
+                      }
+                    }
                     const reqNote = isOther ? (item.otherContent || item.other_content || '-') : (item.note || item.notes || '-');
                     return `
                       <tr class="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">

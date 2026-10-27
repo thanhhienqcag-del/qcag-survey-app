@@ -4316,7 +4316,8 @@ async function qcagConfirmSurveySize() {
   const ok = await qcagDesktopPersistRequest(updated, 'Đã lưu kích thước khảo sát');
   if (ok) {
     qcagCloseSurveySizeModal();
-    if (typeof showRequestDetail === 'function' && typeof isQcagMobileMode === 'function' && isQcagMobileMode()) {
+    const dtModal = document.getElementById('requestDetailModal');
+    if (dtModal && !dtModal.classList.contains('hidden') && typeof showRequestDetail === 'function') {
       showRequestDetail(currentDetailRequest.__backendId);
     }
   }
@@ -4345,7 +4346,8 @@ async function qcagReopenSurveyForItem() {
   const ok = await qcagDesktopPersistRequest(updated, 'Đã đặt lại trạng thái khảo sát');
   if (ok) {
     qcagCloseSurveySizeModal();
-    if (typeof showRequestDetail === 'function' && typeof isQcagMobileMode === 'function' && isQcagMobileMode()) {
+    const dtModal = document.getElementById('requestDetailModal');
+    if (dtModal && !dtModal.classList.contains('hidden') && typeof showRequestDetail === 'function') {
       showRequestDetail(currentDetailRequest.__backendId);
     }
   }

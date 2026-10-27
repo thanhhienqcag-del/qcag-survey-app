@@ -3092,7 +3092,13 @@ const KS_REQUESTS_SELECT_SQL = `
           'poles', ri.poles,
           'note', ri.note,
           'brandChangedByQcag', ri.brand_changed_by_qcag,
-          'addedByQcag', ri.added_by_qcag
+          'addedByQcag', ri.added_by_qcag,
+          'survey', COALESCE(ri.survey, false),
+          'surveySize', CASE 
+            WHEN ri.survey_width IS NOT NULL AND ri.survey_height IS NOT NULL AND ri.survey_width > 0 AND ri.survey_height > 0 
+            THEN json_build_object('width', ri.survey_width, 'height', ri.survey_height)
+            ELSE NULL 
+          END
         ) ORDER BY ri.seq)::text
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
@@ -3133,7 +3139,6 @@ const KS_REQUESTS_SELECT_SQL = `
       CASE 
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
-          AND (d_lat.created_at IS NULL OR n_edit.created_at > d_lat.created_at)
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
@@ -3225,7 +3230,6 @@ const KS_REQUESTS_SELECT_SQL = `
         )
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
-        AND (d_lat.created_at IS NULL OR n.created_at > d_lat.created_at)
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
@@ -3283,7 +3287,6 @@ const KS_REQUESTS_LITE_SQL = `
       CASE 
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
-          AND (d_lat.created_at IS NULL OR n_edit.created_at > d_lat.created_at)
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
@@ -3362,7 +3365,6 @@ const KS_REQUESTS_LITE_SQL = `
         )
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
-        AND (d_lat.created_at IS NULL OR n.created_at > d_lat.created_at)
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
@@ -3882,7 +3884,13 @@ async function getRequestDetailDirect(idOrTkCode) {
     ] = await Promise.all([
         pool.query(`
             SELECT id, seq, type, other_content AS "otherContent", action, brand, width, height, 
-                   use_old_size AS "useOldSize", poles, note, brand_changed_by_qcag AS "brandChangedByQcag", added_by_qcag AS "addedByQcag"
+                   use_old_size AS "useOldSize", poles, note, brand_changed_by_qcag AS "brandChangedByQcag", added_by_qcag AS "addedByQcag",
+                   COALESCE(survey, false) AS "survey",
+                   CASE 
+                     WHEN survey_width IS NOT NULL AND survey_height IS NOT NULL AND survey_width > 0 AND survey_height > 0 
+                     THEN json_build_object('width', survey_width, 'height', survey_height)
+                     ELSE NULL 
+                   END AS "surveySize"
             FROM request_items
             WHERE request_tk_code = ?
             ORDER BY seq
@@ -3938,6 +3946,31 @@ async function getRequestDetailDirect(idOrTkCode) {
 
     row.design_images = JSON.stringify((designRows || []).map(d => d.url));
     row.comments = JSON.stringify(noteRows || []);
+
+    // Accurately compute editing_requested_at and has_had_design
+    let editingRequestedAt = null;
+    if (Array.isArray(noteRows) && noteRows.length > 0) {
+        let lastEditIdx = -1;
+        let lastResIdx = -1;
+        for (let i = 0; i < noteRows.length; i++) {
+            const nt = String(noteRows[i].commentType || '').toLowerCase();
+            if (nt === 'edit-request' || nt === 'edit_request') lastEditIdx = i;
+            if (nt === 'edit-resolved') lastResIdx = i;
+        }
+        if (lastEditIdx !== -1 && (lastResIdx === -1 || lastEditIdx > lastResIdx)) {
+            let firstEditAfterRes = noteRows[lastEditIdx];
+            for (let i = (lastResIdx === -1 ? 0 : lastResIdx + 1); i <= lastEditIdx; i++) {
+                const nt = String(noteRows[i].commentType || '').toLowerCase();
+                if (nt === 'edit-request' || nt === 'edit_request') {
+                    firstEditAfterRes = noteRows[i];
+                    break;
+                }
+            }
+            editingRequestedAt = firstEditAfterRes ? (firstEditAfterRes.createdAt || firstEditAfterRes.created_at) : null;
+        }
+    }
+    row.editing_requested_at = editingRequestedAt;
+    row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
 
     return row;
 }
@@ -4431,12 +4464,16 @@ app.post("/api/ks/requests", async (req, res) => {
                 const poles = Number(it.poles) || 0;
                 const note = toNullableString(it.note);
                 const otherContent = toNullableString(it.otherContent);
+                const isSurvey = Boolean(it.survey || (!it.useOldSize && (!it.width || Number(it.width) === 0) && it.type !== 'Hạng mục khác'));
+                const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : null;
+                const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : null;
 
                 await pool.query(`
                     INSERT INTO request_items (
                         id, request_tk_code, seq, type, other_content, action, brand,
-                        width, height, use_old_size, poles, note, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        width, height, use_old_size, poles, note,
+                        survey, survey_width, survey_height, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET
                         type = EXCLUDED.type,
                         other_content = EXCLUDED.other_content,
@@ -4446,10 +4483,14 @@ app.post("/api/ks/requests", async (req, res) => {
                         height = EXCLUDED.height,
                         use_old_size = EXCLUDED.use_old_size,
                         poles = EXCLUDED.poles,
-                        note = EXCLUDED.note
+                        note = EXCLUDED.note,
+                        survey = EXCLUDED.survey,
+                        survey_width = EXCLUDED.survey_width,
+                        survey_height = EXCLUDED.survey_height
                 `, [
                     itemId, tkCode, seq, itemType, otherContent, action, brand,
-                    width, height, useOldSize, poles, note, now
+                    width, height, useOldSize, poles, note,
+                    isSurvey, surveyW, surveyH, now
                 ]);
             }
         }
@@ -4804,6 +4845,70 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             vals.push(tkCode);
             await pool.query(`UPDATE requests SET ${fields.join(', ')} WHERE tk_code = ?`, vals);
         }
+
+        // Handle item edits & survey dimensions updates
+        if ('items' in b) {
+            let itemsToSave = [];
+            try {
+                itemsToSave = typeof b.items === 'string' ? JSON.parse(b.items) : (Array.isArray(b.items) ? b.items : []);
+            } catch (_) { itemsToSave = []; }
+            if (Array.isArray(itemsToSave) && itemsToSave.length > 0) {
+                for (let i = 0; i < itemsToSave.length; i++) {
+                    const it = itemsToSave[i] || {};
+                    const itemId = toNullableString(it.id) || `rqi_${tkCode}_${i + 1}`;
+                    const seq = Number(it.seq) || (i + 1);
+                    const itemType = toNullableString(it.type) || 'Hạng mục khảo sát';
+                    const action = toNullableString(it.action) || 'Làm mới';
+                    const brand = toNullableString(it.brand) || null;
+                    const width = it.width && !isNaN(Number(it.width)) ? Number(it.width) : null;
+                    const height = it.height && !isNaN(Number(it.height)) ? Number(it.height) : null;
+                    const useOldSize = Boolean(it.useOldSize);
+                    const poles = Number(it.poles) || 0;
+                    const note = toNullableString(it.note);
+                    const otherContent = toNullableString(it.otherContent);
+                    const isSurvey = Boolean(it.survey);
+                    const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : null;
+                    const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : null;
+                    const brandChangedByQcag = Boolean(it.brandChangedByQcag || it.brand_changed_by_qcag);
+                    const addedByQcag = Boolean(it.addedByQcag || it.added_by_qcag);
+
+                    await pool.query(`
+                        INSERT INTO request_items (
+                            id, request_tk_code, seq, type, other_content, action, brand,
+                            width, height, use_old_size, poles, note,
+                            survey, survey_width, survey_height,
+                            brand_changed_by_qcag, added_by_qcag, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                        ON CONFLICT (id) DO UPDATE SET
+                            seq = EXCLUDED.seq,
+                            type = EXCLUDED.type,
+                            other_content = EXCLUDED.other_content,
+                            action = EXCLUDED.action,
+                            brand = EXCLUDED.brand,
+                            width = EXCLUDED.width,
+                            height = EXCLUDED.height,
+                            use_old_size = EXCLUDED.use_old_size,
+                            poles = EXCLUDED.poles,
+                            note = EXCLUDED.note,
+                            survey = EXCLUDED.survey,
+                            survey_width = EXCLUDED.survey_width,
+                            survey_height = EXCLUDED.survey_height,
+                            brand_changed_by_qcag = EXCLUDED.brand_changed_by_qcag,
+                            added_by_qcag = EXCLUDED.added_by_qcag
+                    `, [
+                        itemId, tkCode, seq, itemType, otherContent, action, brand,
+                        width, height, useOldSize, poles, note,
+                        isSurvey, surveyW, surveyH,
+                        brandChangedByQcag, addedByQcag
+                    ]);
+                }
+                const validIds = itemsToSave.map(x => toNullableString(x.id)).filter(Boolean);
+                if (validIds.length > 0) {
+                    await pool.query(`DELETE FROM request_items WHERE request_tk_code = ? AND id NOT IN (${validIds.map(() => '?').join(',')})`, [tkCode, ...validIds]);
+                }
+            }
+        }
+        ksInvalidateCache();
 
         if (b.status === 'done') {
             try {
