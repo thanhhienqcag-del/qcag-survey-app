@@ -32,21 +32,17 @@ function getLocalDevCandidates(req) {
 
 module.exports = async function handler(req, res) {
   const host = String((req && req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || '').toLowerCase();
-  const isProdHost = host.includes('vercel.app') || host.includes('qcag');
   const defaultProdBackend = 'https://ks-backend-493469512136.asia-southeast1.run.app';
-  const defaultStagingBackend = 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
 
   const explicitBackend = String(
-    process.env.BACKEND_URL || process.env.KS_BACKEND_URL ||
-    (isProdHost ? defaultProdBackend : defaultStagingBackend)
+    process.env.BACKEND_URL || process.env.KS_BACKEND_URL || defaultProdBackend
   ).trim();
   const backendCandidates = Array.from(new Set([
     explicitBackend,
     String(process.env.KS_BACKEND_FALLBACK_URL || '').trim(),
     ...splitList(process.env.KS_BACKEND_CANDIDATES),
     ...getLocalDevCandidates(req),
-    defaultProdBackend,
-    defaultStagingBackend
+    defaultProdBackend
   ].filter(Boolean)));
 
   const env = {

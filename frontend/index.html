@@ -17,54 +17,86 @@
   <link rel="shortcut icon" href="./app/assets/logo-qcag-2.0.ico?v=20261010_final" type="image/x-icon">
   <script>
     (function () {
-      // Tự động đồng bộ phiên bản ngầm và dọn cache cũ trong nền (Zero User Friction)
-      try {
-        var APP_BUILD_VER = '3.0.3';
-        var prevBuild = localStorage.getItem('ks_app_build');
-        if (prevBuild && prevBuild !== APP_BUILD_VER) {
-          if ('caches' in window) {
-            caches.keys().then(function (keys) {
-              keys.forEach(function (k) {
-                if (k.indexOf('v' + APP_BUILD_VER) === -1) {
-                  try { caches.delete(k); } catch (_) {}
-                }
-              });
-            });
-          }
-        }
-        localStorage.setItem('ks_app_build', APP_BUILD_VER);
-      } catch (_) {}
+      // ── QCAG AUTO VERSION & ZERO-TOUCH CACHE INITIATOR ────────────────────────────
+      var APP_BUILD_VER = '2026.10.27_V12_01';
+      window.QCAG_SYSTEM_BUILD_VER = APP_BUILD_VER;
 
-      // Hàm reset cache toàn cầu có thể gọi bất kỳ lúc nào từ console hoặc nút bấm
-      window.resetAppCache = function (redirect) {
+      function performZeroTouchWipe(newVer) {
         try {
+          // 1. Sao lưu thông tin đăng nhập và tùy chọn giao diện
+          var savedSession = localStorage.getItem('ks_session');
+          var savedToken = localStorage.getItem('token');
+          var savedTheme = localStorage.getItem('ks_theme');
+          var savedRole = localStorage.getItem('ks_role');
+
+          // 2. Dọn sạch toàn bộ localStorage & sessionStorage cũ
           try { localStorage.clear(); } catch (_) {}
           try { sessionStorage.clear(); } catch (_) {}
+
+          // 3. Khôi phục lại phiên đăng nhập an toàn
+          if (savedSession) localStorage.setItem('ks_session', savedSession);
+          if (savedToken) localStorage.setItem('token', savedToken);
+          if (savedTheme) localStorage.setItem('ks_theme', savedTheme);
+          if (savedRole) localStorage.setItem('ks_role', savedRole);
+          localStorage.setItem('ks_app_build', newVer);
+          localStorage.setItem('QCAG_SYSTEM_BUILD_VER', newVer);
+
+          // 4. Xóa sạch IndexedDB cache
           if ('indexedDB' in window) {
             try { indexedDB.deleteDatabase('ks_offline_db'); } catch (_) {}
           }
+
+          // 5. Hủy toàn bộ ServiceWorker & CacheStorage cũ
           var p1 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function (regs) {
             return Promise.all(regs.map(function (r) { return r.unregister(); }));
           }) : Promise.resolve();
           var p2 = ('caches' in window) ? caches.keys().then(function (keys) {
             return Promise.all(keys.map(function (k) { return caches.delete(k); }));
           }) : Promise.resolve();
+
           Promise.all([p1, p2]).then(function () {
-            if (redirect !== false) {
-              window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
-            }
+            window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
           }).catch(function () {
-            if (redirect !== false) {
-              window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
-            }
+            window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
           });
         } catch (_) {
-          if (redirect !== false) {
-            window.location.replace(window.location.origin + window.location.pathname + '?v=' + Date.now());
-          }
+          window.location.replace(window.location.origin + window.location.pathname + '?_bust=' + Date.now());
         }
+      }
+
+      // Kiểm tra ngay khi tải trang: nếu phiên bản cũ -> Tự động dọn & tải lại ngay
+      var prevBuild = localStorage.getItem('QCAG_SYSTEM_BUILD_VER') || localStorage.getItem('ks_app_build');
+      if (!prevBuild || prevBuild !== APP_BUILD_VER) {
+        performZeroTouchWipe(APP_BUILD_VER);
+        return;
+      }
+
+      window.resetAppCache = function (redirect) {
+        performZeroTouchWipe(APP_BUILD_VER);
       };
 
+      // Tự động kiểm tra phiên bản mới ngầm khi người dùng quay lại tab (Heartbeat)
+      function checkRemoteVersion() {
+        try {
+          fetch('/version.json?_t=' + Date.now(), { cache: 'no-store' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (data) {
+              if (data && data.version && data.version !== APP_BUILD_VER) {
+                console.log('[QCAG AUTO-UPDATE] Phát hiện phiên bản mới:', data.version);
+                performZeroTouchWipe(data.version);
+              }
+            }).catch(function () {});
+        } catch (_) {}
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') { checkRemoteVersion(); }
+      });
+      setInterval(checkRemoteVersion, 10 * 60 * 1000);
+    })();
+  </script>
+  <script>
+    (function () {
       try {
         var saved = localStorage.getItem('ks_theme');
         var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -122,8 +154,7 @@
       } catch (_) { }
       var isProdHost = host.includes('vercel.app') || host.includes('qcag');
       var defaultProdBackend = "https://ks-backend-493469512136.asia-southeast1.run.app";
-      var stagingBackend = "https://ks-backend-staging-493469512136.asia-southeast1.run.app";
-      var defaultBackend = localOverride || (isProdHost ? defaultProdBackend : stagingBackend);
+      var defaultBackend = localOverride || defaultProdBackend;
       if (typeof window.__env.BACKEND_URL === 'undefined') {
         window.__env.BACKEND_URL = defaultBackend;
       }

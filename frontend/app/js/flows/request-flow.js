@@ -1250,12 +1250,13 @@ async function validateTab1() {
   } catch (e) {}
 
   // If outlet matches an existing request, require explicit confirmation or block if pending
-  if (duplicateOutletState && duplicateOutletState.mode === 'pending') {
+  const isProducedMode = duplicateOutletState && (duplicateOutletState.mode === 'produced' || (duplicateOutletState.backendLock && duplicateOutletState.backendLock.state === 'confirm_new_phase'));
+  if (!isProducedMode && duplicateOutletState && duplicateOutletState.mode === 'pending') {
     showToast('Outlet này đang có yêu cầu chưa sản xuất. Bạn chỉ được chỉnh sửa trên yêu cầu cũ!');
     showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
     return;
   }
-  if (duplicateOutletState && !userConfirmedNewForOutlet) {
+  if (!isProducedMode && duplicateOutletState && !userConfirmedNewForOutlet) {
     showDuplicateOutletModal(duplicateOutletState.existingRequests);
     return;
   }
@@ -1459,8 +1460,8 @@ async function submitNewRequest() {
     status: 'pending',
     requester: JSON.stringify(sessionForReq),
     __backendId: __preBackendId,
-    allowDuplicate: Boolean(userConfirmedNewForOutlet),
-    userConfirmedNewForOutlet: Boolean(userConfirmedNewForOutlet)
+    allowDuplicate: Boolean(userConfirmedNewForOutlet || (duplicateOutletState && (duplicateOutletState.mode === 'produced' || (duplicateOutletState.backendLock && duplicateOutletState.backendLock.state === 'confirm_new_phase')))),
+    userConfirmedNewForOutlet: Boolean(userConfirmedNewForOutlet || (duplicateOutletState && duplicateOutletState.mode === 'produced'))
   };
 
   // NOTE: Images are now included directly in the POST body (compressed base64).
@@ -1468,7 +1469,8 @@ async function submitNewRequest() {
   // No more background PATCH needed — images are guaranteed to be saved.
 
   // Hard block: Cannot submit new request if outlet currently has an active unproduced request
-  if (duplicateOutletState && duplicateOutletState.mode === 'pending') {
+  const isProducedMode = duplicateOutletState && (duplicateOutletState.mode === 'produced' || (duplicateOutletState.backendLock && duplicateOutletState.backendLock.state === 'confirm_new_phase'));
+  if (!isProducedMode && duplicateOutletState && duplicateOutletState.mode === 'pending') {
     showToast('Outlet này đã tạo yêu cầu và chưa sản xuất. Bạn chỉ được chỉnh sửa trên yêu cầu cũ!');
     btn.disabled = false;
     btn.textContent = 'Xác nhận yêu cầu';

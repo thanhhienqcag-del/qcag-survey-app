@@ -2,7 +2,7 @@
 // Must be served at / for full PWA standalone push support on iOS 16.4+
 'use strict';
 
-const CACHE_NAME = 'qcag-v3.0.3';
+const CACHE_NAME = 'qcag-v2026.10.27_V12_01';
 
 // ── Install: immediately activate ──────────────────────────────────────────────
 self.addEventListener('install', function (event) {
@@ -110,8 +110,8 @@ self.addEventListener('fetch', function (event) {
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  // Skip API calls and cross-origin requests
-  if (url.pathname.startsWith('/api/') || url.origin !== location.origin) return;
+  // Skip API calls, cross-origin requests, version.json, and HTML documents
+  if (url.pathname.startsWith('/api/') || url.origin !== location.origin || url.pathname.endsWith('version.json') || url.pathname.endsWith('.html') || url.pathname === '/') return;
 
   event.respondWith(
     fetchWithTimeout(event.request, 3500).catch(function () {

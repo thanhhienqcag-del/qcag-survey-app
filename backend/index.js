@@ -4059,15 +4059,21 @@ app.post("/api/ks/requests", async (req, res) => {
 
         // Outlet Exclusivity Check: Prevent creating a new survey request if this outlet is already in progress
         if (outletCode && !isPlaceholderOutlet && !allowDuplicate) {
-            // 1. Check if an active survey request already exists for this outlet
+            // 1. Check if an active survey request already exists for this outlet (loại trừ các request đã có báo giá ra đơn hàng)
             const [activeReqRows] = await pool.query(
-                `SELECT tk_code, status 
-                 FROM requests 
-                 WHERE (outlet_id = ? OR outlet_id = ('OUT_' || ?))
-                   AND (is_deleted = false OR is_deleted IS NULL)
-                   AND status NOT IN ('cancelled', 'completed', 'done', 'exported')
+                `SELECT r.tk_code, r.status 
+                 FROM requests r 
+                 WHERE (r.outlet_id = ? OR r.outlet_id = ('OUT_' || ?) OR REGEXP_REPLACE(LOWER(r.outlet_id::text), '^out_', '') = LOWER(?))
+                   AND (r.is_deleted = false OR r.is_deleted IS NULL)
+                   AND r.status NOT IN ('cancelled', 'completed', 'done', 'exported')
+                   AND NOT EXISTS (
+                       SELECT 1 FROM quotations q
+                       JOIN order_quotes oq ON oq.quotation_code = q.quote_code
+                       JOIN orders ord ON ord.id = oq.order_id AND (ord.is_deleted = false OR ord.is_deleted IS NULL)
+                       WHERE (q.tk_code = r.tk_code OR q.request_tk_code = r.tk_code)
+                   )
                  LIMIT 1`,
-                [outletCode, outletCode]
+                [outletCode, outletCode, outletCode]
             );
             if (activeReqRows && activeReqRows.length > 0) {
                 console.warn(`[ks/create 409] Outlet ${outletCode} has active request ${activeReqRows[0].tk_code}`);
