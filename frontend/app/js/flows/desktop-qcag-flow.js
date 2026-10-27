@@ -96,27 +96,26 @@ function qcagFormatRegionDisplay(val) {
 
 function qcagDesktopGetRequestRegionKey(r) {
   if (!r) return null;
-  if (r._cachedRegKey !== undefined) return r._cachedRegKey;
+  if (r._cachedRegKey) return r._cachedRegKey;
   const requester = qcagDesktopParseJson(r.requester, {});
-  const isNPP = typeof r._cachedIsNPP === 'boolean'
-    ? r._cachedIsNPP
-    : (String(requester.saleType || '').toLowerCase() === 'npp' || Boolean(requester.isNPP));
+  const saleType = String(r.saleType || requester.saleType || '').toLowerCase();
+  const isNPP = saleType === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
   if (isNPP) {
-    r._cachedIsNPP = true;
     r._cachedRegKey = 'npp';
     return 'npp';
   }
-  r._cachedIsNPP = false;
   const regionRaw = String(r.outletArea || r.area || requester.region || r.region || '').trim();
-  if (/south\s*4|\bs4\b/i.test(regionRaw)) r._cachedRegKey = 's4';
-  else if (/south\s*5|\bs5\b/i.test(regionRaw)) r._cachedRegKey = 's5';
-  else if (/south\s*16|\bs16\b/i.test(regionRaw)) r._cachedRegKey = 's16';
-  else if (/south\s*17|\bs17\b/i.test(regionRaw)) r._cachedRegKey = 's17';
-  else if (/south\s*24|\bs?24\b/i.test(regionRaw)) r._cachedRegKey = '24';
-  else if (/south\s*19|\bs19\b/i.test(regionRaw)) r._cachedRegKey = 's19';
-  else if (/mon?dern\W*on\W*team\W*8|\bmot8\b|modern\W*team\W*8/i.test(regionRaw)) r._cachedRegKey = 'mot8';
-  else r._cachedRegKey = null;
-  return r._cachedRegKey;
+  let key = null;
+  if (/south\s*4|\bs0?4\b/i.test(regionRaw)) key = 's4';
+  else if (/south\s*5|\bs0?5\b/i.test(regionRaw)) key = 's5';
+  else if (/south\s*16|\bs16\b/i.test(regionRaw)) key = 's16';
+  else if (/south\s*17|\bs17\b/i.test(regionRaw)) key = 's17';
+  else if (/south\s*24|\bs?24\b/i.test(regionRaw)) key = '24';
+  else if (/south\s*19|\bs19\b/i.test(regionRaw)) key = 's19';
+  else if (/mon?dern\W*on\W*team\W*8|\bmot8\b|modern\W*team\W*8/i.test(regionRaw)) key = 'mot8';
+
+  if (key) r._cachedRegKey = key;
+  return key;
 }
 
 const _qcagJsonParseCache = new Map();
@@ -7380,11 +7379,11 @@ function qcagNavRenderList() {
   qcagNavUpdateMetricsAndCounts(reqs);
 
   const regionPatterns = {
-    's4': /south\s*4|\bs4\b/i,
-    's5': /south\s*5|\bs5\b/i,
+    's4': /south\s*4|\bs0?4\b/i,
+    's5': /south\s*5|\bs0?5\b/i,
     's16': /south\s*16|\bs16\b/i,
     's17': /south\s*17|\bs17\b/i,
-    '24': /south\s*24|\b24\b/i,
+    '24': /south\s*24|\bs?24\b/i,
     's19': /south\s*19|\bs19\b/i,
     'mot8': /mon?dern\W*on\W*team\W*8|\bmot8\b|modern\W*team\W*8/i
   };
@@ -7399,10 +7398,18 @@ function qcagNavRenderList() {
       }
       // region filter
       if (rf) {
-        const requester = qcagDesktopParseJson(r.requester, {});
-        const regionRaw = String(requester.region || r.region || '');
-        const pattern = regionPatterns[rf.toLowerCase()] || new RegExp(rf.replace(/[^a-z0-9]/gi, ''), 'i');
-        if (!pattern.test(regionRaw)) return false;
+        const targetRf = (rf.toLowerCase() === 's24' || rf === '24') ? '24' : rf.toLowerCase();
+        const regKey = qcagDesktopGetRequestRegionKey(r);
+        if (targetRf === 'npp') {
+          if (regKey !== 'npp') return false;
+        } else if (regKey) {
+          if (regKey !== targetRf) return false;
+        } else {
+          const requester = qcagDesktopParseJson(r.requester, {});
+          const regionRaw = String(r.outletArea || r.area || requester.region || r.region || '');
+          const pattern = regionPatterns[targetRf] || new RegExp(targetRf.replace(/[^a-z0-9]/gi, ''), 'i');
+          if (!pattern.test(regionRaw)) return false;
+        }
       }
       // text search
       if (q) {

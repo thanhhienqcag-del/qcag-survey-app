@@ -43,9 +43,31 @@
         }
         document.documentElement.setAttribute('data-theme', theme);
 
-        // Khởi tạo data-app-mode sớm chống giật layout (FOUC)
+        // Khởi tạo data-app-mode và data-boot-target sớm chống giật layout & chống nhá đăng nhập (Zero Flash)
         var ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
-        var isQcag = !!(ses && String(ses.role || '').toLowerCase() === 'qcag');
+        var savedHk = JSON.parse(localStorage.getItem('ks_hk_profile') || 'null');
+        var isExplicitLogout = sessionStorage.getItem('ks_logged_out') === '1';
+
+        var isQcag = !isExplicitLogout && !!(ses && String(ses.role || '').toLowerCase() === 'qcag');
+        var isHkStep2 = !isExplicitLogout && !isQcag && !!(
+          (savedHk && savedHk.phone && savedHk.saleCode) ||
+          (ses && String(ses.role || '').toLowerCase() === 'heineken' && (ses.phone || ses.saleCode))
+        );
+
+        if (isQcag) {
+          document.documentElement.setAttribute('data-boot-target', 'qcag');
+          document.addEventListener('DOMContentLoaded', function () {
+            var msg = document.getElementById('loadingOverlayMsg');
+            var sub = document.getElementById('loadingOverlaySub');
+            if (msg) msg.textContent = 'Đang tải dữ liệu QCAG...';
+            if (sub) { sub.textContent = 'Vui lòng chờ trong giây lát'; sub.style.display = ''; }
+          });
+        } else if (isHkStep2) {
+          document.documentElement.setAttribute('data-boot-target', 'hk-step2');
+        } else {
+          document.documentElement.setAttribute('data-boot-target', 'login-company');
+        }
+
         var isDesktop = (window.innerWidth >= 1024);
         var mode = 'hk-mobile';
         if (!isQcag && isDesktop) mode = 'hk-desktop';
@@ -56,7 +78,7 @@
         // Đồng bộ tiêu đề thẻ trình duyệt theo trạng thái luồng (Heineken / QC An Giang Design)
         if (isQcag) {
           document.title = 'QC An Giang Design';
-        } else if (ses && String(ses.role || '').toLowerCase() === 'heineken') {
+        } else if (isHkStep2 || (ses && String(ses.role || '').toLowerCase() === 'heineken')) {
           document.title = 'Heineken';
         }
       } catch (e) { }
@@ -1337,6 +1359,42 @@
 
     #toast {
       z-index: 10000;
+    }
+
+    /* ── Chống nhá màn hình đăng nhập (Zero Flash) ── */
+    html[data-boot-target="qcag"] #loginScreen {
+      display: none !important;
+    }
+    html[data-boot-target="qcag"] #loadingOverlay {
+      opacity: 1 !important;
+      pointer-events: auto !important;
+    }
+    html[data-boot-target="qcag"] #loadingOverlay .loading-overlay-card {
+      transform: scale(1) !important;
+    }
+
+    html[data-boot-target="hk-step2"] #loginScreen {
+      display: flex !important;
+    }
+    html[data-boot-target="hk-step2"] #loginStepCompany,
+    html[data-boot-target="hk-step2"] #loginStepHK1,
+    html[data-boot-target="hk-step2"] #loginStepQCAG {
+      display: none !important;
+    }
+    html[data-boot-target="hk-step2"] #loginStepHK2 {
+      display: flex !important;
+    }
+
+    html[data-boot-target="login-company"] #loginScreen {
+      display: flex !important;
+    }
+    html[data-boot-target="login-company"] #loginStepCompany {
+      display: flex !important;
+    }
+    html[data-boot-target="login-company"] #loginStepHK1,
+    html[data-boot-target="login-company"] #loginStepHK2,
+    html[data-boot-target="login-company"] #loginStepQCAG {
+      display: none !important;
     }
   </style>
   <!-- Favicon and PWA manifest -->
@@ -3586,17 +3644,17 @@
   <script src="app/js/shared/image-utils.js?v=3.0.3"></script>
   <script src="app/js/shared/location.js?v=3.0.3"></script>
   <script src="app/js/shared/sdk-init.js?v=3.0.8"></script>
-  <script src="app/js/flows/login-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/login-flow.js?v=3.1.1"></script>
   <script src="app/js/flows/request-flow.js?v=3.0.3"></script>
   <script src="app/js/flows/warranty-flow.js?v=3.0.3"></script>
   <script src="app/js/flows/list-flow.js?v=3.0.9"></script>
   <script src="app/js/flows/detail-flow.js?v=3.0.9"></script>
-  <script src="app/js/flows/desktop-qcag-flow.js?v=3.0.9"></script>
+  <script src="app/js/flows/desktop-qcag-flow.js?v=3.1.0"></script>
   <script src="app/js/flows/desktop-task-flow.js?v=3.0.3"></script>
   <script src="app/js/flows/desktop-orders-flow.js?v=3.0.3"></script>
-  <script src="app/js/flows/app-stats-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/app-stats-flow.js?v=3.0.4"></script>
   <script src="app/js/flows/mobile-nav-flow.js?v=3.0.3"></script>
-  <script src="app/js/flows/mobile-qcag-flow.js?v=3.0.3"></script>
+  <script src="app/js/flows/mobile-qcag-flow.js?v=3.0.4"></script>
   <script src="app/js/flows/production-approval-flow.js?v=3.0.7"></script>
   <script src="app/js/core/router.js?v=3.0.3"></script>
 
@@ -3729,7 +3787,7 @@
     </div>
   </div>
 
-  <script src="app/js/app.js?v=3.0.3"></script>
+  <script src="app/js/app.js?v=3.1.0"></script>
   <!-- v3.0.3 | 2026-10-26 -->
   <script>
     // ── Service Worker Registration (Standard PWA, Long Cache) ─────────────────

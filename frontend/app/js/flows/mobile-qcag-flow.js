@@ -16,11 +16,11 @@
 
   var _regionDefs = [
     { key: 'all', label: 'Tất cả khu vực', selectLabel: 'Tất cả KV', pat: /.*/ },
-    { key: 's4', label: 'S4 Hậu Giang', selectLabel: 'S4 Hậu Giang', pat: /south\s*4|\bs4\b/i },
-    { key: 's5', label: 'S5 Cà Mau', selectLabel: 'S5 Cà Mau', pat: /south\s*5|\bs5\b/i },
+    { key: 's4', label: 'S4 Hậu Giang', selectLabel: 'S4 Hậu Giang', pat: /south\s*4|\bs0?4\b/i },
+    { key: 's5', label: 'S5 Cà Mau', selectLabel: 'S5 Cà Mau', pat: /south\s*5|\bs0?5\b/i },
     { key: 's16', label: 'S16 An Giang', selectLabel: 'S16 An Giang', pat: /south\s*16|\bs16\b/i },
     { key: 's17', label: 'S17 Kiên Giang', selectLabel: 'S17 Kiên Giang', pat: /south\s*17|\bs17\b/i },
-    { key: '24', label: '24 Kiên Giang', selectLabel: '24 Kiên Giang', pat: /south\s*24|\b24\b/i },
+    { key: '24', label: '24 Kiên Giang', selectLabel: '24 Kiên Giang', pat: /south\s*24|\bs?24\b/i },
     { key: 's19', label: 'S19 Bạc Liêu', selectLabel: 'S19 Bạc Liêu', pat: /south\s*19|\bs19\b/i },
     { key: 'mot8', label: 'MOT8 Phú Quốc', selectLabel: 'MOT8 Phú Quốc', pat: /mon?dern\W*on\W*team\W*8|\bmot8\b|modern\W*team\W*8/i },
     { key: 'npp', label: 'NPP', selectLabel: 'NPP', isNPP: true }
@@ -197,15 +197,21 @@
       if (def.key === 'all') return;
       if (def.isNPP) {
         counts[def.key] = processingItems.filter(function(r) {
+          if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+            return qcagDesktopGetRequestRegionKey(r) === 'npp';
+          }
           var requester = _parseJson(r.requester, {});
-          return String(requester.saleType || '').toLowerCase() === 'npp' || Boolean(requester.isNPP);
+          return String(r.saleType || requester.saleType || '').toLowerCase() === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
         }).length;
       } else {
         counts[def.key] = processingItems.filter(function(r) {
+          if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+            return qcagDesktopGetRequestRegionKey(r) === def.key;
+          }
           var requester = _parseJson(r.requester, {});
-          var isNPP = String(requester.saleType || '').toLowerCase() === 'npp' || Boolean(requester.isNPP);
+          var isNPP = String(r.saleType || requester.saleType || '').toLowerCase() === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
           if (isNPP) return false;
-          var reg = String(requester.region || r.region || '');
+          var reg = String(r.outletArea || r.area || requester.region || r.region || '');
           return def.pat && def.pat.test(reg);
         }).length;
       }
@@ -351,7 +357,6 @@
       _qmStatusFilter = 'done';
       _qmTypeFilter = 'all';
     }
-    _qmRegionFilter = 'all';
     showRequestList();
   };
 
@@ -364,6 +369,12 @@
     showRequestList();
   };
 
+  window.__qcagMobileSelectRegion = function(regionKey) {
+    _qmRegionFilter = regionKey || 'all';
+    _qmListDisplayLimit = 40;
+    renderQcagMobileList();
+  };
+
   function _getVisibleRequests() {
     var list = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.slice() : [];
 
@@ -373,16 +384,22 @@
       if (regDef) {
         if (regDef.isNPP) {
           list = list.filter(function(r) {
+            if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+              return qcagDesktopGetRequestRegionKey(r) === 'npp';
+            }
             var requester = _parseJson(r.requester, {});
-            return String(requester.saleType || '').toLowerCase() === 'npp' || Boolean(requester.isNPP);
+            return String(r.saleType || requester.saleType || '').toLowerCase() === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
           });
-        } else if (regDef.pat) {
+        } else {
           list = list.filter(function(r) {
+            if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+              return qcagDesktopGetRequestRegionKey(r) === regDef.key;
+            }
             var requester = _parseJson(r.requester, {});
-            var isNPP = String(requester.saleType || '').toLowerCase() === 'npp' || Boolean(requester.isNPP);
+            var isNPP = String(r.saleType || requester.saleType || '').toLowerCase() === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
             if (isNPP) return false;
-            var reg = String(requester.region || r.region || '');
-            return regDef.pat.test(reg);
+            var reg = String(r.outletArea || r.area || requester.region || r.region || '');
+            return regDef.pat && regDef.pat.test(reg);
           });
         }
       }

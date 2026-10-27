@@ -156,96 +156,93 @@ window.addEventListener('resize', () => {
       try { return JSON.parse(localStorage.getItem('ks_hk_profile') || '{}'); } catch (e) { return {}; }
     })();
 
-    // ── TỰ ĐỘNG KHÔI PHỤC PHIÊN VÀ NẠP CACHE (ZERO-TOUCH RECOVERY FOR SALES) ──
-    if (!isExplicitLogout) {
-      // Nếu chưa có session hoặc session bị thiếu thông tin cá nhân
-      if (!ses || !ses.phone || !ses.saleCode) {
-        let pushEndpoint = '';
-        try {
-          if ('serviceWorker' in navigator && 'PushManager' in window) {
-            const reg = await Promise.race([
-              navigator.serviceWorker.ready,
-              new Promise(r => setTimeout(r, 600))
-            ]);
-            if (reg && reg.pushManager) {
-              const sub = await reg.pushManager.getSubscription();
-              if (sub && sub.endpoint) pushEndpoint = sub.endpoint;
-            }
-          }
-        } catch (_) {}
+    const isQcagSession = !isExplicitLogout && ses && String(ses.role || '').toLowerCase() === 'qcag';
+    const isHeinekenProfileSaved = !isExplicitLogout && !isQcagSession && Boolean(
+      (saved && saved.phone && saved.saleCode) ||
+      (ses && String(ses.role || '').toLowerCase() === 'heineken' && (ses.phone || ses.saleCode))
+    );
 
-        const queryParts = [];
-        if (pushEndpoint) queryParts.push('endpoint=' + encodeURIComponent(pushEndpoint));
-        if (saved.phone) queryParts.push('phone=' + encodeURIComponent(saved.phone));
-        if (saved.saleCode) queryParts.push('sale_code=' + encodeURIComponent(saved.saleCode));
-
-        if (queryParts.length > 0) {
-          try {
-            const lookupRes = await Promise.race([
-              fetch('/api/ks/push/lookup?' + queryParts.join('&')),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
-            ]);
-            if (lookupRes && lookupRes.ok) {
-              const lookupData = await lookupRes.json();
-              if (lookupData && lookupData.ok && lookupData.user) {
-                const u = lookupData.user;
-                ses = {
-                  role: u.role || 'heineken',
-                  phone: u.phone,
-                  saleCode: u.saleCode,
-                  saleName: u.saleName,
-                  region: u.region || '',
-                  ssName: u.ssName || '',
-                  saleType: u.region ? 'dsm_sr' : 'tba',
-                  isTBA: !u.region,
-                  isNPP: false
-                };
-                localStorage.setItem('ks_session', JSON.stringify(ses));
-                saved = { phone: u.phone, saleCode: u.saleCode, saleName: u.saleName };
-                localStorage.setItem('ks_hk_profile', JSON.stringify(saved));
-              }
-            }
-          } catch (_) {}
-        }
-      }
-    }
-
-    // Prefill form inputs để sẵn sàng nếu người dùng cần chỉnh sửa
-    const pEl = document.getElementById('hkPhone');
-    const cEl = document.getElementById('hkSaleCode');
-    const nEl = document.getElementById('hkSaleName');
-    if (saved.phone && pEl) pEl.value = saved.phone;
-    if (saved.saleCode && cEl) cEl.value = saved.saleCode;
-    if (saved.saleName && nEl) nEl.value = saved.saleName;
-
-    if (ses && (ses.phone || ses.saleCode || ses.role === 'qcag')) {
-      // Đã có danh tính (tự động nhận diện hoặc session cũ): Vào thẳng ứng dụng!
+    // ── 1. QCAG ĐÃ ĐĂNG NHẬP: HIỂN THỊ LOADING OVERLAY VÀ MỞ THẲNG TRANG LÀM VIỆC ──
+    if (isQcagSession) {
       currentSession = ses;
       const loginEl = document.getElementById('loginScreen');
-      if (loginEl) { loginEl.classList.add('hidden'); loginEl.classList.remove('flex'); }
+      if (loginEl) {
+        loginEl.classList.add('hidden');
+        loginEl.classList.remove('flex');
+        loginEl.style.display = 'none';
+      }
       updateSessionBar();
       if (typeof loadAccountProfile === 'function') loadAccountProfile();
+      if (typeof showLoadingOverlay === 'function') {
+        showLoadingOverlay('Đang tải dữ liệu QCAG...', 'Vui lòng chờ trong giây lát', true);
+      }
       if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
         if (typeof openQCAGDesktop === 'function') openQCAGDesktop();
       } else {
         showScreen('homeScreen');
       }
-      initApp();
+      try {
+        await initApp();
+      } finally {
+        if (typeof hideLoadingOverlay === 'function') {
+          hideLoadingOverlay();
+        }
+        try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
+      }
       if (typeof fetchProductionApprovalBadgeCount === 'function') {
         fetchProductionApprovalBadgeCount();
       }
-    } else {
-      // Chưa có danh tính hoặc người dùng chủ động Đăng xuất: Hiển thị màn hình chọn công ty
-      const loginEl = document.getElementById('loginScreen');
-      if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
-      if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
+      return;
     }
+
+    // ── 2. SALE HEINEKEN ĐÃ QUA BƯỚC 1 (MỞ APP TỪ LẦN 2 TRỞ ĐI): BẮT ĐẦU TỪ BƯỚC 2 ──
+    if (isHeinekenProfileSaved) {
+      if (!saved.phone && ses && ses.phone) saved.phone = ses.phone;
+      if (!saved.saleCode && ses && ses.saleCode) saved.saleCode = ses.saleCode;
+      if (!saved.saleName && ses && (ses.saleName || ses.name)) saved.saleName = ses.saleName || ses.name;
+      try { localStorage.setItem('ks_hk_profile', JSON.stringify(saved)); } catch (_) {}
+
+      // Prefill vào các input ở Bước 1 để nếu Sale bấm "Quay lại" thì thông tin có sẵn
+      const pEl = document.getElementById('hkPhone');
+      const cEl = document.getElementById('hkSaleCode');
+      const nEl = document.getElementById('hkSaleName');
+      if (saved.phone && pEl) pEl.value = saved.phone;
+      if (saved.saleCode && cEl) cEl.value = saved.saleCode;
+      if (saved.saleName && nEl) nEl.value = saved.saleName;
+
+      // Hiển thị màn hình Login trực tiếp tại Bước 2 (chọn khu vực & nhập tên SS)
+      const loginEl = document.getElementById('loginScreen');
+      if (loginEl) {
+        loginEl.classList.remove('hidden');
+        loginEl.classList.add('flex');
+        loginEl.style.display = 'flex';
+      }
+      if (typeof loginShowStep === 'function') loginShowStep('loginStepHK2');
+      if (typeof loginPrefillHK2 === 'function') loginPrefillHK2();
+      try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
+      return;
+    }
+
+    // ── 3. CHƯA CÓ DANH TÍNH HOẶC CHỦ ĐỘNG ĐĂNG XUẤT: HIỂN THỊ CHỌN CÔNG TY ──
+    const loginEl = document.getElementById('loginScreen');
+    if (loginEl) {
+      loginEl.classList.remove('hidden');
+      loginEl.classList.add('flex');
+      loginEl.style.display = 'flex';
+    }
+    if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
+    try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
   } catch (err) {
     console.error('[bootApp] Error during startup recovery:', err);
     try {
       const loginEl = document.getElementById('loginScreen');
-      if (loginEl) { loginEl.classList.remove('hidden'); loginEl.classList.add('flex'); }
+      if (loginEl) {
+        loginEl.classList.remove('hidden');
+        loginEl.classList.add('flex');
+        loginEl.style.display = 'flex';
+      }
       if (typeof loginShowStep === 'function') loginShowStep('loginStepCompany');
+      document.documentElement.removeAttribute('data-boot-target');
     } catch (_) {}
   }
 })();

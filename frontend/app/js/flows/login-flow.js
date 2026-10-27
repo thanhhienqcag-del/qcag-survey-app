@@ -8,14 +8,58 @@ function loginGetQCAGPassword() {
 }
 
 function loginShowStep(showId) {
+  try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
+  const loginEl = document.getElementById('loginScreen');
+  if (loginEl) {
+    loginEl.classList.remove('hidden');
+    loginEl.classList.add('flex');
+    loginEl.style.display = 'flex';
+  }
   ['loginStepCompany', 'loginStepHK1', 'loginStepHK2', 'loginStepQCAG'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.classList.toggle('hidden', id !== showId);
       el.classList.toggle('flex', id === showId);
+      el.style.display = (id === showId) ? 'flex' : 'none';
     }
   });
 }
+
+function loginPrefillHK2() {
+  let savedWork = (() => {
+    try { return JSON.parse(localStorage.getItem('ks_hk_work_info') || '{}'); } catch (_) { return {}; }
+  })();
+  if (!savedWork.saleType) {
+    try {
+      const ses = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+      if (ses.saleType) savedWork.saleType = ses.saleType;
+      if (ses.region) savedWork.region = ses.region;
+      if (ses.ssName) savedWork.ssName = ses.ssName;
+    } catch (_) {}
+  }
+  const saleType = savedWork.saleType || 'dsm_sr';
+  loginSelectSaleType(saleType);
+  if (savedWork.region) {
+    _loginSelectedRegion = savedWork.region;
+    const normTarget = String(savedWork.region).replace(/[\s\-_]+/g, '').toLowerCase().replace(/^south/, 's').replace(/^modernonteam/, 'mot');
+    document.querySelectorAll('.region-btn').forEach(b => {
+      const bText = b.textContent.replace(/\s+/g, ' ').trim();
+      const normBtn = bText.replace(/[\s\-_]+/g, '').toLowerCase().replace(/^south/, 's').replace(/^modernonteam/, 'mot');
+      const isMatch = (normBtn === normTarget) ||
+        (normBtn.replace(/^s/, '') === normTarget.replace(/^s/, '')) ||
+        (bText.toLowerCase() === String(savedWork.region).toLowerCase());
+      if (isMatch) {
+        _loginSelectedRegion = bText;
+      }
+      b.classList.toggle('selected', isMatch);
+    });
+  }
+  if (savedWork.ssName) {
+    const ssEl = document.getElementById('hkSSName');
+    if (ssEl) ssEl.value = savedWork.ssName;
+  }
+}
+window.loginPrefillHK2 = loginPrefillHK2;
 
 function loginSelectCompany(company) {
   if (typeof window.updateAppTitle === 'function') {
@@ -54,10 +98,8 @@ function loginHK1Next() {
   // Require sale code to be exactly 8 digits
   if (saleCode.length !== 8) { showToast('Mã nhân viên phải đủ 8 chữ số'); return; }
   localStorage.setItem(HK_PROFILE_KEY, JSON.stringify({ phone, saleCode, saleName }));
-  _loginSelectedRegion = '';
-  document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('selected'));
-  loginSelectSaleType(_loginSelectedSaleType || '');
   loginShowStep('loginStepHK2');
+  loginPrefillHK2();
 }
 
 function loginSelectSaleType(type) {
@@ -201,6 +243,16 @@ function loginHK2Submit() {
     };
   }
 
+  // Lưu cache máy thông tin bước 2 cho Sale để lần sau mở app tự động nạp
+  try {
+    const ssVal = (saleType === 'dsm_sr') ? (document.getElementById('hkSSName').value.trim()) : '';
+    localStorage.setItem('ks_hk_work_info', JSON.stringify({
+      saleType,
+      region: _loginSelectedRegion || '',
+      ssName: ssVal
+    }));
+  } catch (_) {}
+
   _justLoggedIn = true;
   try { sessionStorage.removeItem('ks_logged_out'); } catch (_) {}
   localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
@@ -290,9 +342,14 @@ function executeLogout() {
 }
 
 function launchApp() {
+  try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
   try { if (typeof window.applyAppUIMode === 'function') window.applyAppUIMode(); } catch (e) { }
   const loginEl = document.getElementById('loginScreen');
-  if (loginEl) { loginEl.classList.add('hidden'); loginEl.classList.remove('flex'); }
+  if (loginEl) {
+    loginEl.classList.add('hidden');
+    loginEl.classList.remove('flex');
+    loginEl.style.display = 'none';
+  }
   updateSessionBar();
   if (typeof loadAccountProfile === 'function') loadAccountProfile();
   initHomeAndLoad();

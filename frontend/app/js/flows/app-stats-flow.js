@@ -64,12 +64,18 @@ function calculateQcagAdvancedStats(yearFilter, regionFilter) {
 
     // Region filter
     if (regionFilter && regionFilter !== 'all') {
-      let reqRegion = '';
-      try {
-        const reqJson = typeof r.requester === 'string' ? JSON.parse(r.requester) : (r.requester || {});
-        reqRegion = reqJson.region || r.region || '';
-      } catch (_) { reqRegion = r.region || ''; }
-      const key = qcagGetRegionKey(reqRegion);
+      let key = null;
+      if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+        key = qcagDesktopGetRequestRegionKey(r);
+      }
+      if (!key) {
+        let reqRegion = '';
+        try {
+          const reqJson = typeof r.requester === 'string' ? JSON.parse(r.requester) : (r.requester || {});
+          reqRegion = r.outletArea || r.area || reqJson.region || r.region || '';
+        } catch (_) { reqRegion = r.outletArea || r.area || r.region || ''; }
+        key = qcagGetRegionKey(reqRegion);
+      }
       if (key !== regionFilter) return false;
     }
 
@@ -162,12 +168,18 @@ function calculateQcagAdvancedStats(yearFilter, regionFilter) {
     }
 
     // Region distribution
-    let reqRegion = '';
-    try {
-      const reqJson = typeof r.requester === 'string' ? JSON.parse(r.requester) : (r.requester || {});
-      reqRegion = reqJson.region || r.region || '';
-    } catch (_) { reqRegion = r.region || ''; }
-    const rKey = qcagGetRegionKey(reqRegion);
+    let rKey = null;
+    if (typeof qcagDesktopGetRequestRegionKey === 'function') {
+      rKey = qcagDesktopGetRequestRegionKey(r);
+    }
+    if (!rKey || !regionsMap[rKey]) {
+      let reqRegion = '';
+      try {
+        const reqJson = typeof r.requester === 'string' ? JSON.parse(r.requester) : (r.requester || {});
+        reqRegion = r.outletArea || r.area || reqJson.region || r.region || '';
+      } catch (_) { reqRegion = r.outletArea || r.area || r.region || ''; }
+      rKey = qcagGetRegionKey(reqRegion);
+    }
     if (regionsMap[rKey]) {
       const reg = regionsMap[rKey];
       reg.total++;
