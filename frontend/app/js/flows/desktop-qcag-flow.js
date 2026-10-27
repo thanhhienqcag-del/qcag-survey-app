@@ -1957,13 +1957,15 @@ async function qcagDesktopConfirmEditItemsModal() {
     updatedAt: now
   };
 
-  // Close modal immediately and persist in background to keep UI snappy.
+  // Close modal and persist
   qcagCloseEditItemsModal();
   const confirmBtn = document.getElementById('qcagEditItemConfirmBtn');
   if (confirmBtn) confirmBtn.disabled = true;
-  qcagDesktopPersistRequest(updated, 'Đã thêm hạng mục').catch(() => {
+  try {
+    await qcagDesktopPersistRequest(updated, 'Đã thêm hạng mục');
+  } catch (err) {
     showToast('Không thể thêm hạng mục');
-  });
+  }
 }
 
 async function qcagDesktopRemoveItem(index) {
@@ -3244,6 +3246,12 @@ async function qcagDesktopDeleteRequest(backendId) {
 async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
   if (!updated) return false;
 
+  // Khóa chặn race condition với SSE / onDataChanged trong 4s
+  if (typeof window !== 'undefined') {
+    window._qcagLastOptimisticSaveTs = Date.now();
+    window._qcagLastOptimisticSaveId = updated.__backendId;
+  }
+
   const isSynth = !!(updated._isSynthetic || String(updated.__backendId || '').startsWith('task-quote-') || updated.isQuoteOnly);
 
   if (isSynth) {
@@ -4011,12 +4019,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
 
   // BẢNG HẠNG MỤC: Hiển thị đầy đủ các hạng mục khảo sát thực tế (bao gồm Bảng hiệu, Hộp đèn, Shopname, Logo và Hạng mục khác)
   const displayItems = Array.isArray(items)
-    ? items.filter(it => {
-        if (!it) return false;
-        const tt = String(it.type || it.product_name || '').toLowerCase();
-        if (tt.includes('hạng mục khác') || tt.includes('hang muc khac') || tt === 'khác' || tt === 'khac') return true;
-        return (typeof qcagIsSignageProductionItem === 'function' ? qcagIsSignageProductionItem(it) : true);
-      })
+    ? items.filter(it => it && (it.type || it.product_name || it.otherContent || it.action || it.brand))
     : [];
 
   // Khởi tạo bản đồ khớp 1-1 thông minh giữa Request Items và Quote Items
@@ -4089,14 +4092,18 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
     const actionCell = canManageItems
       ? `<div class="qcag-item-actions-cell"><button class="qcag-item-edit-btn" onclick="qcagDesktopOpenEditItemModal(${idx})" title="Sửa hạng mục"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="qcag-item-delete-btn" onclick="qcagDesktopRemoveItem(${idx})" title="Xóa hạng mục">✕</button></div>`
       : '<div></div>';
-    const brandBadge = item && item.brandChangedByQCAG
-      ? `<span class="qcag-brand-changed-badge" title="${escapeHtml('Brand được ' + (item.brandChangedBy || 'QCAG') + ' QCAG đổi theo yêu cầu của sale')}"></span>`
+    const isBrandChanged = !!(item && (item.brandChangedByQCAG || item.brandChangedByQcag || item.brand_changed_by_qcag));
+    const isAdded = !!(item && (item.addedByQCAG || item.addedByQcag || item.added_by_qcag));
+    const isEdited = !!(item && (item.editedByQCAG || item.editedByQcag || item.edited_by_qcag));
+
+    const brandBadge = isBrandChanged
+      ? `<span class="qcag-brand-changed-badge" title="${escapeHtml('Brand được ' + (item.brandChangedBy || item.brand_changed_by || 'QCAG') + ' QCAG đổi theo yêu cầu của sale')}"></span>`
       : '';
-    const addedBadgeHtml = item && item.addedByQCAG
-      ? `<span class="qcag-added-badge" title="${escapeHtml('Hạng mục được thêm bởi ' + (item.addedByQCAGBy || 'QCAG') + ' theo yêu cầu chỉnh sửa' + (item.type ? ': ' + item.type : ''))}"></span>`
+    const addedBadgeHtml = isAdded
+      ? `<span class="qcag-added-badge" title="${escapeHtml('Hạng mục được thêm bởi ' + (item.addedByQCAGBy || item.addedByQcagBy || item.added_by_qcag_by || 'QCAG') + ' theo yêu cầu chỉnh sửa' + (item.type ? ': ' + item.type : ''))}"></span>`
       : '';
-    const editedBadgeHtml = item && item.editedByQCAG
-      ? `<span class="qcag-edited-badge" title="${escapeHtml('Hạng mục được sửa bởi ' + (item.editedByQCAGBy || 'QCAG') + (item.editedByQCAGAt ? ' lúc ' + new Date(item.editedByQCAGAt).toLocaleString('vi-VN') : ''))}"></span>`
+    const editedBadgeHtml = isEdited
+      ? `<span class="qcag-edited-badge" title="${escapeHtml('Hạng mục được sửa bởi ' + (item.editedByQCAGBy || item.editedByQcagBy || item.edited_by_qcag_by || 'QCAG') + ((item.editedByQCAGAt || item.editedByQcagAt || item.edited_by_qcag_at) ? ' lúc ' + new Date(item.editedByQCAGAt || item.editedByQcagAt || item.edited_by_qcag_at).toLocaleString('vi-VN') : ''))}"></span>`
       : '';
     let brandClass = 'brand-default';
     try {
@@ -4902,16 +4909,30 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
     _qcagDesktopListScrollSave = listEl.scrollTop;
   }
 
-  // Khi người dùng chuyển sang thẻ khác, nếu thẻ trước đó đã hoàn thành (done)
-  // thì thẻ cũ mới chính thức rời khỏi tab "Đang xử lý" để chuyển sang tab "Hoàn thành"
-  const _prevWasDone = _prevDetail && _prevDetail.__backendId !== id &&
-    (String(_prevDetail.status).toLowerCase() === 'done' || String(_prevDetail.status).toLowerCase() === 'processed') &&
-    !qcagDesktopIsPendingEditRequest(_prevDetail);
+  // Khi người dùng chuyển sang thẻ khác:
+  // - Nếu trong tab "Đang xử lý" có bất kỳ thẻ nào đã hoàn thành (done/processed) mà không phải thẻ đang xem (id),
+  //   thì thẻ đó phải được dọn dẹp và tự động chuyển sang tab "Hoàn thành".
+  // - Ngược lại nếu ở tab "Hoàn thành" có thẻ bị Sale yêu cầu sửa, cũng tự động chuyển về "Đang xử lý".
+  const hasCompletedInProcessing = _qcagDesktopStatusFilter === 'processing' && Array.isArray(allRequests) && allRequests.some(r => {
+    if (!r) return false;
+    const isTarget = String(r.__backendId || r.id || r.tkCode || '') === String(id);
+    if (isTarget) return false;
+    const s = String(r.status || '').toLowerCase();
+    const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed');
+    return isDone && !qcagDesktopIsPendingEditRequest(r);
+  });
 
-  if (_prevWasDone && _qcagDesktopStatusFilter === 'processing') {
-    if (typeof renderQCAGDesktopList === 'function') {
-      renderQCAGDesktopList();
-    }
+  const hasPendingInDone = _qcagDesktopStatusFilter === 'done' && Array.isArray(allRequests) && allRequests.some(r => {
+    if (!r) return false;
+    const isTarget = String(r.__backendId || r.id || r.tkCode || '') === String(id);
+    if (isTarget) return false;
+    const s = String(r.status || '').toLowerCase();
+    const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed');
+    return !isDone || qcagDesktopIsPendingEditRequest(r);
+  });
+
+  if ((hasCompletedInProcessing || hasPendingInDone) && typeof renderQCAGDesktopList === 'function') {
+    renderQCAGDesktopList(true);
   } else if (listEl) {
     // Fast in-place active toggle to eliminate UI lag/freezing on normal card clicks
     const prevActive = listEl.querySelector('.qcag-request-item.active');

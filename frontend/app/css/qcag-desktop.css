@@ -2309,7 +2309,9 @@
 
   .qcag-stt-cell {
     display: flex !important;
+    flex-direction: row !important;
     align-items: center !important;
+    justify-content: flex-start !important;
     height: 28px !important;
     min-height: 28px !important;
     max-height: 28px !important;
@@ -2318,42 +2320,63 @@
   }
 
   .qcag-added-badge {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #3b82f6; /* blue — hạng mục thêm mới */
-    display: inline-block;
-    box-shadow: 0 0 0 2px rgba(59,130,246,0.12);
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #2563eb !important; /* blue — hạng mục thêm mới */
+    display: inline-block !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 0 0 1.5px #bfdbfe !important;
+    vertical-align: middle !important;
   }
 
   .qcag-brand-changed-badge {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #10b981; /* green — brand đổi */
-    display: inline-block;
-    box-shadow: 0 0 0 2px rgba(16,185,129,0.12);
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #059669 !important; /* green — brand đổi */
+    display: inline-block !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 0 0 1.5px #a7f3d0 !important;
+    vertical-align: middle !important;
   }
 
   .qcag-edited-badge {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #f97316; /* orange — hạng mục được sửa */
-    display: inline-block;
-    box-shadow: 0 0 0 2px rgba(249,115,22,0.15);
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: #ea580c !important; /* orange — hạng mục được sửa */
+    display: inline-block !important;
+    flex-shrink: 0 !important;
+    box-shadow: 0 0 0 1.5px #fed7aa !important;
+    vertical-align: middle !important;
+  }
+
+  /* Dark mode glow */
+  body.dark-mode .qcag-added-badge, [data-theme="dark"] .qcag-added-badge {
+    background: #60a5fa !important;
+    box-shadow: 0 0 6px rgba(96,165,250,0.8) !important;
+  }
+  body.dark-mode .qcag-brand-changed-badge, [data-theme="dark"] .qcag-brand-changed-badge {
+    background: #34d399 !important;
+    box-shadow: 0 0 6px rgba(52,211,153,0.8) !important;
+  }
+  body.dark-mode .qcag-edited-badge, [data-theme="dark"] .qcag-edited-badge {
+    background: #fb923c !important;
+    box-shadow: 0 0 6px rgba(251,146,60,0.8) !important;
   }
 
   .qcag-stt-badges {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-left: 8px;
-    align-items: center;
-    justify-content: center;
+    display: inline-flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    margin-left: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
   }
 
-  .qcag-stt-num { font-weight: 700; }
+  .qcag-stt-num { font-weight: 700; line-height: 1; flex-shrink: 0; }
 
   .qcag-actions {
     display: flex;
@@ -7713,6 +7736,18 @@ html:not(.theme-dark) .qcag-checklist-badge.pending {
   justify-content: flex-start !important;
   align-items: flex-start !important;
   min-width: 0 !important;
+}
+
+/* Exception: the STT cell with status badges must stay horizontal, vertically centered */
+.qcag-items-row > .qcag-stt-cell {
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
 }
 
 /* Exception: the action cell (edit+delete) must stay horizontal */

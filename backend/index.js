@@ -3884,7 +3884,20 @@ async function getRequestDetailDirect(idOrTkCode) {
     ] = await Promise.all([
         pool.query(`
             SELECT id, seq, type, other_content AS "otherContent", action, brand, width, height, 
-                   use_old_size AS "useOldSize", poles, note, brand_changed_by_qcag AS "brandChangedByQcag", added_by_qcag AS "addedByQcag",
+                   use_old_size AS "useOldSize", poles, note,
+                   COALESCE(brand_changed_by_qcag, false) AS "brandChangedByQcag",
+                   COALESCE(brand_changed_by_qcag, false) AS "brandChangedByQCAG",
+                   brand_changed_by AS "brandChangedBy",
+                   COALESCE(added_by_qcag, false) AS "addedByQcag",
+                   COALESCE(added_by_qcag, false) AS "addedByQCAG",
+                   added_by_qcag_by AS "addedByQcagBy",
+                   added_by_qcag_by AS "addedByQCAGBy",
+                   COALESCE(edited_by_qcag, false) AS "editedByQcag",
+                   COALESCE(edited_by_qcag, false) AS "editedByQCAG",
+                   edited_by_qcag_by AS "editedByQcagBy",
+                   edited_by_qcag_by AS "editedByQCAGBy",
+                   edited_by_qcag_at AS "editedByQcagAt",
+                   edited_by_qcag_at AS "editedByQCAGAt",
                    COALESCE(survey, false) AS "survey",
                    CASE 
                      WHEN survey_width IS NOT NULL AND survey_height IS NOT NULL AND survey_width > 0 AND survey_height > 0 
@@ -4852,10 +4865,13 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             try {
                 itemsToSave = typeof b.items === 'string' ? JSON.parse(b.items) : (Array.isArray(b.items) ? b.items : []);
             } catch (_) { itemsToSave = []; }
-            if (Array.isArray(itemsToSave) && itemsToSave.length > 0) {
+            if (Array.isArray(itemsToSave)) {
+                const processedIds = [];
                 for (let i = 0; i < itemsToSave.length; i++) {
                     const it = itemsToSave[i] || {};
-                    const itemId = toNullableString(it.id) || `rqi_${tkCode}_${i + 1}`;
+                    const itemId = (toNullableString(it.id) || `rqi_${tkCode}_${i + 1}`).trim();
+                    it.id = itemId;
+                    processedIds.push(itemId);
                     const seq = Number(it.seq) || (i + 1);
                     const itemType = toNullableString(it.type) || 'Hạng mục khảo sát';
                     const action = toNullableString(it.action) || 'Làm mới';
@@ -4869,16 +4885,24 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const isSurvey = Boolean(it.survey);
                     const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : null;
                     const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : null;
-                    const brandChangedByQcag = Boolean(it.brandChangedByQcag || it.brand_changed_by_qcag);
-                    const addedByQcag = Boolean(it.addedByQcag || it.added_by_qcag);
+                    const brandChangedByQcag = Boolean(it.brandChangedByQCAG || it.brandChangedByQcag || it.brand_changed_by_qcag);
+                    const brandChangedBy = toNullableString(it.brandChangedBy || it.brand_changed_by);
+                    const addedByQcag = Boolean(it.addedByQCAG || it.addedByQcag || it.added_by_qcag);
+                    const addedByQcagBy = toNullableString(it.addedByQCAGBy || it.addedByQcagBy || it.added_by_qcag_by);
+                    const editedByQcag = Boolean(it.editedByQCAG || it.editedByQcag || it.edited_by_qcag);
+                    const editedByQcagBy = toNullableString(it.editedByQCAGBy || it.editedByQcagBy || it.edited_by_qcag_by);
+                    const editedByQcagAt = (it.editedByQCAGAt || it.editedByQcagAt || it.edited_by_qcag_at) ? new Date(it.editedByQCAGAt || it.editedByQcagAt || it.edited_by_qcag_at) : null;
 
                     await pool.query(`
                         INSERT INTO request_items (
                             id, request_tk_code, seq, type, other_content, action, brand,
                             width, height, use_old_size, poles, note,
                             survey, survey_width, survey_height,
-                            brand_changed_by_qcag, added_by_qcag, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+                            brand_changed_by_qcag, brand_changed_by,
+                            added_by_qcag, added_by_qcag_by,
+                            edited_by_qcag, edited_by_qcag_by, edited_by_qcag_at,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
                         ON CONFLICT (id) DO UPDATE SET
                             seq = EXCLUDED.seq,
                             type = EXCLUDED.type,
@@ -4894,17 +4918,25 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             survey_width = EXCLUDED.survey_width,
                             survey_height = EXCLUDED.survey_height,
                             brand_changed_by_qcag = EXCLUDED.brand_changed_by_qcag,
-                            added_by_qcag = EXCLUDED.added_by_qcag
+                            brand_changed_by = COALESCE(EXCLUDED.brand_changed_by, request_items.brand_changed_by),
+                            added_by_qcag = EXCLUDED.added_by_qcag,
+                            added_by_qcag_by = COALESCE(EXCLUDED.added_by_qcag_by, request_items.added_by_qcag_by),
+                            edited_by_qcag = EXCLUDED.edited_by_qcag,
+                            edited_by_qcag_by = COALESCE(EXCLUDED.edited_by_qcag_by, request_items.edited_by_qcag_by),
+                            edited_by_qcag_at = COALESCE(EXCLUDED.edited_by_qcag_at, request_items.edited_by_qcag_at)
                     `, [
                         itemId, tkCode, seq, itemType, otherContent, action, brand,
                         width, height, useOldSize, poles, note,
                         isSurvey, surveyW, surveyH,
-                        brandChangedByQcag, addedByQcag
+                        brandChangedByQcag, brandChangedBy,
+                        addedByQcag, addedByQcagBy,
+                        editedByQcag, editedByQcagBy, editedByQcagAt
                     ]);
                 }
-                const validIds = itemsToSave.map(x => toNullableString(x.id)).filter(Boolean);
-                if (validIds.length > 0) {
-                    await pool.query(`DELETE FROM request_items WHERE request_tk_code = ? AND id NOT IN (${validIds.map(() => '?').join(',')})`, [tkCode, ...validIds]);
+                if (processedIds.length > 0) {
+                    await pool.query(`DELETE FROM request_items WHERE request_tk_code = ? AND id NOT IN (${processedIds.map(() => '?').join(',')})`, [tkCode, ...processedIds]);
+                } else if (itemsToSave.length === 0) {
+                    await pool.query(`DELETE FROM request_items WHERE request_tk_code = ?`, [tkCode]);
                 }
             }
         }
