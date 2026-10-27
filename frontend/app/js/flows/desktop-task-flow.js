@@ -338,8 +338,7 @@ async function fetchQcagPendingOrders() {
                         const qKey = code.toLowerCase();
                         const cleanCode = qKey.replace(/^bg[-_]?/i, '');
                         const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
-                        const qOutlet = outlet.toLowerCase();
-                        const appr = (appMap.get(cleanCode) || appMap.get(qKey) || appMap.get(qTk) || appMap.get(qOutlet));
+                        const appr = (appMap.get(cleanCode) || appMap.get(qKey) || (qTk && appMap.get(qTk)));
                         if (appr && appr.status) {
                             q.productionApprovalStatus = appr.status;
                             if (appr.reason) q.rejectReason = appr.reason;
@@ -1656,15 +1655,11 @@ function qcagGetTaskQuoteForRequest(req) {
             if (!q) return false;
             const qCode = String(q.quote_code || q.quoteCode || '').trim().toLowerCase();
             const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
-            const qOutlet = String(q.outlet_code || q.outletCode || '').trim().toLowerCase();
             const qBackend = String(q.__backendId || q.id || '').trim().toLowerCase();
 
             if (rBackend && qBackend && rBackend === qBackend) return true;
             if (rTk && qTk && rTk === qTk) return true;
             if (rQ && qCode && rQ === qCode) return true;
-            if (rTk && qCode && rTk === qCode) return true;
-            if (rQ && qTk && rQ === qTk) return true;
-            if (rOutlet && qOutlet && rOutlet === qOutlet) return true;
             return false;
         });
 

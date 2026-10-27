@@ -1518,17 +1518,15 @@ function _checkRequestLockState(req) {
     const qTk = String(q.tk_code || q.tkCode || q.request_tk_code || q.requestTkCode || '').trim();
     const qTkDigits = qTk.replace(/\D/g, '');
     const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
-    const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
     const targetQuoteCode = String(req.quoteCode || req.quote_code || '').trim();
     const targetTk = String(req.tkCode || req.tk_code || '').trim();
-    const targetOutlet = String(req.outletCode || req.outlet_code || '').trim();
     const isOfficialTk = /^TK/i.test(targetTk);
     const targetTkDigits = isOfficialTk ? targetTk.replace(/\D/g, '') : '';
 
     if (targetQuoteCode && qCode && (qCode === targetQuoteCode)) return true;
     if (isOfficialTk && targetTk && qTk && (qTk.toLowerCase() === targetTk.toLowerCase())) return true;
     if (isOfficialTk && targetTkDigits && targetTkDigits.length >= 4 && qTkDigits && qTkDigits === targetTkDigits) return true;
-    if (targetOutlet && targetOutlet !== '---' && targetOutlet !== 'Chưa có code' && qOutlet && (qOutlet === targetOutlet)) return true;
+    // Tuyệt đối không khớp theo outlet_code vì 1 điểm bán có nhiều đợt khảo sát khác nhau
     return false;
   };
 
@@ -1728,15 +1726,13 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
     if (matched) return matched;
   }
 
-  // 2. Tra cứu B-Tree cực nhanh qua local App 2 backend (< 5ms)
+  // 2. Tra cứu B-Tree cực nhanh qua local App 2 backend (< 5ms) — chỉ theo tk_code hoặc quote_code
   const qParams = new URLSearchParams();
   if (targetTk) {
     qParams.set('tk_code', targetTk);
     qParams.set('exact', '1');
   } else if (quoteCode) {
     qParams.set('quote_code', quoteCode);
-  } else if (outletCode) {
-    qParams.set('outlet_code', outletCode);
   }
 
   const queryStr = qParams.toString();
@@ -1972,12 +1968,11 @@ async function _loadBridgeStatus(backendId) {
       const qTk = String(q.tk_code || q.tkCode || q.request_tk_code || q.requestTkCode || '').trim();
       const qTkDigits = qTk.replace(/\D/g, '');
       const qCode = String(q.quote_code || q.quoteCode || q.id || '').trim();
-      const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
 
       if (targetQuoteCode && qCode && (qCode === targetQuoteCode)) return true;
       if (isOfficialTk && targetTk && qTk && (qTk.toLowerCase() === targetTk.toLowerCase())) return true;
       if (isOfficialTk && targetTkDigits && targetTkDigits.length >= 4 && qTkDigits && qTkDigits === targetTkDigits) return true;
-      if (targetOutlet && targetOutlet !== '---' && targetOutlet !== 'Chưa có code' && qOutlet && (qOutlet === targetOutlet)) return true;
+      // Tuyệt đối không khớp theo outlet_code vì 1 điểm bán có nhiều đợt khảo sát khác nhau
       return false;
     };
 
@@ -2118,19 +2113,17 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
   const isOfficialTk = /^TK/i.test(targetTk);
   const targetTkDigits = isOfficialTk ? targetTk.replace(/\D/g, '') : '';
   const targetQuoteCode = req ? String(req.quoteCode || req.quote_code || '').trim() : '';
-  const targetOutlet = req ? String(req.outletCode || req.outlet_code || '').trim() : '';
 
   const isMatchingQuote = (candidate) => {
     if (!candidate) return false;
     const cQuote = String(candidate.quote_code || candidate.quoteCode || candidate.id || '').trim();
     const cTk = String(candidate.tk_code || candidate.tkCode || '').trim();
     const cTkDigits = cTk.replace(/\D/g, '');
-    const cOutlet = String(candidate.outlet_code || candidate.outletCode || '').trim();
 
     if (targetQuoteCode && cQuote && targetQuoteCode === cQuote) return true;
     if (isOfficialTk && targetTk && cTk && targetTk.toLowerCase() === cTk.toLowerCase()) return true;
     if (isOfficialTk && targetTkDigits && targetTkDigits.length >= 4 && cTkDigits && cTkDigits === targetTkDigits) return true;
-    if (targetOutlet && targetOutlet !== '---' && cOutlet && targetOutlet === cOutlet) return true;
+    // Tuyệt đối không khớp theo outlet_code vì 1 điểm bán có nhiều đợt khảo sát khác nhau
     return false;
   };
 
@@ -2158,11 +2151,11 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     q = window.__qcagQuoteListCache.find(isMatchingQuote);
   }
 
-  // 6. Nếu chưa có báo giá khớp, fetch trực tiếp qua B-Tree Index (< 10ms)
-  if (!q && (targetTk || targetQuoteCode || targetOutlet || backendId)) {
+  // 6. Nếu chưa có báo giá khớp, fetch trực tiếp qua B-Tree Index (< 10ms) chỉ khi có tk_code hoặc quoteCode
+  if (!q && (targetTk || targetQuoteCode)) {
     try {
       if (typeof _fetchTargetedQuoteByTk === 'function') {
-        q = await _fetchTargetedQuoteByTk(targetTk, targetQuoteCode, targetOutlet);
+        q = await _fetchTargetedQuoteByTk(targetTk, targetQuoteCode);
       }
       if (!q && typeof _fetchApp1QuoteListWithCache === 'function') {
         const cachedQuotes = await _fetchApp1QuoteListWithCache();
@@ -2194,12 +2187,10 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
   if (!req && typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
     const qTk = String(q.tk_code || q.tkCode || '').trim();
     const qQuote = String(q.quote_code || q.quoteCode || '').trim();
-    const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
     req = allRequests.find(r => {
       if (!r) return false;
       if (qQuote && (r.quoteCode === qQuote || r.quote_code === qQuote)) return true;
       if (qTk && (r.tkCode === qTk || r.tk_code === qTk)) return true;
-      if (qOutlet && qOutlet !== '---' && (r.outletCode === qOutlet || r.outlet_code === qOutlet)) return true;
       return false;
     });
   }
@@ -4543,7 +4534,6 @@ function _resolveCurrentOrQuoteRequest() {
     const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
     const qTkDigits = qTk.replace(/\D/g, '');
     const qQuote = String(q.quote_code || q.quoteCode || '').trim().toLowerCase();
-    const qOutlet = String(q.outlet_code || q.outletCode || '').trim().toLowerCase();
 
     const found = allRequests.find(r => {
       if (!r) return false;
@@ -4555,7 +4545,6 @@ function _resolveCurrentOrQuoteRequest() {
       if (qQuote && rQuote && qQuote === rQuote) return true;
       if (qTk && rTk && qTk === rTk) return true;
       if (qTkDigits && qTkDigits.length >= 4 && rTkDigits && qTkDigits === rTkDigits) return true;
-      if (qOutlet && qOutlet !== '---' && rOutlet && qOutlet === rOutlet) return true;
       return false;
     });
 

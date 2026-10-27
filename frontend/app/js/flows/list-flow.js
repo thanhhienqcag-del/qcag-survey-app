@@ -367,22 +367,9 @@ function getCardQuoteBadge(req) {
       }) || null;
     }
 
-    // Match 3: Outlet Code fallback
-    if (!matchedQ) {
-      const rOutlet = String(req.outletCode || req.outlet_code || '').trim();
-      if (rOutlet && rOutlet !== '---' && rOutlet !== 'Chưa có code' && rOutlet !== 'null') {
-        matchedQ = cached.find(q => {
-          if (!q) return false;
-          const qOutlet = String(q.outlet_code || q.outletCode || '').trim();
-          return qOutlet && qOutlet.toLowerCase() === rOutlet.toLowerCase();
-        }) || null;
-      }
-    }
-
-    // Match 4: window._quoteDataMap RAM cache
+    // Match 3: window._quoteDataMap RAM cache (chỉ khớp chính xác theo tk_code hoặc quote_code)
     if (!matchedQ && window._quoteDataMap) {
-      matchedQ = (req.__backendId && window._quoteDataMap[req.__backendId]) ||
-                 (rTkRaw && window._quoteDataMap[rTkRaw]) ||
+      matchedQ = (rTkRaw && window._quoteDataMap[rTkRaw]) ||
                  (rQCode && window._quoteDataMap[rQCode]) || null;
     }
 

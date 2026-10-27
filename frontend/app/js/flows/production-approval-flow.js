@@ -241,56 +241,30 @@ function findMatchingKsRequest(q, rawQuoteCode) {
     }
     const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
     const qTkDigits = qTk.replace(/\D/g, '');
-    const qOutlet = String(q.outlet_code || q.outletCode || '').trim().toLowerCase();
-    const qOutletDigits = qOutlet.replace(/\D/g, '');
-    const qName = String(q.outlet_name || q.outletName || '').trim().toLowerCase();
+    const qQuote = String(rawQuoteCode || q.quote_code || q.quoteCode || '').trim().toLowerCase();
 
-    // 1. Primary & safest match: Match by Outlet Code (Outlet Code is unique per Heineken outlet)
-    if (qOutlet && qOutlet !== 'new outlet' && qOutlet !== '---') {
-        const byOutlet = allRequests.find(r => {
+    // 1. Match by Quote Code (nếu request đã được gán mã báo giá)
+    if (qQuote && qQuote !== '---' && qQuote !== 'null') {
+        const byQuote = allRequests.find(r => {
             if (!r) return false;
-            const rOutlet = String(r.outletCode || r.outlet_code || (r.requester && (r.requester.outletCode || r.requester.outlet_code)) || '').trim().toLowerCase();
-            const rOutletDigits = rOutlet.replace(/\D/g, '');
-            if (qOutlet === rOutlet) return true;
-            if (qOutletDigits && qOutletDigits.length >= 6 && qOutletDigits === rOutletDigits) return true;
-            return false;
+            const rQuote = String(r.quoteCode || r.quote_code || (r.bridge && r.bridge.quote_code) || '').trim().toLowerCase();
+            return rQuote && rQuote === qQuote;
         });
-        if (byOutlet) return byOutlet;
+        if (byQuote) return byQuote;
     }
 
-    // 2. Match by exact valid TK Code (e.g. 'TK26.00472') - must not be empty or truncated
+    // 2. Sợi chỉ đỏ tk_code: Match by exact valid TK Code (e.g. 'TK26.00472')
     if (qTk && qTk.startsWith('tk') && qTkDigits.length >= 4) {
         const byTk = allRequests.find(r => {
             if (!r) return false;
             const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
             const rTkDigits = rTk.replace(/\D/g, '');
-            if (qTk === rTk || (qTkDigits.length >= 4 && qTkDigits === rTkDigits)) {
-                // If outlet codes are present on both, verify they don't conflict
-                const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
-                if (qOutlet && rOutlet && qOutlet !== '---' && rOutlet !== '---' && qOutlet !== rOutlet) {
-                    return false; // different outlet, do not match!
-                }
-                return true;
-            }
-            return false;
+            return qTk === rTk || (qTkDigits.length >= 4 && qTkDigits === rTkDigits);
         });
         if (byTk) return byTk;
     }
 
-    // 3. Match by exact Outlet Name (if sufficiently unique and no conflicting outlet code)
-    if (qName && qName.length >= 6) {
-        const byName = allRequests.find(r => {
-            if (!r) return false;
-            const rName = String(r.outletName || r.outlet_name || (r.requester && (r.requester.outletName || r.requester.outlet_name)) || '').trim().toLowerCase();
-            const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
-            if (qOutlet && rOutlet && qOutlet !== '---' && rOutlet !== '---' && qOutlet !== rOutlet) {
-                return false;
-            }
-            return rName && (rName === qName || (rName.length >= 8 && (rName.includes(qName) || qName.includes(rName))));
-        });
-        if (byName) return byName;
-    }
-
+    // TUYỆT ĐỐI CẤM khớp theo Outlet Code hoặc Outlet Name vì một điểm bán có nhiều đợt khảo sát khác nhau
     return null;
 }
 
