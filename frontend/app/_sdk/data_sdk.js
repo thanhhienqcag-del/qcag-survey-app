@@ -154,7 +154,12 @@
                 // New row: add to beginning of store if not already present
                 var exists = false;
                 for (var pi = 0; pi < _store.length; pi++) {
-                  if (_store[pi].__backendId === bid) { exists = true; _store[pi] = row; break; }
+                  var pItem = _store[pi];
+                  if (pItem.__backendId === bid || (pItem.tkCode && row.tkCode && pItem.tkCode === row.tkCode) || (pItem.id && row.id && String(pItem.id) === String(row.id))) {
+                    exists = true;
+                    _store[pi] = row;
+                    break;
+                  }
                 }
                 if (!exists) _store.unshift(row);
                 if (_store.length > _storeMaxRows) {
@@ -164,7 +169,12 @@
                 patched = true;
               } else if (payload.action === 'update' || payload.action === 'upsert') {
                 for (var ui = 0; ui < _store.length; ui++) {
-                  if (_store[ui].__backendId === bid) {
+                  var uItem = _store[ui];
+                  var isMatch = (uItem.__backendId === bid) ||
+                    (uItem.id && row.id && String(uItem.id) === String(row.id)) ||
+                    (uItem.tkCode && row.tkCode && String(uItem.tkCode) === String(row.tkCode)) ||
+                    (payload.id && (String(uItem.__backendId) === String(payload.id) || String(uItem.tkCode) === String(payload.id)));
+                  if (isMatch) {
                     for (var key in row) {
                       if (!Object.prototype.hasOwnProperty.call(row, key)) continue;
                       if (_shouldPreserveExistingField(key, row[key], _store[ui][key])) continue;
@@ -749,12 +759,25 @@
       statusImages: true,
       designImages: true,
       acceptanceImages: true,
-      comments: true
+      comments: true,
+      items: true
     };
     if (!protectedFields[key]) return false;
     if (incoming == null) return String(existing || '').trim().length > 0;
     if ((key === 'content' || key === 'oldContentExtra') && String(incoming).trim() === '' && String(existing || '').trim().length > 0) {
       return true;
+    }
+    if (key === 'items') {
+      var hasValidItems = function (val) {
+        if (!val) return false;
+        if (Array.isArray(val)) return val.length > 0;
+        if (typeof val === 'string') {
+          var t = val.trim();
+          return t !== '' && t !== '[]' && t !== 'null';
+        }
+        return false;
+      };
+      return !hasValidItems(incoming) && hasValidItems(existing);
     }
     if ((key === 'statusImages' || key === 'designImages' || key === 'acceptanceImages' || key === 'comments') && typeof incoming === 'string') {
       var trimmed = String(incoming).trim();

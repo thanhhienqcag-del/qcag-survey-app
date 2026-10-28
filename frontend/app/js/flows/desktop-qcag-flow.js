@@ -222,9 +222,28 @@ function qcagDesktopMergePreserveImageFields(nextReq, prevReq) {
     }
   }
 
+  // Preserve items if previous had valid items and incoming is empty/missing
+  const _hasAnyItems = (val) => {
+    if (!val) return false;
+    if (Array.isArray(val)) return val.length > 0;
+    if (typeof val === 'string') {
+      const t = val.trim();
+      return t !== '' && t !== '[]' && t !== 'null';
+    }
+    return false;
+  };
+  if (!_hasAnyItems(merged.items) && _hasAnyItems(prevReq.items)) {
+    merged.items = prevReq.items;
+  }
+
   // Preserve oldContent flag if previously true and incoming is falsy without content
   if (prevReq.oldContent && !nextReq.oldContent && !nextReq.content) {
     merged.oldContent = true;
+  }
+
+  // Preserve designFilename if previous had valid filename and incoming is missing/empty
+  if (!merged.designFilename && prevReq.designFilename) {
+    merged.designFilename = prevReq.designFilename;
   }
 
   return merged;
@@ -407,11 +426,18 @@ async function qcagDesktopGetFullRequest(idOrReq, forceRefresh) {
 
   const base = (typeof idOrReq === 'object' && idOrReq)
     ? idOrReq
-    : allRequests.find(r => r.__backendId === id);
+    : allRequests.find(r => r && (
+        r.__backendId === id ||
+        String(r.__backendId || '').trim() === String(id).trim() ||
+        String(r.id || '').trim() === String(id).trim() ||
+        String(r.tkCode || '').trim() === String(id).trim()
+      ));
   if (!base) return null;
 
   const cached = _qcagDesktopFullRequestCache[id];
-  if (cached && !forceRefresh) {
+  const isWarranty = qcagDesktopGetRequestType(base) === 'warranty';
+  const hasCachedItems = cached && (typeof cached.items === 'string' ? (cached.items.trim() !== '' && cached.items.trim() !== '[]') : (Array.isArray(cached.items) && cached.items.length > 0));
+  if (cached && !forceRefresh && (isWarranty || hasCachedItems)) {
     if (base && (base.updatedAt !== cached.updatedAt || base.editingRequestedAt !== cached.editingRequestedAt || base.status !== cached.status || (base.comments || '').length !== (cached.comments || '').length)) {
       _qcagDesktopFullRequestCache[id] = qcagDesktopMergePreserveImageFields(base, cached);
     }
@@ -426,7 +452,12 @@ async function qcagDesktopGetFullRequest(idOrReq, forceRefresh) {
         const r = await window.dataSdk.getOne(id);
         if (r && r.isOk && r.data) {
           merged = Object.assign({}, merged, r.data);
-          const idx = allRequests.findIndex(x => x.__backendId === id);
+          const idx = allRequests.findIndex(x => x && (
+            x.__backendId === id ||
+            String(x.__backendId || '').trim() === String(id).trim() ||
+            String(x.id || '').trim() === String(id).trim() ||
+            String(x.tkCode || '').trim() === String(id).trim()
+          ));
           if (idx !== -1) allRequests[idx] = merged;
         }
       } catch (e) {
@@ -1368,7 +1399,9 @@ async function qcagDesktopConfirmEditSingleItemModal() {
 
   qcagCloseEditSingleItemModal();
 
-  const items = qcagDesktopParseJson(currentDetailRequest.items, []);
+  const items = Array.isArray(qcagDesktopParseJson(currentDetailRequest.items, []))
+    ? [...qcagDesktopParseJson(currentDetailRequest.items, [])]
+    : [];
   if (!items[idx]) { showToast('Không tìm thấy hạng mục'); return; }
 
   const oldItem = items[idx];
@@ -1927,11 +1960,15 @@ async function qcagDesktopConfirmEditItemsModal() {
     return;
   }
 
-  const items = qcagDesktopParseJson(currentDetailRequest.items, []);
+  const items = Array.isArray(qcagDesktopParseJson(currentDetailRequest.items, []))
+    ? [...qcagDesktopParseJson(currentDetailRequest.items, [])]
+    : [];
   const now = new Date().toISOString();
   const tLower = type.toLowerCase();
   const isNoPoles = type === 'Mái che di động' || type === 'Rèm Mái Che' || tLower.includes('mái che') || tLower.includes('mai che') || tLower.includes('rèm') || tLower.includes('rem');
+  const genItemId = `rqi_${String(currentDetailRequest.tkCode || currentDetailRequest.tk_code || 'rq').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}_${items.length + 1}`;
   items.push({
+    id: genItemId,
     type,
     subType: subType || undefined,
     action,
@@ -1945,7 +1982,7 @@ async function qcagDesktopConfirmEditItemsModal() {
     addedByQCAG: true,
     addedByQCAGBy: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
     addedByQCAGAt: now,
-    otherContent: type === 'Hạng mục khác' ? otherContent : undefined
+    otherContent: type === 'Hạng mục khác' ? otherContent : (subType || undefined)
   });
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${subType ? ' - ' + subType : ''}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now });
@@ -1970,8 +2007,10 @@ async function qcagDesktopConfirmEditItemsModal() {
 
 async function qcagDesktopRemoveItem(index) {
   if (!currentDetailRequest || !qcagDesktopCanEditItems(currentDetailRequest)) return;
-  const items = qcagDesktopParseJson(currentDetailRequest.items, []);
-  if (!Array.isArray(items) || index < 0 || index >= items.length) return;
+  const items = Array.isArray(qcagDesktopParseJson(currentDetailRequest.items, []))
+    ? [...qcagDesktopParseJson(currentDetailRequest.items, [])]
+    : [];
+  if (items.length === 0 || index < 0 || index >= items.length) return;
 
   // Show confirmation modal before deleting
   const itemLabel = items[index] && items[index].type ? items[index].type : `hạng mục số ${index + 1}`;
@@ -3335,9 +3374,38 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
   // 1. Refresh bảng hạng mục (items table)
   const itemsSec = document.getElementById('qcagItemsSection');
   if (itemsSec) {
-    const items = qcagDesktopParseJson(updatedRequest.items, []);
+    const _hasInPlaceItems = (val) => {
+      if (!val) return false;
+      if (Array.isArray(val)) return val.length > 0;
+      if (typeof val === 'string') {
+        const t = val.trim();
+        return t !== '' && t !== '[]' && t !== 'null';
+      }
+      return false;
+    };
+    let itemsToRender = updatedRequest.items;
+    if (!_hasInPlaceItems(itemsToRender)) {
+      const cached = (typeof _qcagDesktopFullRequestCache !== 'undefined') ? _qcagDesktopFullRequestCache[updatedRequest.__backendId || _qcagDesktopCurrentId] : null;
+      if (cached && _hasInPlaceItems(cached.items)) {
+        itemsToRender = cached.items;
+      } else if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest && _hasInPlaceItems(currentDetailRequest.items)) {
+        itemsToRender = currentDetailRequest.items;
+      }
+    }
+    const items = qcagDesktopParseJson(itemsToRender, []);
     const canManageItems = qcagDesktopCanEditItems(updatedRequest);
     itemsSec.innerHTML = qcagDesktopBuildItemsHtml(items, canManageItems, updatedRequest);
+
+    // Nếu cả updatedRequest lẫn cache đều chưa có items, tự động fetch full items từ backend
+    const isWarranty = typeof qcagDesktopGetRequestType === 'function' && qcagDesktopGetRequestType(updatedRequest) === 'warranty';
+    if (!isWarranty && !_hasInPlaceItems(itemsToRender) && updatedRequest.__backendId && typeof qcagDesktopGetFullRequest === 'function') {
+      qcagDesktopGetFullRequest(updatedRequest.__backendId, true).then(full => {
+        if (full && _hasInPlaceItems(full.items) && _qcagDesktopCurrentId === updatedRequest.__backendId) {
+          const fullItems = qcagDesktopParseJson(full.items, []);
+          itemsSec.innerHTML = qcagDesktopBuildItemsHtml(fullItems, qcagDesktopCanEditItems(full), full);
+        }
+      }).catch(() => {});
+    }
   }
 
   // 2. Refresh comment timeline & badge
@@ -4889,7 +4957,17 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
   if (_cachedFull) {
     _qcagDesktopFullRequestCache[id] = request;
   }
-  const _needsFullFetch = !_cachedFull;
+  const isWarrantyReq = qcagDesktopGetRequestType(request) === 'warranty';
+  const _hasReqItems = (r) => {
+    if (!r || !r.items) return false;
+    if (Array.isArray(r.items)) return r.items.length > 0;
+    if (typeof r.items === 'string') {
+      const t = r.items.trim();
+      return t !== '' && t !== '[]' && t !== 'null';
+    }
+    return false;
+  };
+  const _needsFullFetch = !_cachedFull || (!isWarrantyReq && !_hasReqItems(request));
 
   const _prevDetail = currentDetailRequest;
   const isSameReq = _qcagDesktopCurrentId === id;
@@ -5965,6 +6043,7 @@ async function qcagDesktopMarkProcessed() {
       production_approval_status: 'approved',
       comments: JSON.stringify(comments),
       designImages: _finalDesignImgStr,
+      designFilename: currentDetailRequest.designFilename || '',
       ...extraFields
     };
 

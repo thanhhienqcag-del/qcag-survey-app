@@ -718,6 +718,8 @@ async function initKsDB() {
             DROP VIEW IF EXISTS ks_requests_view CASCADE;
             DROP VIEW IF EXISTS ks_requests_lite_view CASCADE;
             DROP VIEW IF EXISTS ks_request_items CASCADE;
+            ALTER TABLE request_items DROP CONSTRAINT IF EXISTS request_items_added_by_qcag_by_fkey;
+            ALTER TABLE request_items DROP CONSTRAINT IF EXISTS request_items_brand_changed_by_fkey;
         `);
     } catch (err) {
         console.warn('[initKsDB] Views cleanup warning (non-fatal):', err && err.message ? err.message : err);
@@ -3154,7 +3156,7 @@ const KS_REQUESTS_SELECT_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
-      NULL::varchar(255) AS design_filename,
+      COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       r.sale_name,
       r.sale_phone,
       r.sale_code,
@@ -3196,7 +3198,7 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, d.created_at 
+      SELECT d.url, d.created_by, d.created_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY d.created_at DESC, d.id DESC LIMIT 1
@@ -3302,7 +3304,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
-      NULL::varchar(255) AS design_filename,
+      COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       COALESCE(u.fullname, '') AS sale_name,
       COALESCE(u.phone, '') AS sale_phone,
       COALESCE(u.username, '') AS sale_code,
@@ -3331,7 +3333,7 @@ const KS_REQUESTS_LITE_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
@@ -3854,14 +3856,14 @@ async function getRequestDetailDirect(idOrTkCode) {
             COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
             COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
             COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
-            NULL::varchar(255) AS design_filename
+            COALESCE(d_lat.filename, '')::varchar(255) AS design_filename
         FROM requests r
         LEFT JOIN outlets o ON r.outlet_id = o.id
         LEFT JOIN users u ON r.requester_id = u.id
         LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
         LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
         LEFT JOIN LATERAL (
-          SELECT d.url, d.created_by, d.created_at 
+          SELECT d.url, d.created_by, d.created_at, d.filename 
           FROM designs d 
           WHERE d.request_tk_code = r.tk_code 
           ORDER BY d.id DESC LIMIT 1
@@ -4784,6 +4786,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId]);
                 }
             }
+        } else if ('designFilename' in b && b.designFilename) {
+            const filenameVal = String(b.designFilename).trim();
+            if (filenameVal) {
+                await pool.query('UPDATE designs SET filename = ?, updated_at = NOW() WHERE request_tk_code = ?', [filenameVal, tkCode]);
+            }
         }
 
         if ('acceptanceImages' in b) {
@@ -4869,7 +4876,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 const processedIds = [];
                 for (let i = 0; i < itemsToSave.length; i++) {
                     const it = itemsToSave[i] || {};
-                    const itemId = (toNullableString(it.id) || `rqi_${tkCode}_${i + 1}`).trim();
+                    const itemId = (toNullableString(it.id) || `rqi_${String(tkCode).replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}_${i + 1}`).trim();
                     it.id = itemId;
                     processedIds.push(itemId);
                     const seq = Number(it.seq) || (i + 1);
@@ -4881,7 +4888,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const useOldSize = Boolean(it.useOldSize);
                     const poles = Number(it.poles) || 0;
                     const note = toNullableString(it.note);
-                    const otherContent = toNullableString(it.otherContent);
+                    const otherContent = toNullableString(it.otherContent || it.subType);
                     const isSurvey = Boolean(it.survey);
                     const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : null;
                     const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : null;

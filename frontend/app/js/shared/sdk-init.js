@@ -244,6 +244,17 @@ window.__ksOnInvalidate = function (payload) {
 
       if (isEditReq && matchedReq) {
         matchedReq.editingRequestedAt = note.createdAt || new Date().toISOString();
+        if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
+          if (matchedReq.__backendId && _qcagDesktopFullRequestCache[matchedReq.__backendId]) {
+            _qcagDesktopFullRequestCache[matchedReq.__backendId].editingRequestedAt = matchedReq.editingRequestedAt;
+          }
+          if (targetId && _qcagDesktopFullRequestCache[targetId]) {
+            _qcagDesktopFullRequestCache[targetId].editingRequestedAt = matchedReq.editingRequestedAt;
+          }
+        }
+        if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest && (currentDetailRequest.__backendId === matchedReq.__backendId || currentDetailRequest.tkCode === matchedReq.tkCode || currentDetailRequest.__backendId === targetId)) {
+          currentDetailRequest.editingRequestedAt = matchedReq.editingRequestedAt;
+        }
         if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
 
         // Gắn tag chỉnh sửa in-place trên thẻ danh sách ngay lập tức
@@ -316,6 +327,12 @@ window.__ksOnInvalidate = function (payload) {
         Object.assign(allRequests[existsIdx], data);
       }
       if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
+    }
+
+    // In-Place Full Cache Update: Cache full data (including items) immediately for Desktop QCAG
+    if (typeof _qcagDesktopFullRequestCache !== 'undefined' && data) {
+      _qcagDesktopFullRequestCache[bid] = Object.assign({}, data);
+      if (data.tkCode) _qcagDesktopFullRequestCache[data.tkCode] = _qcagDesktopFullRequestCache[bid];
     }
 
     // In-Place DataSdk Store Update
