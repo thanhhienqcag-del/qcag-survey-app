@@ -685,65 +685,85 @@ function renderRequestItems() {
         ` : ''}
 
         <div class="space-y-3">
-          <!-- HÀNG 1: Loại bảng hiệu (100% khi chưa chọn -> thu về 50% khi chọn) + Brand (25%) + Hình thức (25%) -->
-          <div class="req-row-type-brand" id="reqRowMain-${item.id}">
-            <!-- Ô Loại bảng hiệu -->
-            <div class="req-col-type ${!item.type || isOther ? 'is-full' : 'is-shrunk'}">
-              <label class="block text-xs text-gray-500 mb-1">Loại bảng hiệu</label>
-              <div class="custom-select" data-id="${item.id}" data-field="type">
-                <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')">
-                  <span class="cs-label">${item.type ? (item.type === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' : escapeHtml(item.type)) : 'Chọn loại bảng hiệu'}</span>
-                </button>
-                <div class="cs-options hidden ${index >= 1 ? 'dropup' : ''}">
-                  ${availableSignTypes.map(t => t === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml('Bảng hiflex 2 mặt ')}<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span></div>` : `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
-                </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Loại bảng hiệu</label>
+            <div class="custom-select" data-id="${item.id}" data-field="type">
+              <button type="button" id="type-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'type')"><span class="cs-label">${item.type ? (item.type === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' : escapeHtml(item.type)) : 'Chọn loại bảng hiệu'}</span></button>
+              <div class="cs-options hidden ${index >= 1 ? 'dropup' : ''}">
+                ${availableSignTypes.map(t => t === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' ? `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml('Bảng hiflex 2 mặt ')}<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span></div>` : `<div class="cs-option" data-value="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join('')}
               </div>
             </div>
-
-            <!-- Ô Brand -->
-            <div class="req-col-brand ${!item.type || isOther ? 'is-hidden' : 'is-shown'}">
-              <label class="block text-xs text-gray-500 mb-1">Brand</label>
-              ${isNPP ? `
-                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Kênh NPP cố định thương hiệu Heineken">
-                  <span>Heineken</span>
-                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                </div>
-                <input type="hidden" name="brand-${item.id}" value="Heineken">
-              ` : isFixedTiger ? `
-                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
-                  <span>Tiger</span>
-                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                </div>
-                <input type="hidden" name="brand-${item.id}" value="Tiger">
-              ` : `
-                <div class="custom-select" data-id="${item.id}" data-field="brand">
-                  <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
-                  <div class="cs-options hidden">
-                    ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
-                  </div>
-                </div>
-              `}
-            </div>
-
-            <!-- Ô Hình thức -->
-            <div class="req-col-action ${!item.type || isOther || !hasBrandAndAction ? 'is-hidden' : 'is-shown'}">
-              <label class="block text-xs text-gray-500 mb-1">Hình thức</label>
-              ${isFixedAction ? `
-                <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
-                  <span>Làm mới</span>
-                  <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                </div>
-                <input type="hidden" name="action-${item.id}" value="Làm mới">
-              ` : `
-                <div class="custom-select" data-id="${item.id}" data-field="action">
-                  <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
-                  <div class="cs-options hidden">
-                    ${getActionsForItem(item.type, item).map(act => `<div class="cs-option" data-value="${escapeHtml(act)}">${escapeHtml(act)}</div>`).join('')}
-                  </div>
-                </div>
-              `}
-            </div>
           </div>
+
+          ${item.type && !isOther ? `
+            ${hasBrandAndAction ? `
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Brand</label>
+                  ${isNPP ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Kênh NPP cố định thương hiệu Heineken">
+                      <span>Heineken</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <input type="hidden" name="brand-${item.id}" value="Heineken">
+                  ` : isFixedTiger ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>Tiger</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <input type="hidden" name="brand-${item.id}" value="Tiger">
+                  ` : `
+                    <div class="custom-select" data-id="${item.id}" data-field="brand">
+                      <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
+                      <div class="cs-options hidden">
+                        ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
+                      </div>
+                    </div>
+                  `}
+                </div>
+                <div>
+                  <label class="block text-xs text-gray-500 mb-1">Hình thức</label>
+                  ${isFixedAction ? `
+                    <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                      <span>Làm mới</span>
+                      <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                    </div>
+                    <input type="hidden" name="action-${item.id}" value="Làm mới">
+                  ` : `
+                    <div class="custom-select" data-id="${item.id}" data-field="action">
+                      <button type="button" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'action')"><span class="cs-label">${item.action || 'Chọn hình thức'}</span></button>
+                      <div class="cs-options hidden">
+                        ${getActionsForItem(item.type, item).map(act => `<div class="cs-option" data-value="${escapeHtml(act)}">${escapeHtml(act)}</div>`).join('')}
+                      </div>
+                    </div>
+                  `}
+                </div>
+              </div>
+            ` : `
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Brand</label>
+                ${isNPP ? `
+                  <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Kênh NPP cố định thương hiệu Heineken">
+                    <span>Heineken</span>
+                    <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                  </div>
+                  <input type="hidden" name="brand-${item.id}" value="Heineken">
+                ` : isFixedTiger ? `
+                  <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
+                    <span>Tiger</span>
+                    <svg class="w-3.5 h-3.5 opacity-40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                  </div>
+                  <input type="hidden" name="brand-${item.id}" value="Tiger">
+                ` : `
+                  <div class="custom-select" data-id="${item.id}" data-field="brand">
+                    <button type="button" id="brand-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'brand')"><span class="cs-label">${item.brand || 'Chọn brand'}</span></button>
+                    <div class="cs-options hidden">
+                      ${brands.map(b => `<div class="cs-option" data-value="${escapeHtml(b)}">${escapeHtml(b)}</div>`).join('')}
+                    </div>
+                  </div>
+                `}
+              </div>
+            `}
 
           ${isLogoIndoorTiger || isLogoIndoorHeineken ? `
             <div>
@@ -759,27 +779,66 @@ function renderRequestItems() {
             </div>
           ` : ''}
 
-          <!-- HÀNG 2: Kích thước cũ (1 cột) + Ngang (1 cột) + Cao (1 cột) + Số trụ (1 cột) -->
-          ${!item.survey && item.type && !isOther ? `
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-              <!-- 1. Kích thước cũ toggle ở ĐẦU TIÊN -->
-              <div class="col-span-1">
-                <label class="block text-xs text-gray-500 mb-1">Kích thước cũ</label>
-                <div class="flex items-center h-10">
+            ${hasBrandAndAction ? `
+              <div>
+                ${item.action === 'Di dời' ? `
+                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                    <span>Yêu cầu riêng</span>
+                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Tên quán lấy Logo</span>
+                  </label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập tên quán nơi lấy Logo và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>Bạn bắt buộc phải nhập tên quán nơi lấy Logo và yêu cầu khác nếu có</span>
+                  </p>
+                ` : item.action === 'Thu hồi' ? `
+                  <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
+                    <span>Yêu cầu riêng</span>
+                    <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Nơi lưu trữ</span>
+                  </label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập nơi lưu trữ và yêu cầu khác nếu có..." rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
+                  <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span>Bạn bắt buộc phải nhập nơi lưu trữ và yêu cầu khác nếu có</span>
+                  </p>
+                ` : `
+                  <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
+                  <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="2" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
+                `}
+              </div>
+            ` : ''}
+
+            ${!item.survey ? `
+            <div class="py-2">
+              <div class="flex items-center justify-between text-sm text-gray-500 mb-2">
+                <span class="${noPoles ? 'text-gray-400' : ''}">Số trụ</span>
+                <span>Kích thước cũ</span>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-2" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : ''}>
+                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, -1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">-</button>
+                    <input id="poles-${item.id}" type="text" ${noPoles ? `readonly onclick="showDefaultFieldToast(event)"` : ''} inputmode="numeric" pattern="\\d*" value="${noPoles ? 0 : (item.poles || 0)}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-12 h-8 px-2 border border-gray-200 rounded-lg text-sm text-center ${noPoles ? 'opacity-50 bg-gray-100 cursor-not-allowed text-gray-400' : ''}">
+                    <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, 1)"`} class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded-lg text-sm font-semibold ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">+</button>
+                    <span class="text-xs ${noPoles ? 'text-gray-400' : 'text-gray-500'}">trụ</span>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
                   <button onclick="toggleOldSize(${item.id})" class="toggle-switch ${item.useOldSize ? 'bg-gray-900 toggle-on' : 'bg-gray-300'} ${isFixedSize || isLogoIndoorHeineken || isLogoOutdoorFixed ? 'opacity-40 cursor-not-allowed' : ''} rounded-full p-0.5 relative">
                     <div class="toggle-slider w-5 h-5 bg-white rounded-full shadow"></div>
                   </button>
                 </div>
               </div>
+            </div>
 
-              <!-- 2 & 3. Ngang (m) và Cao (m) -->
-              ${isLogoIndoorHeineken ? `
-                ${!item.subType ? `
-                  <div class="col-span-2 py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-                    Vui lòng chọn Phân loại để chọn kích thước
-                  </div>
-                ` : `
-                  <div class="col-span-1">
+            ${isLogoIndoorHeineken ? `
+              ${!item.subType ? `
+                <div class="py-2.5 px-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                  Vui lòng chọn Phân loại để chọn kích thước
+                </div>
+              ` : `
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
                     <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                     <div class="custom-select" data-id="${item.id}" data-field="heinekenWidth">
                       <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenWidth')">
@@ -794,7 +853,7 @@ function renderRequestItems() {
                       </div>
                     </div>
                   </div>
-                  <div class="col-span-1">
+                  <div>
                     <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                     <div class="custom-select" data-id="${item.id}" data-field="heinekenHeight">
                       <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'heinekenHeight')">
@@ -809,9 +868,11 @@ function renderRequestItems() {
                       </div>
                     </div>
                   </div>
-                `}
-              ` : isLogoOutdoorFixed ? `
-                <div class="col-span-1">
+                </div>
+              `}
+            ` : isLogoOutdoorFixed ? `
+              <div class="grid grid-cols-2 gap-3">
+                <div>
                   <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                   <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoWidth">
                     <button type="button" id="width-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoWidth')">
@@ -826,7 +887,7 @@ function renderRequestItems() {
                     </div>
                   </div>
                 </div>
-                <div class="col-span-1">
+                <div>
                   <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                   <div class="custom-select" data-id="${item.id}" data-field="outdoorLogoHeight">
                     <button type="button" id="height-${item.id}" class="cs-trigger" onclick="toggleCustomSelect(event, ${item.id}, 'outdoorLogoHeight')">
@@ -841,8 +902,10 @@ function renderRequestItems() {
                     </div>
                   </div>
                 </div>
-              ` : !item.useOldSize ? `
-                <div class="col-span-1">
+              </div>
+            ` : !item.useOldSize ? `
+              <div class="grid grid-cols-2 gap-3">
+                <div>
                   <label class="block text-xs text-gray-500 mb-1">Ngang (m)</label>
                   ${isFixedSize ? `
                     <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
@@ -854,7 +917,7 @@ function renderRequestItems() {
                     <input id="width-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.width}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'width', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
                   `}
                 </div>
-                <div class="col-span-1">
+                <div>
                   <label class="block text-xs text-gray-500 mb-1">Cao (m)</label>
                   ${isFixedSize ? `
                     <div class="cs-fixed-box" onclick="showDefaultFieldToast(event)" title="Hạng mục này đã được mặc định những thông tin này không thể thay đổi">
@@ -866,56 +929,13 @@ function renderRequestItems() {
                     <input id="height-${item.id}" type="text" inputmode="decimal" pattern="[0-9]*[.,]?[0-9]*" value="${item.height}" oninput="sanitizeDecimalInput(this)" onchange="updateRequestItem(${item.id}, 'height', this.value)" class="w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-white text-sm" placeholder="0.00">
                   `}
                 </div>
-              ` : `
-                <div class="col-span-2">
-                  <label class="block text-xs text-gray-500 mb-1">Kích thước</label>
-                  <div class="h-10 px-3 flex items-center bg-gray-100 dark:bg-slate-800 rounded-lg text-xs text-gray-500 italic">
-                    Sử dụng theo kích thước cũ
-                  </div>
-                </div>
-              `}
-
-              <!-- 4. Số trụ ở CUỐI CÙNG -->
-              <div class="col-span-1">
-                <label class="block text-xs text-gray-500 mb-1 ${noPoles ? 'text-gray-400' : ''}">Số trụ</label>
-                <div class="poles-counter-box flex items-center gap-1.5 h-10 px-2 bg-gray-100 dark:bg-slate-900 border border-gray-200 dark:border-white/10 rounded-xl" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : ''}>
-                  <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, -1)"`} class="w-7 h-7 flex items-center justify-center bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded-lg text-sm font-semibold transition-colors ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">-</button>
-                  <input id="poles-${item.id}" type="text" ${noPoles ? `readonly onclick="showDefaultFieldToast(event)"` : ''} inputmode="numeric" pattern="\\d*" value="${noPoles ? 0 : (item.poles || 0)}" oninput="sanitizeIntegerInput(this)" onchange="setPolesSilent(${item.id}, this.value)" class="w-10 h-7 bg-transparent text-center font-bold text-sm ${noPoles ? 'opacity-50 cursor-not-allowed text-gray-400' : ''}">
-                  <button type="button" ${noPoles ? `onclick="showDefaultFieldToast(event)"` : `onclick="incrementPoles(${item.id}, 1)"`} class="w-7 h-7 flex items-center justify-center bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded-lg text-sm font-semibold transition-colors ${noPoles ? 'opacity-40 cursor-not-allowed text-gray-400' : ''}">+</button>
-                  <span class="text-xs ml-0.5 ${noPoles ? 'text-gray-400' : 'text-gray-500'}">trụ</span>
-                </div>
               </div>
-            </div>
-          ` : ''}
-
-          <!-- HÀNG 3: Yêu cầu riêng -->
-          ${item.type && !isOther && hasBrandAndAction ? `
-            <div>
-              ${item.action === 'Di dời' ? `
-                <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
-                  <span>Yêu cầu riêng</span>
-                  <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Tên quán lấy Logo</span>
-                </label>
-                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập tên quán nơi lấy Logo và yêu cầu khác nếu có..." rows="3" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
-                <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
-                  <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                  <span>Bạn bắt buộc phải nhập tên quán nơi lấy Logo và yêu cầu khác nếu có</span>
-                </p>
-              ` : item.action === 'Thu hồi' ? `
-                <label class="block text-xs text-amber-600 font-medium mb-1 flex items-center justify-between">
-                  <span>Yêu cầu riêng</span>
-                  <span class="text-[11px] text-red-500 font-semibold">* Bắt buộc: Nơi lưu trữ</span>
-                </label>
-                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Bắt buộc nhập nơi lưu trữ và yêu cầu khác nếu có..." rows="3" class="w-full px-3 py-2 border border-amber-300 rounded-lg bg-amber-50/40 text-xs resize-none focus:border-amber-500">${item.note || ''}</textarea>
-                <p class="text-[11px] text-amber-600 mt-1 flex items-center gap-1">
-                  <svg class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                  <span>Bạn bắt buộc phải nhập nơi lưu trữ và yêu cầu khác nếu có</span>
-                </p>
-              ` : `
-                <label class="block text-xs text-gray-500 mb-1">Yêu cầu riêng (nếu có)</label>
-                <textarea id="note-${item.id}" onchange="updateRequestItem(${item.id}, 'note', this.value)" placeholder="Nhập yêu cầu riêng (ví dụ: sửa viền, thay khung...)" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-white text-xs resize-none">${item.note || ''}</textarea>
-              `}
-            </div>
+            ` : `
+              <div class="py-2 px-3 bg-gray-200 rounded-lg text-sm text-gray-600">
+                Sử dụng theo kích thước cũ
+              </div>
+            `}
+            ` : ''}
           ` : ''}
 
           ${isOther ? `
@@ -937,38 +957,6 @@ function renderRequestItems() {
       opt.addEventListener('click', (e) => {
         e.stopPropagation();
         const value = opt.getAttribute('data-value') || '';
-        if (field === 'type') {
-          const row = document.getElementById(`reqRowMain-${id}`);
-          const colType = row ? row.querySelector('.req-col-type') : null;
-          const colBrand = row ? row.querySelector('.req-col-brand') : null;
-          const colAction = row ? row.querySelector('.req-col-action') : null;
-          if (colType && colType.classList.contains('is-full')) {
-            closeAllCustomSelects();
-            const trigLabel = cs.querySelector('.cs-label');
-            if (trigLabel) {
-              trigLabel.innerHTML = value === 'Bảng hiflex 2 mặt (KHÔNG ĐÈN)' 
-                ? escapeHtml('Bảng hiflex 2 mặt ') + '<span class="text-red-600 font-semibold">(KHÔNG ĐÈN)</span>' 
-                : escapeHtml(value);
-            }
-            // Kích hoạt transition thu về cực mượt
-            colType.classList.remove('is-full');
-            colType.classList.add('is-shrunk');
-            if (value !== 'Hạng mục khác') {
-              if (colBrand) {
-                colBrand.classList.remove('is-hidden');
-                colBrand.classList.add('is-shown');
-              }
-              if (colAction) {
-                colAction.classList.remove('is-hidden');
-                colAction.classList.add('is-shown');
-              }
-            }
-            setTimeout(() => {
-              chooseCustomOption(parseInt(id, 10), field, value);
-            }, 300);
-            return;
-          }
-        }
         chooseCustomOption(parseInt(id, 10), field, value);
       });
     });

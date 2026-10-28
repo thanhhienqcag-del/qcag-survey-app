@@ -2777,33 +2777,6 @@ body.theme-light .prod-app-home-badge,
   padding-bottom: calc(112px + env(safe-area-inset-bottom, 14px)) !important;
 }
 
-/* Responsive Hàng 1 Tab 2 trên Mobile */
-.req-row-type-brand {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 12px !important;
-  width: 100% !important;
-}
-
-.req-col-type.is-full,
-.req-col-type.is-shrunk {
-  width: 100% !important;
-  max-width: 100% !important;
-  flex: 1 1 100% !important;
-}
-
-.req-col-brand.is-hidden,
-.req-col-action.is-hidden {
-  display: none !important;
-}
-
-.req-col-brand.is-shown,
-.req-col-action.is-shown {
-  width: 100% !important;
-  max-width: 100% !important;
-  flex: 1 1 100% !important;
-  display: block !important;
-}
 
 /* ── MOBILE HEINEKEN: FIT GỌN & NÂNG CAO BOTTOM PANEL BẢN ĐỒ (≤ 767px) ── */
 @media (max-width: 767px) {
