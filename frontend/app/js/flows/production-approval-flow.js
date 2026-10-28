@@ -575,16 +575,21 @@ function renderDesktopMqSplitScreen(modal, item, activeUrl, idKey) {
 
 /** Render Vertical Lightbox on Mobile devices */
 function renderMobileMqLightbox(modal, item, activeUrl, idKey) {
-    const outletName = item.outletName || 'Outlet';
-    const quoteCode = item.quoteCode || '---';
+    const activeReq = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) || window._currentQuoteModalData || window._dv_currentDesignReq || {};
+    const outletName = item.outletName || item.outlet_name || activeReq.outletName || activeReq.outlet_name || 'Outlet';
+    const quoteCode = item.quoteCode || item.quote_code || item.quotationCode || activeReq.quoteCode || activeReq.quote_code || '---';
+    const outletCode = item.outletCode || item.outlet_code || activeReq.outletCode || activeReq.outlet_code || '';
     modal.innerHTML = `
         <!-- Top Bar: Title, Zoom & Close Controls -->
         <div class="w-full flex items-center justify-between z-50 pt-2 px-1">
-            <div class="flex flex-col">
-                <span class="text-xs font-mono font-bold text-gray-300">MÃ BÁO GIÁ: ${escapeHtml(quoteCode)}</span>
-                <span class="text-sm font-bold text-white uppercase tracking-wide truncate max-w-[200px]">${escapeHtml(outletName)}</span>
+            <div class="flex flex-col min-w-0 pr-2">
+                <div class="flex items-center gap-1.5 overflow-hidden">
+                    <span class="text-xs font-mono font-bold text-gray-300 shrink-0">MÃ BÁO GIÁ: ${escapeHtml(quoteCode)}</span>
+                    ${outletCode ? `<span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded text-sky-400 bg-sky-950/40 border border-sky-600/40 shrink-0">#${escapeHtml(outletCode)}</span>` : ''}
+                </div>
+                <span class="text-sm font-bold text-white uppercase tracking-wide truncate max-w-[220px]">${escapeHtml(outletName)}</span>
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-1.5 shrink-0">
                 <button onclick="changeMqZoom(0.35)" class="w-9 h-9 bg-white/15 text-white rounded-xl flex items-center justify-center font-bold text-base border border-white/20 shadow" title="Phóng to">+</button>
                 <button onclick="changeMqZoom(-0.35)" class="w-9 h-9 bg-white/15 text-white rounded-xl flex items-center justify-center font-bold text-base border border-white/20 shadow" title="Thu nhỏ">-</button>
                 <button onclick="resetMqZoom()" class="w-9 h-9 bg-white/15 text-white rounded-xl flex items-center justify-center border border-white/20 shadow" title="Đặt lại kích thước">
@@ -601,28 +606,42 @@ function renderMobileMqLightbox(modal, item, activeUrl, idKey) {
             <img id="mqLightboxImg" src="${escapeHtml(activeUrl)}" draggable="false" ondragstart="return false;" onmousedown="initMqImagePan(event)" ontouchstart="initMqImagePan(event)" ondblclick="handleMqDoubleClick(event)" class="max-h-[66vh] max-w-full object-contain rounded-xl shadow-2xl pointer-events-auto select-none" style="transform: translate(0px, 0px) scale(1); -webkit-user-drag: none; cursor: grab;">
         </div>
 
-        <!-- Bottom: Integrated 3 Action Buttons on Mobile -->
-        ${((item.productionApprovalStatus || 'pending') === 'pending') ? `
-            <div class="w-full flex items-center gap-2 pb-2 z-50" onclick="event.stopPropagation()">
-                <div id="swipeContainer_modal_${idKey}" onclick="handleSwipeContainerClick(event, '${idKey}', true)" class="prod-app-swipe-box prod-app-swipe-container flex-1 rounded-full h-[46px] relative flex items-center px-1 overflow-hidden select-none touch-none cursor-pointer" title="Nhấp chuột hoặc vuốt để đồng ý sản xuất">
-                    <div id="swipeFill_modal_${idKey}" class="prod-app-swipe-fill absolute left-0 top-0 bottom-0 rounded-l-full transition-all duration-75 pointer-events-none w-0"></div>
-                    <div id="swipeKnob_modal_${idKey}" onmousedown="initSwipeDragModal(event, '${idKey}')" ontouchstart="initSwipeDragModal(event, '${idKey}')" class="prod-app-swipe-knob w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs cursor-grab active:cursor-grabbing z-10 transition-transform">
-                        <svg class="w-4 h-4 pointer-events-none" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
-                    </div>
-                    <div id="swipeLabel_modal_${idKey}" class="prod-app-swipe-label absolute inset-0 flex items-center justify-center text-xs font-bold pointer-events-none pl-6 pr-2 text-center whitespace-nowrap overflow-hidden text-ellipsis tracking-wider transition-opacity">
-                        <span class="prod-app-swipe-text">Vuốt đồng ý</span>
-                    </div>
-                </div>
-                <button onclick="closeMqImagePreview(); promptRequestEditProduction('${idKey}')" class="prod-app-btn-edit font-bold text-xs h-[46px] px-3.5 rounded-xl flex items-center justify-center transition-all flex-shrink-0 whitespace-nowrap">
-                    Chỉnh sửa
-                </button>
-                <button onclick="closeMqImagePreview(); promptRejectProduction('${idKey}')" class="prod-app-btn-reject font-bold text-xs h-[46px] px-3.5 rounded-xl flex items-center justify-center transition-all flex-shrink-0 whitespace-nowrap">
-                    Từ chối
-                </button>
-            </div>
-        ` : ''}
+        <!-- Bottom: Integrated 2 Action Buttons on Mobile (Chỉnh sửa & Chia sẻ Zalo) -->
+        <div class="w-full flex items-center gap-3 px-3 z-50" style="padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));" onclick="event.stopPropagation()">
+            <button type="button" onclick="closeMqImagePreview(); promptRequestEditProduction('${idKey}')" class="dv-zoom-btn dv-zoom-btn-edit flex-1 font-bold text-sm h-[48px] rounded-xl flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer">
+                <svg class="dv-zoom-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                <span>Chỉnh sửa</span>
+            </button>
+            <button type="button" onclick="handleMqShareZalo(event, '${idKey}')" class="dv-zoom-btn dv-zoom-btn-share flex-1 font-bold text-sm h-[48px] rounded-xl flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer">
+                <svg class="dv-zoom-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                <span>Chia sẻ Zalo</span>
+            </button>
+        </div>
     `;
 }
+
+/** Chia sẻ ảnh Maquette trực tiếp sang Zalo từ Mobile Lightbox */
+function handleMqShareZalo(event, idKey) {
+    if (event) {
+        try { event.stopPropagation(); } catch (_) { }
+    }
+    const imgEl = document.getElementById('mqLightboxImg');
+    const targetSrc = (imgEl && imgEl.src) || '';
+    const item = (typeof _currentApprovalItem !== 'undefined' && _currentApprovalItem) ||
+                 (typeof _productionApprovalCache !== 'undefined' && _productionApprovalCache[idKey]) || {};
+    if (typeof window.shareDesignImage === 'function') {
+        window.shareDesignImage(targetSrc, item);
+    } else {
+        if (targetSrc) {
+            navigator.clipboard.writeText(targetSrc).then(() => {
+                if (typeof showToast === 'function') showToast('Đã sao chép liên kết hình ảnh để chia sẻ Zalo!');
+            }).catch(() => {
+                if (typeof showToast === 'function') showToast('Không thể sao chép liên kết hình ảnh');
+            });
+        }
+    }
+}
+window.handleMqShareZalo = handleMqShareZalo;
 
 /** Chuyển đơn Trước / Sau trên Desktop Split-Screen */
 function navigateDesktopMqPreview(step) {
@@ -2305,10 +2324,21 @@ function undoApproveProduction(idKey) {
 
 /** Edit Request Handler (Gửi Yêu Cầu Sửa Về Desktop QCAG dùng chung openEditRequestSheet) */
 function promptRequestEditProduction(idKey) {
-    const item = _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey);
-    if (!item) return;
+    let item = (typeof _productionApprovalItems !== 'undefined' && Array.isArray(_productionApprovalItems))
+        ? _productionApprovalItems.find(i => (i.__backendId || i.id) == idKey)
+        : null;
+    if (!item) {
+        item = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest)
+            || window._currentQuoteModalData
+            || window._dv_currentDesignReq
+            || null;
+    }
+    if (!item) {
+        if (typeof openEditRequestSheet === 'function') openEditRequestSheet();
+        return;
+    }
 
-    window.__pendingEditIdKey = idKey;
+    window.__pendingEditIdKey = idKey || item.__backendId || item.id;
 
     // Find target request object in allRequests for the unified openEditRequestSheet UI
     let reqObj = item.__ksReq || null;

@@ -2246,6 +2246,20 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
   const address = q.address || (req ? req.address : '');
   const quoteCode = q.quote_code || q.quoteCode || (req ? req.quoteCode : '---');
   const tkCode = q.tk_code || q.tkCode || (req ? req.tkCode : '---');
+
+  window._currentQuoteModalData = {
+    quoteCode: quoteCode,
+    quote_code: quoteCode,
+    outletName: outletName,
+    outlet_name: outletName,
+    outletCode: outletCode,
+    outlet_code: outletCode,
+    tkCode: tkCode,
+    tk_code: tkCode,
+    id: q.id || quoteCode,
+    __backendId: q.__backendId || q.id || quoteCode,
+    ...q
+  };
   const phone = q.phone || (req ? (req.phone || req.outletPhone) : '');
   const areaName = q.area || (req && (req.area || req.region || req.province || req.district)) || '';
   const channelName = (req && (req.channel || req.outletType)) || q.outlet_type || q.sale_type || '';
@@ -2521,9 +2535,9 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
               <div class="mobile-quote-summary-card hk-modal-mq-card rounded-xl p-4 flex flex-col flex-1 min-h-[280px] mt-0">
                 <div class="text-[11px] font-bold mobile-quote-section-title mb-2.5 flex items-center justify-between flex-shrink-0">
                   <span>HÌNH ẢNH MAQUETTE / THIẾT KẾ</span>
-                  <span class="text-[11px] text-sky-400 font-semibold cursor-pointer hover:underline" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}'); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">phóng to full 100% ↗</span>
+                  <span class="text-[11px] text-sky-400 font-semibold cursor-pointer hover:underline" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}', '${ksEscapeHtml(quoteCode)}', window._currentQuoteModalData); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">phóng to full 100% ↗</span>
                 </div>
-                <div class="hk-mq-rect-box flex-1 flex items-center justify-center bg-black/60 rounded-xl overflow-hidden border border-slate-700/60 p-2 w-full cursor-pointer min-h-[230px]" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}'); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">
+                <div class="hk-mq-rect-box flex-1 flex items-center justify-center bg-black/60 rounded-xl overflow-hidden border border-slate-700/60 p-2 w-full cursor-pointer min-h-[230px]" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}', '${ksEscapeHtml(quoteCode)}', window._currentQuoteModalData); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">
                   <img src="${ksEscapeHtml(firstMqUrl)}" class="w-full h-full object-contain cursor-pointer hover:scale-[1.02] transition-transform" alt="Maquette Báo Giá">
                 </div>
               </div>
@@ -2648,10 +2662,10 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
           <div class="space-y-2">
             <div class="flex items-center justify-between">
               <h3 class="full-mqm-section-title text-xs font-bold tracking-wider uppercase">HÌNH ẢNH MAQUETTE / THIẾT KẾ</h3>
-              <button type="button" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}'); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1">phóng to full 100% ↗</button>
+              <button type="button" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}', '${ksEscapeHtml(quoteCode)}', window._currentQuoteModalData); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300 transition-colors flex items-center gap-1">phóng to full 100% ↗</button>
             </div>
             <div class="full-mqm-mq-card rounded-xl p-2.5 flex flex-col gap-2.5">
-              <div class="relative w-full aspect-video bg-black/40 rounded-lg border border-gray-700/50 overflow-hidden flex items-center justify-center cursor-pointer group" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}'); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">
+              <div class="relative w-full aspect-video bg-black/40 rounded-lg border border-gray-700/50 overflow-hidden flex items-center justify-center cursor-pointer group" onclick="if (typeof openMqImagePreview === 'function') openMqImagePreview('${ksEscapeHtml(firstMqUrl)}', '${ksEscapeHtml(quoteCode)}', window._currentQuoteModalData); else if (typeof showImageFull === 'function') showImageFull('${ksEscapeHtml(firstMqUrl)}', false);">
                 <img src="${ksEscapeHtml(firstMqUrl)}" class="full-mqm-mq-img w-full h-full object-contain transition-transform group-hover:scale-[1.02]" alt="Maquette báo giá">
               </div>
             </div>
@@ -3834,23 +3848,6 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       };
       inner.appendChild(shareBtn);
 
-      if (req && (req.__backendId || req.id || req.tkCode || req.quoteCode)) {
-        const quoteBtn = document.createElement('button');
-        quoteBtn.type = 'button';
-        quoteBtn.className = 'dv-zoom-btn dv-zoom-btn-quote';
-        quoteBtn.innerHTML = '<svg class="dv-zoom-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path></svg><span>Xem chi tiết báo giá</span>';
-        quoteBtn.onclick = (e) => {
-          try { e.stopPropagation(); } catch (ex) { }
-          const targetId = req.__backendId || req.id || req.tkCode || req.tk_code;
-          const quoteObj = qData || (req && req.bridge) || (window._quoteDataMap && targetId ? window._quoteDataMap[targetId] : null);
-          if (typeof openFullMobileQuoteModal === 'function') {
-            openFullMobileQuoteModal(targetId, quoteObj);
-          } else if (typeof window.openFullMobileQuoteModal === 'function') {
-            window.openFullMobileQuoteModal(targetId, quoteObj);
-          }
-        };
-        inner.appendChild(quoteBtn);
-      }
       showContentBar.appendChild(inner);
       overlay.appendChild(showContentBar);
     }
@@ -4042,6 +4039,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
       }
     }
   }
+  window.shareDesignImage = _handleZoomShare;
 
   document.body.appendChild(overlay);
 
