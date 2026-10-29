@@ -2456,7 +2456,7 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     const raw0 = quoteImages[0];
     firstMqUrl = typeof raw0 === 'string' ? raw0 : (raw0 && (raw0.data || raw0.url || raw0.src));
   }
-
+
 
   const isDesktop = window.innerWidth >= 1024;
   const modalHtml = isDesktop ? `
@@ -4738,7 +4738,8 @@ async function submitEditRequest() {
     return;
   }
 
-  // Heineken and QCAG edit-requests must pull request back to processing and clear MQ
+  // Heineken and QCAG edit-requests must pull request back to processing
+  // TRIỆT ĐỂ: Tuyệt đối KHÔNG xóa designImages: '[]'. Giữ nguyên ảnh MQ cũ để QCAG xem đối chiếu (grayscale ám xám + badge Đang chỉnh sửa)
   let extraFields = {};
   if (['heineken', 'qcag'].includes(String(authorRole || '').toLowerCase())) {
     const existingDesignImgs = (() => {
@@ -4754,8 +4755,7 @@ async function submitEditRequest() {
       editingRequestedAt: initialEditDate,
       editing_requested_at: initialEditDate,
       hasEditRequest: true,
-      status: 'processing',
-      ...(Array.isArray(existingDesignImgs) && existingDesignImgs.length > 0 ? { designImages: '[]' } : {})
+      status: 'processing'
     };
   }
 

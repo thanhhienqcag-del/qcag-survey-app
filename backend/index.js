@@ -4817,8 +4817,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         if ('designImages' in b) {
             const designImgsList = parseImagesArr(b.designImages);
             if (designImgsList.length === 0) {
-                // Người dùng bấm xóa ảnh MQ
-                await pool.query('DELETE FROM designs WHERE request_tk_code = ?', [tkCode]);
+                // Người dùng bấm xóa ảnh MQ (chỉ xóa khi không phải yêu cầu chỉnh sửa và có cờ xác nhận rõ ràng)
+                if (b.allowClearDesign === true) {
+                    await pool.query('DELETE FROM designs WHERE request_tk_code = ?', [tkCode]);
+                }
             } else {
                 // Lấy ảnh MQ mới nhất hợp lệ
                 const latestImg = designImgsList[designImgsList.length - 1];
@@ -4831,7 +4833,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         VALUES (?, ?, ?, ?, ?, NOW(), NOW())
                         ON CONFLICT (request_tk_code) DO UPDATE SET 
                             url = EXCLUDED.url,
-                            filename = COALESCE(EXCLUDED.filename, designs.filename),
+                            filename = COALESCE(NULLIF(EXCLUDED.filename, ''), designs.filename),
                             created_by = COALESCE(EXCLUDED.created_by, designs.created_by),
                             updated_at = NOW()
                     `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId]);

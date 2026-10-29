@@ -4142,7 +4142,12 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
     let rawW = parseFloat(item.width || 0);
     let rawH = parseFloat(item.height || 0);
     if (item.type !== 'Hạng mục khác') {
-      if (item.survey) {
+      const isSurveyFlag = Boolean(
+        item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
+        item.survey_required || item.is_survey ||
+        (!item.width && !item.height && !item.useOldSize && (item.action === 'Làm mới' || (item.note && String(item.note).toLowerCase().includes('khảo sát'))))
+      );
+      if (isSurveyFlag) {
         // If surveySize exists (object with width/height), show it; otherwise show 'Khảo sát' with edit button
         if (item.surveySize && item.surveySize.width && item.surveySize.height) {
           rawW = parseFloat(item.surveySize.width || rawW);
@@ -4156,7 +4161,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
               </button>`;
           sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
         } else {
-          size = `<span class="qcag-survey-badge">Khảo sát</span> <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
+          size = `<span class="qcag-survey-badge">Khảo sát</span> <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập số đo khảo sát">\
                 <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
                 </svg>\
@@ -4165,7 +4170,17 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
       } else if (item.useOldSize) {
         size = 'KT cũ';
       } else {
-        size = qcagFormatDimensionText(item.width, item.height);
+        const dimText = qcagFormatDimensionText(item.width, item.height);
+        // Nếu chưa có kích thước nhưng có nút khảo sát tiện lợi
+        if (dimText === '-' && canManageItems) {
+          size = `- <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước">\
+                <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
+                </svg>\
+              </button>`;
+        } else {
+          size = dimText;
+        }
       }
     }
     const poles = (item.type !== 'Hạng mục khác' && !isNoPoles) ? ((item.poles || 0) + ' trụ') : '-';
@@ -6386,6 +6401,7 @@ async function qcagDesktopRemoveDesignImage(index) {
     ...currentDetailRequest,
     designImages: JSON.stringify([]),
     designFilename: '',
+    allowClearDesign: true,
     updatedAt: new Date().toISOString()
   };
 
