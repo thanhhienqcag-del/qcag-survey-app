@@ -564,12 +564,13 @@ function assignStandardTags(req) {
     if (qcagDesktopIsPendingEditRequest(req)) {
       tags.push('Chờ chỉnh sửa');
     }
-    // any item marked as survey *without* a confirmed surveySize -> Chờ khảo sát
+    // any item marked as survey *without* a confirmed surveySize -> Chờ khảo sát (CHỈ khi đơn chưa hoàn thành)
     try {
+      const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed');
       const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey);
       const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
       const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
-      if (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone)) {
+      if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
         tags.push('Chờ khảo sát');
       }
     } catch (e) { }
@@ -2160,7 +2161,13 @@ function qcagDesktopStatusBadge(req) {
     return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
   }
 
-  // 2. Chờ khảo sát: Sale chọn cần khảo sát mà chưa có số đo khảo sát
+  // 2. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  const s = String(req && req.status || 'pending').toLowerCase();
+  if (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed') {
+    return { label: 'Hoàn thành', cls: 'done' };
+  }
+
+  // 3. Chờ khảo sát: Sale chọn cần khảo sát mà chưa có số đo khảo sát (chỉ khi đơn chưa hoàn thành)
   const stdTags = Array.isArray(req.standardTags) ? req.standardTags : ((typeof assignStandardTags === 'function' ? assignStandardTags(req) : []) || []);
   const items = qcagDesktopParseJson(req && (req.items || req.surveyItems), []);
   const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
@@ -2168,12 +2175,6 @@ function qcagDesktopStatusBadge(req) {
   const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
   if (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone)) {
     return { label: 'Chờ khảo sát', cls: 'pending-survey' };
-  }
-
-  // 3. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
-  const s = String(req && req.status || 'pending').toLowerCase();
-  if (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed') {
-    return { label: 'Hoàn thành', cls: 'done' };
   }
 
   // 4. Kiểm tra ảnh MQ thiết kế
