@@ -379,9 +379,12 @@ function qcagDesktopCollectRequestImageUrls(req) {
 }
 
 function qcagDesktopCacheRequest(req) {
-  if (!req || !req.__backendId) return;
-  const existing = _qcagDesktopFullRequestCache[req.__backendId];
-  _qcagDesktopFullRequestCache[req.__backendId] = qcagDesktopMergePreserveImageFields(req, existing);
+  if (!req) return;
+  const ids = [req.__backendId, req.id, req.tkCode].filter(Boolean);
+  ids.forEach(key => {
+    const existing = _qcagDesktopFullRequestCache[key];
+    _qcagDesktopFullRequestCache[key] = qcagDesktopMergePreserveImageFields(req, existing);
+  });
 }
 
 async function qcagDesktopWarmImage(url) {
@@ -2157,7 +2160,7 @@ function qcagDesktopStatusBadge(req) {
   const stdTags = Array.isArray(req.standardTags) ? req.standardTags : ((typeof assignStandardTags === 'function' ? assignStandardTags(req) : []) || []);
   const items = qcagDesktopParseJson(req && (req.items || req.surveyItems), []);
   const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && !!it.survey && !(it.surveySize && it.surveySize.width && it.surveySize.height));
-  const hasSurveyFlag = Boolean(req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey || (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1));
+  const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey || (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1));
   const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
   if (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone)) {
     return { label: 'Chờ khảo sát', cls: 'pending-survey' };
@@ -3329,6 +3332,16 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
       const baseSnapshot = _qcagDesktopOpenRequestSnapshot || currentDetailRequest;
       if (baseSnapshot && patchToSend[field] === baseSnapshot[field]) {
         delete patchToSend[field];
+      }
+    }
+
+    // TRIỆT ĐỂ: Tuyệt đối không gửi items: "[]" nếu đơn chỉ đang giữ bản ghi lite hoặc items không được chủ động sửa
+    if ('items' in patchToSend) {
+      const itemsVal = patchToSend.items;
+      const isEmpty = !itemsVal || itemsVal === '[]' || itemsVal === 'null' || (Array.isArray(itemsVal) && itemsVal.length === 0);
+      if (isEmpty && !patchToSend.allowEmptyItems) {
+        // Nếu không có yêu cầu chủ động xóa toàn bộ hạng mục, loại bỏ items khỏi payload để Backend không xóa nhầm
+        delete patchToSend.items;
       }
     }
     const result = await window.dataSdk.update(patchToSend);
@@ -5515,6 +5528,23 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         const fullItems = qcagDesktopParseJson(full.items, []);
         const canManage = qcagDesktopCanEditItems(full);
         itemsEl.innerHTML = qcagDesktopBuildItemsHtml(fullItems, canManage, full);
+      }
+
+      // Cập nhật lại badge trạng thái (Chờ khảo sát / Chờ thiết kế / ...) trên Header chi tiết và thẻ danh sách
+      const newBadge = qcagDesktopStatusBadge(full);
+      const detailBadgeEl = detailEl.querySelector('.qcag-detail-title-row .qcag-status-badge');
+      if (detailBadgeEl && newBadge) {
+        detailBadgeEl.className = `qcag-status-badge ${newBadge.cls}`;
+        detailBadgeEl.textContent = newBadge.label;
+      }
+      const cardElForBadge = document.querySelector(`.qcag-request-item[data-req-id="${id}"]`) ||
+        Array.from(document.querySelectorAll('.qcag-request-item')).find(el => el.getAttribute('onclick')?.includes(id));
+      if (cardElForBadge && newBadge) {
+        const cardBadgeEl = cardElForBadge.querySelector('.qcag-status-badge');
+        if (cardBadgeEl) {
+          cardBadgeEl.className = `qcag-status-badge ${newBadge.cls}`;
+          cardBadgeEl.textContent = newBadge.label;
+        }
       }
 
       // Refresh requester region and metadata

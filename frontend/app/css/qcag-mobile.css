@@ -1716,6 +1716,12 @@
     color: #334155;
   }
 
+  html:not(.theme-dark):not([data-theme="dark"]) body.qcag-mobile-mode .qcag-survey-badge {
+    color: #92400e !important;
+    background: #fef3c7 !important;
+    border-color: #f59e0b !important;
+  }
+
   html:not(.theme-dark):not([data-theme="dark"]) body.qcag-mobile-mode .qcag-survey-panel {
     background: #ffffff;
     border-color: #e2e8f0;

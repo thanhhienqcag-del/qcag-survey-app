@@ -3259,7 +3259,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(r.id, r.tk_code) AS id,
       COALESCE(r.id, r.tk_code) AS backend_id,
       r.tk_code,
-      COALESCE(r.type, 'new')::varchar(16) AS type,
+      COALESCE(NULLIF(r.type, ''), 'new')::varchar(16) AS type,
       COALESCE(o.code, '') AS outlet_code,
       COALESCE(o.name, '') AS outlet_name,
       COALESCE(o.address, NULLIF(TRIM(CONCAT_WS(', ', NULLIF(o.house_number, ''), NULLIF(o.street, ''), NULLIF(o.ward, ''), NULLIF(o.district, ''), NULLIF(o.province, ''))), ''), o.street, '') AS address,
@@ -3267,6 +3267,12 @@ const KS_REQUESTS_LITE_SQL = `
       o.longitude::varchar(32) AS outlet_lng,
       COALESCE(o.phone, u.phone, '') AS phone,
       '[]'::text AS items,
+      EXISTS(
+        SELECT 1 FROM request_items ri 
+        WHERE ri.request_tk_code = r.tk_code 
+          AND COALESCE(ri.survey, false) = true 
+          AND (COALESCE(NULLIF(TRIM(ri.width), ''), '') = '' OR COALESCE(NULLIF(TRIM(ri.height), ''), '') = '' OR ri.survey_width IS NULL OR ri.survey_height IS NULL)
+      ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
@@ -3805,7 +3811,7 @@ async function getRequestDetailDirect(idOrTkCode) {
             COALESCE(r.id, r.tk_code) AS id,
             COALESCE(r.id, r.tk_code) AS backend_id,
             r.tk_code,
-            'new'::varchar(16) AS type,
+            COALESCE(NULLIF(r.type, ''), 'new')::varchar(16) AS type,
             r.content,
             COALESCE(r.old_content, false)::boolean AS old_content,
             r.old_content_extra,
@@ -3945,7 +3951,52 @@ async function getRequestDetailDirect(idOrTkCode) {
         `, [tkCode])
     ]);
 
-    row.items = JSON.stringify(itemRows || []);
+    let finalItems = itemRows || [];
+    // Fallback: If request_items is empty (e.g. requests synced from App 1 quotes srv_TK26_%), read from quotation_items
+    if (!finalItems.length) {
+        try {
+            const [qItemRows] = await pool.query(`
+                SELECT 
+                    qi.id,
+                    ROW_NUMBER() OVER(ORDER BY qi.id ASC) AS seq,
+                    COALESCE(qi.product_name, qi.item_type, 'Hạng mục khảo sát') AS type,
+                    qi.item_name AS "otherContent",
+                    'Làm mới' AS action,
+                    qi.brand,
+                    qi.width,
+                    qi.height,
+                    false AS "useOldSize",
+                    1 AS poles,
+                    qi.specifications AS note,
+                    false AS "brandChangedByQcag",
+                    false AS "brandChangedByQCAG",
+                    NULL AS "brandChangedBy",
+                    false AS "addedByQcag",
+                    false AS "addedByQCAG",
+                    NULL AS "addedByQcagBy",
+                    NULL AS "addedByQCAGBy",
+                    false AS "editedByQcag",
+                    false AS "editedByQCAG",
+                    NULL AS "editedByQcagBy",
+                    NULL AS "editedByQCAGBy",
+                    NULL AS "editedByQcagAt",
+                    NULL AS "editedByQCAGAt",
+                    false AS "survey",
+                    NULL AS "surveySize"
+                FROM quotations q
+                JOIN quotation_items qi ON qi.quotation_code = q.quote_code
+                WHERE q.tk_code = ? AND COALESCE(q.is_deleted, false) = false
+                ORDER BY qi.id ASC
+            `, [tkCode]);
+            if (qItemRows && qItemRows.length) {
+                finalItems = qItemRows;
+            }
+        } catch (fbErr) {
+            console.warn('[getRequestDetailDirect] fallback quotation_items warning:', fbErr && fbErr.message);
+        }
+    }
+
+    row.items = JSON.stringify(finalItems || []);
 
     const statusImgs = [];
     const acceptImgs = [];
@@ -4867,12 +4918,23 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         }
 
         // Handle item edits & survey dimensions updates
+        // Triệt để bảo vệ request_items: cấm xóa nhầm khi items rỗng hoặc gửi từ bản ghi lite
         if ('items' in b) {
             let itemsToSave = [];
+            let isValidArray = false;
             try {
-                itemsToSave = typeof b.items === 'string' ? JSON.parse(b.items) : (Array.isArray(b.items) ? b.items : []);
-            } catch (_) { itemsToSave = []; }
-            if (Array.isArray(itemsToSave)) {
+                if (typeof b.items === 'string') {
+                    const parsed = JSON.parse(b.items);
+                    if (Array.isArray(parsed)) {
+                        itemsToSave = parsed;
+                        isValidArray = true;
+                    }
+                } else if (Array.isArray(b.items)) {
+                    itemsToSave = b.items;
+                    isValidArray = true;
+                }
+            } catch (_) { isValidArray = false; }
+            if (isValidArray && itemsToSave.length > 0) {
                 const processedIds = [];
                 for (let i = 0; i < itemsToSave.length; i++) {
                     const it = itemsToSave[i] || {};
@@ -4942,9 +5004,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 }
                 if (processedIds.length > 0) {
                     await pool.query(`DELETE FROM request_items WHERE request_tk_code = ? AND id NOT IN (${processedIds.map(() => '?').join(',')})`, [tkCode, ...processedIds]);
-                } else if (itemsToSave.length === 0) {
-                    await pool.query(`DELETE FROM request_items WHERE request_tk_code = ?`, [tkCode]);
                 }
+            } else if (isValidArray && itemsToSave.length === 0 && b.allowEmptyItems === true) {
+                // Triệt để bảo vệ request_items: Chỉ xóa khi client chủ động truyền cờ allowEmptyItems === true
+                await pool.query(`DELETE FROM request_items WHERE request_tk_code = ?`, [tkCode]);
             }
         }
         ksInvalidateCache();

@@ -1215,6 +1215,27 @@
     background: rgba(16,185,129,0.06);
   }
 
+  /* Chờ khảo sát: yellow/amber border + neon glow in dark mode */
+  .qcag-status-badge.pending-survey,
+  .qcag-status-badge.survey {
+    border: 2px solid #f59e0b;
+    padding: 1px 8px;
+    background: rgba(245, 158, 11, 0.08);
+    background-clip: padding-box;
+    color: #b45309;
+  }
+  .theme-dark .qcag-status-badge.pending-survey,
+  [data-theme="dark"] .qcag-status-badge.pending-survey,
+  body.dark .qcag-status-badge.pending-survey,
+  .theme-dark .qcag-status-badge.survey,
+  [data-theme="dark"] .qcag-status-badge.survey,
+  body.dark .qcag-status-badge.survey {
+    border-color: #fbbf24;
+    color: #fef08a;
+    background: rgba(245, 158, 11, 0.16);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.22);
+  }
+
   /* Ngoài phạm vi bảo hành */
   .qcag-status-badge.warranty-out-of-scope {
     border: 2px solid #f97316;
@@ -10219,12 +10240,13 @@ html[data-theme='light'] .qcag-del-reject-btn:hover {
     border: 2px solid #16a34a !important;
     color: #ffffff !important;
   }
-  /* Chờ khảo sát / Khảo sát: Solid Tím, border 2px giống Dark Mode */
+  /* Chờ khảo sát / Khảo sát: Màu Vàng / Amber chuẩn Light Theme Clean Solid */
   html:not(.theme-dark):not([data-theme="dark"]) #qcagDesktopScreen .qcag-status-badge.pending-survey,
   html:not(.theme-dark):not([data-theme="dark"]) #qcagDesktopScreen .qcag-status-badge.survey {
-    background: #7c3aed !important;
-    border: 2px solid #7c3aed !important;
-    color: #ffffff !important;
+    background: #fef3c7 !important;
+    border: 2px solid #f59e0b !important;
+    color: #92400e !important;
+    box-shadow: none !important;
   }
   /* Ngoài phạm vi bảo hành: Solid Đỏ, border 2px giống Dark Mode */
   html:not(.theme-dark):not([data-theme="dark"]) #qcagDesktopScreen .qcag-status-badge.warranty-out-of-scope {

@@ -903,8 +903,11 @@
             if (fetchResult && fetchResult.notModified) {
               console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
             } else if (Array.isArray(fetchResult) && fetchResult.length) {
-              _store = _normalizeRequestRows(fetchResult);
-              _triggerStoreUpdated();
+              var normalizedIncoming = _normalizeRequestRows(fetchResult);
+              var hasChanges = _mergeLatestRows(normalizedIncoming);
+              if (hasChanges) {
+                _triggerStoreUpdated();
+              }
             }
           } catch (fetchErr) {
             console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
