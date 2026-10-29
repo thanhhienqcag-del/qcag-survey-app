@@ -2712,23 +2712,26 @@ function qcagDesktopAddTestPendingWarranty() {
 }
 
 
-async function qcagDesktopGoToPage(p) {
+function qcagDesktopGoToPage(p) {
   const requests = getQCAGDesktopVisibleRequests();
   const totalPages = Math.max(1, Math.ceil(requests.length / _QCAG_PAGE_SIZE));
+  const targetPage = Math.max(0, Math.min(totalPages - 1, p));
 
-  // If user requests a page near the end of loaded memory, automatically fetch next 50 records from server
-  if (p >= totalPages - 1 && window.dataSdk && typeof window.dataSdk.loadMore === 'function') {
-    const storeInfo = window.dataSdk.getStoreInfo ? window.dataSdk.getStoreInfo() : {};
-    if (storeInfo.hasMore && !storeInfo.isLoadingMore) {
-      await window.dataSdk.loadMore();
-    }
-  }
+  if (targetPage === _qcagDesktopListPage) return;
 
-  const updatedRequests = getQCAGDesktopVisibleRequests();
-  const updatedTotalPages = Math.max(1, Math.ceil(updatedRequests.length / _QCAG_PAGE_SIZE));
-  _qcagDesktopListPage = Math.max(0, Math.min(updatedTotalPages - 1, p));
+  // 1. Chuyển trang NGAY LẬP TỨC (0ms latency, mượt mà 60fps, không await mạng)
+  _qcagDesktopListPage = targetPage;
   _qcagDesktopListScrollSave = 0; // reset scroll when changing page
   renderQCAGDesktopList();
+
+  // 2. Prefetch dữ liệu ngầm (background non-blocking) CHỈ KHI đang xem tab 'done'
+  // Tuyệt đối KHÔNG await chặn luồng render UI và KHÔNG prefetch ở tab 'processing' (yêu cầu đang xử lý đã nạp đủ)
+  if (_qcagDesktopStatusFilter === 'done' && targetPage >= totalPages - 1 && window.dataSdk && typeof window.dataSdk.loadMore === 'function') {
+    const storeInfo = window.dataSdk.getStoreInfo ? window.dataSdk.getStoreInfo() : {};
+    if (storeInfo.hasMore && !storeInfo.isLoadingMore) {
+      window.dataSdk.loadMore().catch(err => console.warn('[qcagDesktopGoToPage] background loadMore error:', err));
+    }
+  }
 }
 
 function qcagCalculateWaitDays(dateRef) {
