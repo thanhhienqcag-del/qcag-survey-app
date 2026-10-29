@@ -3020,6 +3020,8 @@ function ksRowToApp(row, lightweight = false) {
         phone: row.phone || '',
         outletPhone: row.outlet_phone || row.phone || '',
         items: itemsStr,
+        hasPendingSurvey: Boolean(row.has_pending_survey),
+        has_pending_survey: Boolean(row.has_pending_survey),
         content: row.content || '',
         oldContent: Boolean(row.old_content),
         oldContentExtra: row.old_content_extra || '',
@@ -3105,6 +3107,12 @@ const KS_REQUESTS_SELECT_SQL = `
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
       ), '[]') AS items,
+      EXISTS(
+        SELECT 1 FROM request_items ri 
+        WHERE ri.request_tk_code = r.tk_code 
+          AND COALESCE(ri.survey, false) = true 
+          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+      ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
@@ -3271,7 +3279,7 @@ const KS_REQUESTS_LITE_SQL = `
         SELECT 1 FROM request_items ri 
         WHERE ri.request_tk_code = r.tk_code 
           AND COALESCE(ri.survey, false) = true 
-          AND (COALESCE(NULLIF(TRIM(ri.width), ''), '') = '' OR COALESCE(NULLIF(TRIM(ri.height), ''), '') = '' OR ri.survey_width IS NULL OR ri.survey_height IS NULL)
+          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -4037,6 +4045,7 @@ async function getRequestDetailDirect(idOrTkCode) {
     }
     row.editing_requested_at = editingRequestedAt;
     row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
+    row.has_pending_survey = (finalItems || []).some(it => Boolean(it.survey) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
 
     return row;
 }

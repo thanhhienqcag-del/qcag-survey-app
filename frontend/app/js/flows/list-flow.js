@@ -401,7 +401,7 @@ function getCardQuoteBadge(req) {
   try {
     reqItems = Array.isArray(req.items) ? req.items : JSON.parse(req.items || '[]');
   } catch (e) { reqItems = []; }
-  const hasSurveyNeedSize = Array.isArray(reqItems) && reqItems.some(it => it && it.type !== 'Hạng mục khác' && !!it.survey && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+  const hasSurveyNeedSize = Boolean(req.hasPendingSurvey || req.has_pending_survey) || (Array.isArray(reqItems) && reqItems.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true') && !(it.surveySize && it.surveySize.width && it.surveySize.height)));
   if (hasSurveyNeedSize) {
     return {
       isLoading: false,
