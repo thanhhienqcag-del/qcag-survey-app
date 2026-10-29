@@ -5307,7 +5307,7 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                 console.warn('[production-approvals] ks_production_approvals query warning:', apprErr && apprErr.message);
             }
 
-            // 2. Nguồn V12: quotations & order_quotes (bảo toàn tên người duyệt cụ thể)
+            // 2. Nguồn V12: order_quotes (chỉ nhận khi có approval_status từ lệnh sản xuất/duyệt thực tế)
             try {
                 const [v12Rows] = await pool.query(`
                     SELECT 
@@ -5315,18 +5315,19 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                         q.request_tk_code,
                         COALESCE(o.code, '') AS outlet_code,
                         CASE 
-                            WHEN COALESCE(oq.approval_status, q.status) IN ('approved', 'confirmed') THEN 'approved'
-                            WHEN COALESCE(oq.approval_status, q.status) = 'rejected' THEN 'rejected'
+                            WHEN oq.approval_status IN ('approved', 'confirmed') THEN 'approved'
+                            WHEN oq.approval_status = 'rejected' THEN 'rejected'
+                            WHEN oq.approval_status IN ('pending-edit', 'edit_requested') THEN 'pending-edit'
                             ELSE 'pending'
                         END AS status,
                         COALESCE(u.fullname, u.username, oq.approved_by, NULL) AS approved_by,
-                        COALESCE(oq.approved_at, q.last_confirmed_at) AS approved_at,
+                        oq.approved_at AS approved_at,
                         oq.reject_reason AS reject_reason
-                    FROM quotations q
+                    FROM order_quotes oq
+                    JOIN quotations q ON oq.quotation_code = q.quote_code
                     LEFT JOIN outlets o ON q.outlet_id = o.id
-                    LEFT JOIN order_quotes oq ON oq.quotation_code = q.quote_code
                     LEFT JOIN users u ON oq.approved_by = u.id
-                    WHERE q.is_deleted = false AND (q.status IN ('approved', 'rejected', 'confirmed') OR oq.approval_status IN ('approved', 'rejected'))
+                    WHERE (q.is_deleted = false OR q.is_deleted IS NULL) AND oq.approval_status IN ('approved', 'rejected', 'pending-edit', 'edit_requested')
                 `);
 
                 (v12Rows || []).forEach(r => {
