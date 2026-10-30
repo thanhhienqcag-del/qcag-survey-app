@@ -2091,55 +2091,11 @@ function qcagDesktopFocusInlineBrand(index) {
 }
 
 async function qcagDesktopAutoSyncEditRequestedFromComments() {
-  if (window.__qcagEditSyncDone || window.__qcagEditSyncInFlight) return;
-  window.__qcagEditSyncInFlight = true;
-  try {
-    const list = (allRequests || []).slice();
-    if (list.length === 0) return;
-
-    // Only create updates for requests that have a Heineken edit-request
-    // and have NOT already been marked via `editingRequestedAt`.
-    const candidates = list.filter(req => {
-      if (!req || String(req.type || '').toLowerCase() !== 'new') return false;
-      if (!qcagDesktopHasHeinekenEditRequest(req)) return false;
-      // If an edit was already recorded (editingRequestedAt), skip clearing MQ here.
-      if (req.editingRequestedAt) return false;
-      return true;
-    });
-
-    if (candidates.length === 0) return;
-
-    for (const req of candidates) {
-      // CRITICAL: Build MINIMAL PATCH — do NOT spread full req.
-      // req.statusImages may be the list-endpoint placeholder '["..."]' which
-      // would overwrite real hiện trạng GCS URLs in DB if sent as-is.
-      const updated = {
-        __backendId: req.__backendId,
-        editingRequestedAt: req.editingRequestedAt || new Date().toISOString(),
-        status: 'processing',
-        updatedAt: new Date().toISOString()
-      };
-
-      // NOTE: Do NOT clear designImages here. QCAG will upload new MQ images
-      // when they complete the edit. Keeping old images allows reference.
-
-      if (window.dataSdk) {
-        const result = await window.dataSdk.update(updated);
-        if (!result.isOk) continue;
-      }
-
-      // Merge only changed fields — preserve existing statusImages/designImages in allRequests
-      const idx = allRequests.findIndex(r => r.__backendId === updated.__backendId);
-      if (idx !== -1) Object.assign(allRequests[idx], updated);
-    }
-
-    _qcagRequestsVersion += 1;
-  } catch (err) {
-    console.warn('[autoSync] failed:', err);
-  } finally {
-    window.__qcagEditSyncDone = true;
-    window.__qcagEditSyncInFlight = false;
-  }
+  // In V12 3NF schema, edit requests are tracked dynamically via the notes table in database.
+  // Client-side auto-sync is disabled to prevent stale localStorage cache from reverting completed items.
+  window.__qcagEditSyncDone = true;
+  window.__qcagEditSyncInFlight = false;
+  return;
 }
 
 
@@ -2163,7 +2119,8 @@ function qcagDesktopStatusBadge(req) {
 
   // 2. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
   const s = String(req && req.status || 'pending').toLowerCase();
-  if (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed') {
+  const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
+  if (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) {
     return { label: 'Hoàn thành', cls: 'done' };
   }
 
@@ -5381,7 +5338,8 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         const cond = qcagCheckCompletionConditions(request);
         const isPendingEdit = qcagDesktopIsPendingEditRequest(request);
         const reqStatus = String(request.status || '').toLowerCase();
-        const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
+        const hasQuote = Boolean(request.quoteCode || request.quote_code || (request.bridge && (request.bridge.quote_code || request.bridge.quoteCode)));
+        const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed' || hasQuote) && !isPendingEdit;
 
         const showCompleteBtn = _qcagDesktopStatusFilter !== 'done';
         const completeDisabled = isDone || !cond.canComplete;
@@ -5837,22 +5795,26 @@ async function qcagDesktopUploadMQ(input) {
   // ── Luồng MQ thiết kế chuẩn Production (tham khảo G:\10. Code) ──
   const isPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
 
-  // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' (Chờ xác nhận) ngay lập tức
+  // 1. Phản hồi tức thì 0ms: Chuyển trạng thái sang 'processing' (hoặc giữ 'done'/'quoted' nếu đã hoàn thành)
   // và hiển thị preview tại chỗ bằng Base64 đã nén để mở khóa nút "Hoàn thành" ngay 0ms
-  currentDetailRequest.status = 'processing';
+  const _existingSt = String((currentDetailRequest && currentDetailRequest.status) || '').toLowerCase();
+  const _isAlreadyDone = (_existingSt === 'done' || _existingSt === 'processed' || _existingSt === 'quoted' || _existingSt === 'completed' || Boolean(currentDetailRequest.quoteCode || currentDetailRequest.quote_code)) && !isPendingEdit;
+  const _targetUploadStatus = _isAlreadyDone ? (_existingSt || 'done') : 'processing';
+
+  currentDetailRequest.status = _targetUploadStatus;
   currentDetailRequest.designImages = JSON.stringify([dataUrl]);
   currentDetailRequest.designFilename = file.name;
   currentDetailRequest._mqReplacedDuringEdit = true;
 
   const idxPreview = allRequests.findIndex(r => r.__backendId === targetId);
   if (idxPreview !== -1) {
-    allRequests[idxPreview].status = 'processing';
+    allRequests[idxPreview].status = _targetUploadStatus;
     allRequests[idxPreview].designImages = currentDetailRequest.designImages;
     allRequests[idxPreview].designFilename = file.name;
     allRequests[idxPreview]._mqReplacedDuringEdit = true;
   }
   if (typeof _qcagDesktopFullRequestCache !== 'undefined' && _qcagDesktopFullRequestCache[targetId]) {
-    _qcagDesktopFullRequestCache[targetId].status = 'processing';
+    _qcagDesktopFullRequestCache[targetId].status = _targetUploadStatus;
     _qcagDesktopFullRequestCache[targetId].designImages = currentDetailRequest.designImages;
     _qcagDesktopFullRequestCache[targetId].designFilename = file.name;
     _qcagDesktopFullRequestCache[targetId]._mqReplacedDuringEdit = true;
@@ -5910,7 +5872,7 @@ async function qcagDesktopUploadMQ(input) {
     editingRequestedAt: isPendingEdit
       ? (currentDetailRequest.editingRequestedAt || now)
       : null,
-    status: 'processing',
+    status: _targetUploadStatus,
     updatedAt: now
   };
 
