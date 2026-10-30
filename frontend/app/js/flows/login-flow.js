@@ -95,8 +95,10 @@ function loginHK1Next() {
   const saleCode = document.getElementById('hkSaleCode').value.trim();
   const saleName = document.getElementById('hkSaleName').value.trim();
   if (!phone || !saleCode || !saleName) { showToast('Vui lòng điền đầy đủ thông tin'); return; }
-  // Require sale code to be exactly 8 digits
-  if (saleCode.length !== 8) { showToast('Mã nhân viên phải đủ 8 chữ số'); return; }
+  // Cho phép mã nhân viên 7 hoặc 8 chữ số (chuẩn hóa 7 số sang 8 số với tiền tố 0)
+  const cleanDigits = saleCode.replace(/\D/g, '');
+  if (cleanDigits.length !== 7 && cleanDigits.length !== 8) { showToast('Mã nhân viên phải gồm 7 hoặc 8 chữ số'); return; }
+  if (cleanDigits.length === 7) saleCode = '0' + cleanDigits;
   localStorage.setItem(HK_PROFILE_KEY, JSON.stringify({ phone, saleCode, saleName }));
   loginShowStep('loginStepHK2');
   loginPrefillHK2();

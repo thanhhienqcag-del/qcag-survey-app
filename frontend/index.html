@@ -1788,8 +1788,13 @@
                   <span>Tất cả</span>
                   <span class="qcag-pill-cnt" id="cntStatusAll"></span>
                 </button>
-                <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="survey"
-                  onclick="qcagNavListSetStatusFilter(this, 'survey')">
+                <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="processing"
+                  onclick="qcagNavListSetStatusFilter(this, 'processing')">
+                  <span>Đang xử lý</span>
+                  <span class="qcag-pill-cnt" id="cntStatusProcessing"></span>
+                </button>
+                <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="pending-survey"
+                  onclick="qcagNavListSetStatusFilter(this, 'pending-survey')">
                   <span>Chờ khảo sát</span>
                   <span class="qcag-pill-cnt" id="cntStatusSurvey"></span>
                 </button>
@@ -1807,16 +1812,6 @@
                   onclick="qcagNavListSetStatusFilter(this, 'pending-confirm')">
                   <span>Chờ xác nhận</span>
                   <span class="qcag-pill-cnt" id="cntStatusConfirm"></span>
-                </button>
-                <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="processing"
-                  onclick="qcagNavListSetStatusFilter(this, 'processing')">
-                  <span>Đang xử lý</span>
-                  <span class="qcag-pill-cnt" id="cntStatusProcessing"></span>
-                </button>
-                <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="pending"
-                  onclick="qcagNavListSetStatusFilter(this, 'pending')">
-                  <span>Chờ xử lý</span>
-                  <span class="qcag-pill-cnt" id="cntStatusPending"></span>
                 </button>
                 <button type="button" class="qcag-nav-filter-pill qcag-nav-filter-vbtn" data-status="done"
                   onclick="qcagNavListSetStatusFilter(this, 'done')">

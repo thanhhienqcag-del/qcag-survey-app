@@ -1016,8 +1016,8 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(o.longitude::text, '') AS longitude,
             COALESCE(u.region, o.area, '') AS region,
             COALESCE(u.fullname, '') AS sale_name,
-            COALESCE(u.username, '') AS sale_code,
-            COALESCE(u.username, '') AS sale_phone,
+            COALESCE(u.sale_code, u.username, '') AS sale_code,
+            COALESCE(u.phone, u.username, '') AS sale_phone,
             COALESCE(q_lat.quote_code, '') AS quote_code,
             COALESCE(q_lat.total_amount, 0)::numeric AS total_amount,
             COALESCE(q_lat.order_number, '') AS order_number,
@@ -1062,8 +1062,8 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(o2.longitude::text, '') AS longitude,
             COALESCE(u2.region, o2.area, '') AS region,
             COALESCE(u2.fullname, q2.created_by_name, '') AS sale_name,
-            COALESCE(u2.username, q2.sales_id, '') AS sale_code,
-            COALESCE(u2.username, '') AS sale_phone,
+            COALESCE(u2.sale_code, u2.username, q2.sales_id, '') AS sale_code,
+            COALESCE(u2.phone, u2.username, '') AS sale_phone,
             COALESCE(q2.quote_code, '') AS quote_code,
             COALESCE(q2.total_amount, 0)::numeric AS total_amount,
             COALESCE(ord_lat2.order_no, '') AS order_number,
@@ -3194,7 +3194,7 @@ const KS_REQUESTS_SELECT_SQL = `
                COALESCE(u_sub.region, o_sub.area, '') AS region,
                COALESCE(u_sub.fullname, '') AS sale_name,
                COALESCE(u_sub.phone, '') AS sale_phone,
-               COALESCE(u_sub.username, '') AS sale_code,
+               COALESCE(u_sub.sale_code, u_sub.username, '') AS sale_code,
                COALESCE(u_sub.ss_name, '') AS ss_name
         FROM requests r_sub
         LEFT JOIN outlets o_sub ON r_sub.outlet_id = o_sub.id
@@ -3321,7 +3321,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       COALESCE(u.fullname, '') AS sale_name,
       COALESCE(u.phone, '') AS sale_phone,
-      COALESCE(u.username, '') AS sale_code,
+      COALESCE(u.sale_code, u.username, '') AS sale_code,
       COALESCE(u.ss_name, '') AS ss_name,
       '' AS ss_code,
       COALESCE(u.region, o.area, '') AS region,
@@ -3852,13 +3852,13 @@ async function getRequestDetailDirect(idOrTkCode) {
             COALESCE(u.fullname, '') AS sale_name,
             COALESCE(u.phone, '') AS sale_phone,
             COALESCE(COALESCE(o.phone, u.phone), '') AS phone,
-            COALESCE(u.username, '') AS sale_code,
+            COALESCE(u.sale_code, u.username, '') AS sale_code,
             COALESCE(u.ss_name, '') AS ss_name,
             '' AS ss_code,
             json_build_object(
                 'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
                 'saleName', COALESCE(u.fullname, ''),
-                'saleCode', COALESCE(u.username, ''),
+                'saleCode', COALESCE(u.sale_code, u.username, ''),
                 'phone', COALESCE(u.phone, o.phone, ''),
                 'region', COALESCE(u.region, o.area, ''),
                 'ssName', COALESCE(u.ss_name, ''),
@@ -4324,42 +4324,55 @@ app.post("/api/ks/requests", async (req, res) => {
 
         let requesterId = null;
         let userRegion = region;
-        if (saleCode) {
-            const [uRows] = await pool.query(
-                "SELECT id, region FROM users WHERE username = ? OR id = ? OR id = ('USR_SALE_' || ?) LIMIT 1",
-                [saleCode, saleCode, saleCode]
-            );
-            if (uRows && uRows.length > 0) {
-                requesterId = uRows[0].id;
-                if (!userRegion && uRows[0].region) userRegion = uRows[0].region;
-            }
-        }
-        if (!requesterId && salePhone) {
-            const [uRows] = await pool.query(
+        // Uu tiên 1: Tìm theo salePhone (định danh chuẩn của cá nhân Sale)
+        if (salePhone) {
+            const phoneRes = await pool.query(
                 "SELECT id, region FROM users WHERE phone = ? OR username = ? OR id = ('USR_PHONE_' || ?) LIMIT 1",
                 [salePhone, salePhone, salePhone]
             );
-            if (uRows && uRows.length > 0) {
-                requesterId = uRows[0].id;
-                if (!userRegion && uRows[0].region) userRegion = uRows[0].region;
+            const uPhoneRows = phoneRes ? phoneRes[0] : null;
+            if (uPhoneRows && uPhoneRows.length > 0) {
+                requesterId = uPhoneRows[0].id;
+                if (!userRegion && uPhoneRows[0].region) userRegion = uPhoneRows[0].region;
+            }
+        }
+        // Uu tiên 2: Tìm theo saleCode / username (hỗ trợ cả 7 số lẫn 8 số có số 0 ở đầu)
+        if (!requesterId && saleCode) {
+            const rawCode = String(saleCode).trim();
+            const paddedCode = (rawCode.length === 7) ? ('0' + rawCode) : rawCode;
+            const unpaddedCode = rawCode.replace(/^0+/, '');
+            const codeRes = await pool.query(
+                `SELECT id, region FROM users 
+                 WHERE sale_code = ? OR sale_code = ? OR sale_code = ?
+                    OR username = ? OR username = ? OR username = ?
+                    OR id = ? OR id = ('USR_SALE_' || ?) OR id = ('USR_SALE_' || ?) 
+                 LIMIT 1`,
+                [rawCode, paddedCode, unpaddedCode, rawCode, paddedCode, unpaddedCode, rawCode, rawCode, paddedCode]
+            );
+            const uCodeRows = codeRes ? codeRes[0] : null;
+            if (uCodeRows && uCodeRows.length > 0) {
+                requesterId = uCodeRows[0].id;
+                if (!userRegion && uCodeRows[0].region) userRegion = uCodeRows[0].region;
             }
         }
         if (!requesterId) {
             requesterId = saleCode ? ('USR_SALE_' + saleCode) : (salePhone ? ('USR_PHONE_' + salePhone) : ('USR_REQ_' + tkCode));
             const uname = saleCode || salePhone || requesterId;
             const fname = saleName || uname;
-            const [uRes] = await pool.query(`
-                INSERT INTO users (id, username, fullname, phone, role, ss_name, region, company, is_internal, can_access_app1, can_access_app2, password_hash, is_active, approved, created_at, updated_at)
-                VALUES (?, ?, ?, ?, 'sales', ?, ?, 'HEINEKEN', false, false, true, 'auto_created', true, true, ?, ?)
+            const insertUserRes = await pool.query(`
+                INSERT INTO users (id, username, fullname, phone, role, ss_name, region, company, is_internal, can_access_app1, can_access_app2, password_hash, is_active, approved, created_at, updated_at, sale_code)
+                VALUES (?, ?, ?, ?, 'sales', ?, ?, 'HEINEKEN', false, false, true, 'auto_created', true, true, ?, ?, ?)
                 ON CONFLICT (username) DO UPDATE SET
                     fullname = COALESCE(EXCLUDED.fullname, users.fullname),
                     phone = COALESCE(EXCLUDED.phone, users.phone),
                     region = COALESCE(EXCLUDED.region, users.region),
+                    sale_code = COALESCE(EXCLUDED.sale_code, users.sale_code),
                     updated_at = EXCLUDED.updated_at
                 RETURNING id
             `, [
-                requesterId, uname, fname, salePhone, ssName, region, now, now
+                requesterId, uname, fname, salePhone, ssName, region, now, now, saleCode
             ]);
+            const uRes = insertUserRes ? insertUserRes[0] : null;
             if (uRes && uRes.length > 0 && uRes[0].id) {
                 requesterId = uRes[0].id;
             }
@@ -4368,10 +4381,11 @@ app.post("/api/ks/requests", async (req, res) => {
         // Step 4: Resolve or create Outlet in V12 3NF table
         let outletId = null;
         if (outletCode && !isPlaceholderOutlet) {
-            const [foundOutlets] = await pool.query(
+            const outletSearchRes = await pool.query(
                 "SELECT id, code, name FROM outlets WHERE id = ? OR code = ? OR id = ('OUT_' || ?) LIMIT 1",
                 [outletCode, outletCode, outletCode]
             );
+            const foundOutlets = outletSearchRes ? outletSearchRes[0] : null;
             if (foundOutlets && foundOutlets.length > 0) {
                 outletId = foundOutlets[0].id;
                 // Nếu Sale gửi định vị mới cho điểm bán có sẵn, luôn cập nhật tọa độ vào bảng outlets

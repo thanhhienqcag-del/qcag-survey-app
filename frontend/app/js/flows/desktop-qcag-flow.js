@@ -6801,12 +6801,20 @@ let _qcagNavListYearFilter = new Date().getFullYear(); // null = tất cả các
 let _qcagNavListYearDropupYear = new Date().getFullYear();
 
 function qcagNavListSetStatusFilter(btn, statusCls) {
-  _qcagNavListStatusFilter = statusCls;
+  _qcagNavListStatusFilter = statusCls || '';
   _qcagNavListCurrentPage = 1;
   _qcagNavListSelected.clear();
   // update pill active states
   const bar = document.getElementById('qcagNavListFilterBar');
-  if (bar) bar.querySelectorAll('.qcag-nav-filter-pill').forEach(b => b.classList.toggle('active', (b.dataset.status || '') === (statusCls || '')));
+  if (bar) {
+    bar.querySelectorAll('.qcag-nav-filter-pill').forEach(b => {
+      const bStat = (b.dataset.status || '').toLowerCase();
+      const targetStat = (_qcagNavListStatusFilter || '').toLowerCase();
+      const isMatch = (bStat === targetStat) ||
+        ((bStat === 'survey' || bStat === 'pending-survey') && (targetStat === 'survey' || targetStat === 'pending-survey'));
+      b.classList.toggle('active', isMatch);
+    });
+  }
   qcagNavRenderList();
 }
 
@@ -7483,32 +7491,62 @@ function _qcagNavListBuildStatus(r) {
   return qcagDesktopStatusBadge(r);
 }
 
+function _qcagNavListMatchStatus(statusCls, filterValue) {
+  if (!filterValue) return true;
+  const s = String(statusCls || '').toLowerCase();
+  const f = String(filterValue || '').toLowerCase();
+  if (f === 'processing') {
+    return s !== 'done';
+  }
+  if (f === 'survey' || f === 'pending-survey') {
+    return s === 'survey' || s === 'pending-survey';
+  }
+  if (f === 'pending') {
+    return s === 'pending' || s === 'pending-design' || s === 'pending-survey';
+  }
+  return s === f;
+}
+
 function qcagNavUpdateMetricsAndCounts(reqs) {
   const all = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
-  let total = all.length;
+  const yf = _qcagNavListYearFilter;
+
+  // Lọc theo năm để số lượng badge khớp với tập dữ liệu đang xem
+  const targetList = (yf !== null)
+    ? all.filter(r => {
+        try { return new Date(r.createdAt || 0).getFullYear() === yf; }
+        catch (e) { return false; }
+      })
+    : all;
+
+  let total = targetList.length;
   let surveyCnt = 0;
   let processingCnt = 0;
   let doneCnt = 0;
 
-  let cntSurvey = 0, cntDesign = 0, cntEdit = 0, cntConfirm = 0, cntProc = 0, cntPending = 0, cntDone = 0;
+  let cntSurvey = 0, cntDesign = 0, cntEdit = 0, cntConfirm = 0, cntProc = 0, cntDone = 0;
 
-  all.forEach(r => {
+  targetList.forEach(r => {
     const status = _qcagNavListBuildStatus(r);
-    if (status.cls === 'survey' || status.cls === 'pending-survey' || status.cls === 'pending') {
-      surveyCnt++;
-    } else if (status.cls === 'done') {
+    const cls = status.cls || '';
+
+    if (cls === 'done') {
       doneCnt++;
     } else {
       processingCnt++;
+      cntProc++;
     }
 
-    if (status.cls === 'survey' || status.cls === 'pending-survey') cntSurvey++;
-    else if (status.cls === 'pending-design') cntDesign++;
-    else if (status.cls === 'pending-edit') cntEdit++;
-    else if (status.cls === 'pending-confirm') cntConfirm++;
-    else if (status.cls === 'processing') cntProc++;
-    else if (status.cls === 'pending') cntPending++;
-    else if (status.cls === 'done') cntDone++;
+    if (cls === 'survey' || cls === 'pending-survey') {
+      surveyCnt++;
+      cntSurvey++;
+    } else if (cls === 'pending-design') {
+      cntDesign++;
+    } else if (cls === 'pending-edit') {
+      cntEdit++;
+    } else if (cls === 'pending-confirm') {
+      cntConfirm++;
+    }
   });
 
   const kpiTot = document.getElementById('qcagNavKpiTotal');
@@ -7534,13 +7572,13 @@ function qcagNavUpdateMetricsAndCounts(reqs) {
     }
   };
   setCnt('cntStatusAll', total);
+  setCnt('cntStatusProcessing', cntProc);
   setCnt('cntStatusSurvey', cntSurvey);
   setCnt('cntStatusDesign', cntDesign);
   setCnt('cntStatusEdit', cntEdit);
   setCnt('cntStatusConfirm', cntConfirm);
-  setCnt('cntStatusProcessing', cntProc);
-  setCnt('cntStatusPending', cntPending);
   setCnt('cntStatusDone', cntDone);
+  setCnt('cntStatusPending', 0);
 }
 
 function qcagNavRenderList() {
@@ -7603,9 +7641,9 @@ function qcagNavRenderList() {
         if (!textMatch) return false;
       }
       // status filter
-      if (sf && !q) {
+      if (sf) {
         const status = _qcagNavListBuildStatus(r);
-        if (status.cls !== sf) return false;
+        if (!_qcagNavListMatchStatus(status.cls, sf)) return false;
       }
       return true;
     });
