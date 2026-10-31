@@ -896,23 +896,28 @@
         await _ensureActiveBase();
         _openSse();
 
-        // Step 2: Background revalidation via ETag (0 bytes transfer if no database changes)
+        // Step 2: Background incremental revalidation when IndexedDB cache is warm (avoids full 7,300-row re-download)
         if (_store.length) {
-          try {
-            var fetchResult = await _fetchStore(false);
-            if (fetchResult && fetchResult.notModified) {
-              console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
-            } else if (Array.isArray(fetchResult) && fetchResult.length) {
-              var normalizedIncoming = _normalizeRequestRows(fetchResult);
-              var hasChanges = _mergeLatestRows(normalizedIncoming);
-              if (hasChanges) {
-                _triggerStoreUpdated();
+          var hasSyncCursor = Boolean(_lastSyncIso || _latestStoreTimestampIso());
+          if (hasSyncCursor) {
+            await this.refresh();
+          } else {
+            try {
+              var fetchResult = await _fetchStore(false);
+              if (fetchResult && fetchResult.notModified) {
+                console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
+              } else if (Array.isArray(fetchResult) && fetchResult.length) {
+                var normalizedIncoming = _normalizeRequestRows(fetchResult);
+                var hasChanges = _mergeLatestRows(normalizedIncoming);
+                if (hasChanges) {
+                  _triggerStoreUpdated();
+                }
               }
+            } catch (fetchErr) {
+              console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
+              await this.refresh();
             }
-          } catch (fetchErr) {
-            console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
           }
-          await this.refresh();
         } else {
           // Cold start (no cache): fetch full lite catalog
           var initialRows = await _fetchStore(true);

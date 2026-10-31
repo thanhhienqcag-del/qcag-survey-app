@@ -101,12 +101,38 @@ function wsBroadcast(payload) {
     } catch (_) { }
 }
 
-// ── In-memory cache for GET /api/ks/requests ──────────────────────────────────
-// Eliminates repetitive Neon queries: cache is populated on first GET after any
-// write, and served from RAM for all subsequent GETs until the next write.
+// ── In-memory cache for GET /api/ks/requests & production-approvals ──────────
+// Eliminates repetitive Neon queries: cache is populated on first GET and
+// patched in-place per single record on writes instead of full-table scans.
 let _ksRequestsCache = null; // { rows: Array, etag: string } | null
 let _ksWarmingInProgress = false;
-function ksInvalidateCache() {
+let _ksProductionApprovalsCache = null; // { data: Object, ts: number } | null
+const KS_PROD_APPROVALS_TTL_MS = 10000;
+
+function ksInvalidateCache(extra) {
+    if (_ksRequestsCache && Array.isArray(_ksRequestsCache.rows) && extra && typeof extra === 'object') {
+        const targetId = String(extra.tkCode || extra.tk_code || extra.id || extra.backendId || extra.code || '').trim();
+        if (targetId) {
+            if (extra.action === 'delete') {
+                const beforeLen = _ksRequestsCache.rows.length;
+                _ksRequestsCache.rows = _ksRequestsCache.rows.filter(r =>
+                    r && r.tkCode !== targetId && r.tk_code !== targetId && r.id !== targetId && r.__backendId !== targetId
+                );
+                if (_ksRequestsCache.rows.length !== beforeLen) {
+                    _ksRequestsCache.etag = `"${Date.now()}_${_ksRequestsCache.rows.length}"`;
+                    return;
+                }
+            } else if (typeof ksPatchSingleRequestCache === 'function') {
+                ksPatchSingleRequestCache(targetId, extra.action).catch(() => {
+                    _ksRequestsCache = null;
+                    if (typeof ksWarmRequestsCache === 'function') {
+                        setTimeout(() => ksWarmRequestsCache().catch(() => {}), 200);
+                    }
+                });
+                return;
+            }
+        }
+    }
     _ksRequestsCache = null;
     if (typeof ksWarmRequestsCache === 'function') {
         setTimeout(() => {
@@ -117,8 +143,11 @@ function ksInvalidateCache() {
 // ────────────────────────────────────────────────────────────────────────────────
 
 function wsInvalidate(resource, extra) {
-    // Invalidate in-memory cache whenever any data changes
-    if (resource === 'ks_requests') ksInvalidateCache();
+    // Invalidate / patch in-memory cache whenever data changes
+    if (resource === 'ks_requests') ksInvalidateCache(extra);
+    if (resource === 'pending_orders' || resource === 'quotations' || resource === 'ks_production_approvals' || resource === 'ks_requests') {
+        _ksProductionApprovalsCache = null;
+    }
     const payload = {
         type: 'invalidate',
         resource: resource,
@@ -385,7 +414,6 @@ app.post('/api/ks/invalidate', (req, res) => {
         const b = req.body || {};
         const resource = b.resource ? String(b.resource) : 'ks_requests';
         const action = b.action ? String(b.action) : 'update';
-        if (resource === 'ks_requests') ksInvalidateCache();
         wsInvalidate(resource, b);
         return res.json({ ok: true, resource, action, ts: Date.now() });
     } catch (err) {
@@ -739,6 +767,7 @@ async function initKsDB() {
         'CREATE INDEX IF NOT EXISTS idx_users_phone ON users (phone)',
         'CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)',
         'CREATE INDEX IF NOT EXISTS idx_request_items_request_tk_code ON request_items (request_tk_code)',
+        'CREATE INDEX IF NOT EXISTS idx_request_items_tk_seq ON request_items (request_tk_code, seq)',
         'CREATE INDEX IF NOT EXISTS idx_assets_owner_code_cat ON assets (owner_code, category)',
         'CREATE INDEX IF NOT EXISTS idx_notes_ref_id_type ON notes (ref_id, ref_type)',
     ];
@@ -3274,7 +3303,20 @@ const KS_REQUESTS_LITE_SQL = `
       o.latitude::varchar(32) AS outlet_lat,
       o.longitude::varchar(32) AS outlet_lng,
       COALESCE(o.phone, u.phone, '') AS phone,
-      '[]'::text AS items,
+      COALESCE((
+        SELECT json_agg(json_build_object(
+          'id', ri.id,
+          'seq', ri.seq,
+          'type', ri.type,
+          'otherContent', ri.other_content,
+          'action', ri.action,
+          'brand', ri.brand,
+          'width', ri.width,
+          'height', ri.height
+        ) ORDER BY ri.seq)::text
+        FROM request_items ri
+        WHERE ri.request_tk_code = r.tk_code
+      ), '[]') AS items,
       EXISTS(
         SELECT 1 FROM request_items ri 
         WHERE ri.request_tk_code = r.tk_code 
@@ -3419,6 +3461,39 @@ async function ksWarmRequestsCache() {
     } finally {
         _ksWarmingInProgress = false;
     }
+}
+
+async function ksPatchSingleRequestCache(targetId, action) {
+    if (!pool || !_ksRequestsCache || !Array.isArray(_ksRequestsCache.rows) || !targetId) return;
+    const cleanId = String(targetId).trim();
+    if (!cleanId) return;
+    const singleSql = KS_REQUESTS_LITE_SQL.replace(
+        /WHERE COALESCE\(r\.is_deleted,\s*false\)\s*=\s*false\s*ORDER BY r\.created_at DESC\s*$/i,
+        'WHERE COALESCE(r.is_deleted, false) = false AND (r.tk_code = ? OR r.id = ? OR q_lat.quote_code = ?) LIMIT 1'
+    );
+    const [rows] = await pool.query(singleSql, [cleanId, cleanId, cleanId]);
+    if (!rows || rows.length === 0) {
+        if (action === 'create') {
+            await ksWarmRequestsCache();
+        }
+        return;
+    }
+    const mappedRow = ksRowToApp(rows[0], true);
+    const tkKey = String(mappedRow.tkCode || mappedRow.tk_code || '').trim();
+    const idKey = String(mappedRow.id || mappedRow.__backendId || '').trim();
+    const idx = _ksRequestsCache.rows.findIndex(r =>
+        r && (
+            (tkKey && (r.tkCode === tkKey || r.tk_code === tkKey)) ||
+            (idKey && (r.id === idKey || r.__backendId === idKey)) ||
+            r.tkCode === cleanId || r.tk_code === cleanId || r.id === cleanId || r.__backendId === cleanId
+        )
+    );
+    if (idx >= 0) {
+        _ksRequestsCache.rows[idx] = mappedRow;
+    } else {
+        _ksRequestsCache.rows.unshift(mappedRow);
+    }
+    _ksRequestsCache.etag = `"${Date.now()}_${_ksRequestsCache.rows.length}"`;
 }
 
 
@@ -3633,15 +3708,21 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
-        // 2) Fast ETag check: query MAX(updated_at) and COUNT(*) on base table requests (takes ~2ms)
+        // 2) Fast ETag check: use in-memory cache ETag first (0ms), fallback to DB stat check (~2ms)
         let serverEtag = null;
         try {
-            const [statRows] = await pool.query(
-                "SELECT COALESCE(TO_CHAR(MAX(updated_at), 'YYYYMMDDHH24MISSMS'), '0') AS max_up, COUNT(*) AS total FROM requests WHERE COALESCE(is_deleted, false) = false"
-            );
-            const statRow = statRows && statRows[0];
-            if (statRow) {
-                serverEtag = `"${statRow.max_up}_${statRow.total}"`;
+            if (_ksRequestsCache && _ksRequestsCache.etag) {
+                serverEtag = _ksRequestsCache.etag;
+            } else {
+                const [statRows] = await pool.query(
+                    "SELECT COALESCE(TO_CHAR(MAX(updated_at), 'YYYYMMDDHH24MISSMS'), '0') AS max_up, COUNT(*) AS total FROM requests WHERE COALESCE(is_deleted, false) = false"
+                );
+                const statRow = statRows && statRows[0];
+                if (statRow) {
+                    serverEtag = `"${statRow.max_up}_${statRow.total}"`;
+                }
+            }
+            if (serverEtag) {
                 const clientEtag = req.headers['if-none-match'];
                 res.setHeader('ETag', serverEtag);
                 res.setHeader('Cache-Control', 'no-cache');
@@ -4643,7 +4724,6 @@ app.post("/api/ks/requests", async (req, res) => {
             updated_at: now
         };
         const appRow = ksRowToApp(row);
-        ksInvalidateCache();
         wsInvalidate('ks_requests', { action: 'create', id: backendId, tkCode, data: appRow });
         return res.status(201).json({ ok: true, data: appRow });
     } catch (err) {
@@ -5035,7 +5115,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 await pool.query(`DELETE FROM request_items WHERE request_tk_code = ?`, [tkCode]);
             }
         }
-        ksInvalidateCache();
 
         if (b.status === 'done') {
             try {
@@ -5130,7 +5209,6 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         const viewRow = await getRequestDetailDirect(tkCode || id || currentReq.id);
         const updated = viewRow || currentReq;
         const appUpdated = ksRowToApp(updated);
-        ksInvalidateCache();
         wsInvalidate('ks_requests', { action: 'update', id: tkCode, data: appUpdated });
         return res.json({ ok: true, data: appUpdated });
     } catch (err) {
@@ -5161,7 +5239,6 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
             ['approved', tkCode]
         );
         console.log(`[DELETED] Request tk_code=${tkCode} marked is_deleted=true in requests. Reason: ${deleteReason}`);
-        ksInvalidateCache();
         wsInvalidate('ks_requests', {
             action: 'delete',
             id: row.id || tkCode,
@@ -5260,7 +5337,6 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
 
         const viewRow = await getRequestDetailDirect(tkCode || current.id);
         const appUpdatedMq = viewRow ? ksRowToApp(viewRow) : current;
-        ksInvalidateCache();
         wsInvalidate('ks_requests', { action: 'update', id: tkCode, data: appUpdatedMq });
         return res.json({ ok: true, data: appUpdatedMq, renamedFiles: Object.keys(remap).length });
     } catch (err) {
@@ -5272,6 +5348,10 @@ app.post('/api/ks/requests/:id/rename-mq-folder', async (req, res) => {
 // ── GET /api/ks/requests/production-approvals ─────────────────────────
 app.get(['/api/ks/requests/production-approvals', '/production-approvals'], async (req, res) => {
     try {
+        const nowTs = Date.now();
+        if (_ksProductionApprovalsCache && (nowTs - _ksProductionApprovalsCache.ts < KS_PROD_APPROVALS_TTL_MS)) {
+            return res.json({ ok: true, data: _ksProductionApprovalsCache.data });
+        }
         const map = {};
         const extractCleanCode = (s) => {
             if (!s) return '';
@@ -5464,6 +5544,7 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
             console.warn('[production-approvals] query fallback:', flowErr && flowErr.message ? flowErr.message : flowErr);
         }
 
+        _ksProductionApprovalsCache = { data: map, ts: Date.now() };
         return res.json({ ok: true, data: map });
     } catch (err) {
         console.error('GET /api/ks/requests/production-approvals error:', err && err.message ? err.message : err);
@@ -5540,7 +5621,7 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
         }
 
         wsInvalidate('pending_orders');
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'update', id: targetCode });
         wsInvalidate('quotations');
         sseBroadcast({ type: 'production_approval', action: 'approve', quoteCode: targetCode, approvedBy });
 
@@ -5627,7 +5708,7 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
         }
 
         wsInvalidate('pending_orders');
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'update', id: targetCode });
         wsInvalidate('quotations');
         sseBroadcast({ type: 'production_approval', action: 'reject', quoteCode: targetCode, reason });
 
@@ -5728,7 +5809,7 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         }
 
         wsInvalidate('pending_orders');
-        wsInvalidate('ks_requests');
+        wsInvalidate('ks_requests', { action: 'update', id: targetCode });
         wsInvalidate('quotations');
         sseBroadcast({ type: 'production_approval', action: 'request_edit', quoteCode: targetCode, reason });
 

@@ -1249,10 +1249,11 @@ async function fetchProductionApprovals() {
     const modal = document.getElementById('productionApprovalModal');
     if (modal && !modal.classList.contains('hidden')) {
         renderProductionApprovalList();
+        // Auto-fetch missing MQ images ONLY when modal is actively open
+        autoFetchMissingProductionImages();
+    } else if (_productionApprovalActive) {
+        autoFetchMissingProductionImages();
     }
-
-    // Auto-fetch missing MQ images in background
-    autoFetchMissingProductionImages();
 
     const pendingCount = finalItems.filter(i => (i.productionApprovalStatus || 'pending') === 'pending').length;
     const approvedCount = finalItems.filter(i => i.productionApprovalStatus === 'approved').length;
@@ -2634,7 +2635,7 @@ if (typeof window !== 'undefined') {
             try { origHook(payload); } catch (_) { }
         }
         const res = String(payload && payload.resource || '').toLowerCase();
-        if (!res || res === 'pending_orders' || res === 'pending-orders' || res === 'production-orders' || res === 'ks_requests' || res === 'quotations' || res === 'ks_production_approvals') {
+        if (!res || res === 'pending_orders' || res === 'pending-orders' || res === 'production-orders' || res === 'quotations' || res === 'ks_production_approvals') {
             // Chặn gọi nặng trên màn hình Desktop QCAG (tính năng duyệt sản xuất chỉ dành cho Mobile Sale)
             if (isQcagDesktopActive() && !_productionApprovalActive) {
                 return;

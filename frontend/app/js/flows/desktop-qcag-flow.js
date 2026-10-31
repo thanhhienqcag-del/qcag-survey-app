@@ -7720,7 +7720,7 @@ function _qcagNavListRenderBody() {
   }).join('');
 }
 
-function qcagNavListPrintSummaryPDF() {
+async function qcagNavListPrintSummaryPDF() {
   if (!_qcagNavListSelected || _qcagNavListSelected.size === 0) {
     alert('Vui lòng chọn ít nhất 1 dòng trong danh sách để in bảng danh sách.');
     return;
@@ -7735,6 +7735,27 @@ function qcagNavListPrintSummaryPDF() {
   if (!targets || targets.length === 0) {
     alert('Không tìm thấy dữ liệu yêu cầu được chọn để in bảng danh sách.');
     return;
+  }
+
+  // Đảm bảo tất cả các yêu cầu được chọn đều có đầy đủ hạng mục thi công (kể cả khi chưa từng mở thẻ)
+  const needFetch = targets.filter(r => {
+    const items = qcagDesktopParseJson(r.items, []);
+    return !Array.isArray(items) || items.length === 0;
+  });
+
+  if (needFetch.length > 0 && typeof qcagDesktopGetFullRequest === 'function') {
+    await Promise.all(needFetch.map(async r => {
+      try {
+        const full = await qcagDesktopGetFullRequest(r.__backendId || r.id || r.tkCode);
+        if (full && full.items) {
+          r.items = full.items;
+          const idx = allRequests.findIndex(x => x && (x.__backendId === r.__backendId || x.tkCode === r.tkCode));
+          if (idx !== -1) allRequests[idx].items = full.items;
+        }
+      } catch (err) {
+        console.warn('[qcagNavListPrintSummaryPDF] Cannot fetch full items for', r.tkCode, err);
+      }
+    }));
   }
 
   const currentDateStr = new Date().toLocaleDateString('vi-VN');
@@ -7792,7 +7813,7 @@ function qcagNavListPrintSummaryPDF() {
         const brand = escapeHtml(it.brand || r.brand || '');
         const brandText = brand ? ` (${brand})` : '';
         return `<div><strong>${iIdx + 1}.</strong> ${name}${brandText}</div>`;
-      }).join('') || '<div>Chưa có hạng mục</div>';
+      }).join('') || (r.content ? `<div>${escapeHtml(r.content)}</div>` : '<div>Chưa có hạng mục</div>');
 
       return `
         <tr>
