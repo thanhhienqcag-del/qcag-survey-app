@@ -1744,21 +1744,120 @@ if (typeof window !== 'undefined') {
   window._resolveApp1Base = _resolveApp1Base;
 }
 
+// Helper chuẩn hóa: Phân biệt vật tư báo giá thật sự (quotation_items) với hạng mục khảo sát sơ bộ (request_items)
+function _isActualQuoteItems(items) {
+  if (!Array.isArray(items) || items.length === 0) return false;
+  return items.some(it => {
+    if (!it || typeof it !== 'object') return false;
+    const hasCode = Boolean(it.code || it.item_code);
+    const priceNum = Number(it.price || it.unit_price || 0);
+    const totalNum = Number(it.total || it.total_price || it.amount || 0);
+    const content = String(it.content || it.product_name || it.item_name || '').trim().toLowerCase();
+    const isSpecificContent = content && content !== 'hạng mục' && content !== 'hang muc' && content !== '---';
+    return hasCode || priceNum > 0 || totalNum > 0 || isSpecificContent;
+  });
+}
+window._isActualQuoteItems = _isActualQuoteItems;
+
+// Helper đảm bảo nạp đầy đủ chi tiết báo giá (Zero Fallback Rác)
+async function _ensureQuotationFullDetails(q, targetTk, targetQuoteCode) {
+  if (!q && !targetTk && !targetQuoteCode) return null;
+  // 1. Nếu q đã có items vật tư hợp lệ -> trả về ngay tức thì (0ms)
+  if (q && Array.isArray(q.items) && _isActualQuoteItems(q.items)) {
+    q._fullDetailFetched = true;
+    return q;
+  }
+  if (q && typeof q.items === 'string') {
+    try {
+      const parsed = JSON.parse(q.items);
+      if (Array.isArray(parsed) && _isActualQuoteItems(parsed)) {
+        q.items = parsed;
+        q._fullDetailFetched = true;
+        return q;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Tra cứu trong RAM cache xem đã có bản full chưa
+  const qCode = String((q && (q.quote_code || q.quoteCode)) || targetQuoteCode || '').trim();
+  const tk = String((q && (q.tk_code || q.tkCode || q.request_tk_code)) || targetTk || '').trim();
+
+  if (qCode && window._quoteDataMap && window._quoteDataMap[qCode] && _isActualQuoteItems(window._quoteDataMap[qCode].items)) {
+    return Object.assign(q || {}, window._quoteDataMap[qCode]);
+  }
+  if (tk && window._quoteDataMap && window._quoteDataMap[tk] && _isActualQuoteItems(window._quoteDataMap[tk].items)) {
+    return Object.assign(q || {}, window._quoteDataMap[tk]);
+  }
+
+  // 3. Fetch trực tiếp từ App 1 Backend (< 100ms)
+  const targetId = qCode || tk || (q && q.id);
+  if (!targetId) return q;
+
+  try {
+    const app1Base = typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
+    
+    // Ưu tiên /quotations/:id vì endpoint này luôn trả về bản ghi chi tiết với quotation_items chuẩn 3NF
+    const res = await fetch(`${app1Base}/quotations/${encodeURIComponent(targetId)}`, {
+      signal: controller ? controller.signal : undefined
+    }).catch(() => null);
+    if (timer) clearTimeout(timer);
+
+    if (res && res.ok) {
+      const fullQ = await res.json().catch(() => null);
+      if (fullQ) {
+        let fullItems = [];
+        if (Array.isArray(fullQ.items)) fullItems = fullQ.items;
+        else if (typeof fullQ.items === 'string') {
+          try { fullItems = JSON.parse(fullQ.items); } catch (_) { fullItems = []; }
+        }
+        fullQ.items = fullItems;
+        fullQ._fullDetailFetched = true;
+
+        if (q) {
+          Object.assign(q, fullQ);
+          q.items = fullItems;
+          q._fullDetailFetched = true;
+        } else {
+          q = fullQ;
+        }
+
+        window._quoteDataMap = window._quoteDataMap || {};
+        if (qCode) window._quoteDataMap[qCode] = q;
+        if (tk) window._quoteDataMap[tk] = q;
+        if (q.id) window._quoteDataMap[q.id] = q;
+        if (q.__backendId) window._quoteDataMap[q.__backendId] = q;
+
+        return q;
+      }
+    }
+  } catch (err) {
+    console.warn('[_ensureQuotationFullDetails] Error fetching full details:', err);
+  }
+
+  return q;
+}
+window._ensureQuotationFullDetails = _ensureQuotationFullDetails;
+
 // ── B-Tree Index Targeted Quote Loader (< 10ms, không tải 1000 items thừa) ──
 async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
   if (!tkCode && !quoteCode && !outletCode) return null;
   const targetTk = tkCode ? String(tkCode).trim() : '';
 
-  // 1. Kiểm tra cache RAM (0ms)
-  if (targetTk && window._quoteDataMap && window._quoteDataMap[targetTk]) {
+  // 1. Kiểm tra cache RAM (0ms) nếu đã có bản ghi full items
+  if (targetTk && window._quoteDataMap && window._quoteDataMap[targetTk] && _isActualQuoteItems(window._quoteDataMap[targetTk].items)) {
     return window._quoteDataMap[targetTk];
+  }
+  if (quoteCode && window._quoteDataMap && window._quoteDataMap[quoteCode] && _isActualQuoteItems(window._quoteDataMap[quoteCode].items)) {
+    return window._quoteDataMap[quoteCode];
   }
   if (Array.isArray(window.__qcagQuoteListCache)) {
     const matched = window.__qcagQuoteListCache.find(q =>
       (targetTk && (q.tk_code === targetTk || q.request_tk_code === targetTk)) ||
       (quoteCode && (q.quote_code === quoteCode || q.id === quoteCode))
     );
-    if (matched) return matched;
+    if (matched && _isActualQuoteItems(matched.items)) return matched;
   }
 
   // 2. Tra cứu B-Tree cực nhanh qua local App 2 backend (< 5ms) — chỉ theo tk_code hoặc quote_code
@@ -1808,11 +1907,36 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
     }
   }
 
+  // 4. Nếu vẫn chưa có hoặc tìm thấy nhưng thiếu items -> fetch trực tiếp /quotations/:id
+  if (!foundQuote || !_isActualQuoteItems(foundQuote.items)) {
+    const directTarget = quoteCode || targetTk;
+    if (directTarget) {
+      try {
+        const app1Base = _resolveApp1Base();
+        const resDirect = await fetch(`${app1Base}/quotations/${encodeURIComponent(directTarget)}`).catch(() => null);
+        if (resDirect && resDirect.ok) {
+          const directData = await resDirect.json().catch(() => null);
+          if (directData && (directData.quote_code || directData.id)) {
+            foundQuote = foundQuote ? Object.assign(foundQuote, directData) : directData;
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
   if (foundQuote) {
+    if (typeof foundQuote.items === 'string') {
+      try { foundQuote.items = JSON.parse(foundQuote.items); } catch (_) {}
+    }
+    if (_isActualQuoteItems(foundQuote.items)) {
+      foundQuote._fullDetailFetched = true;
+    }
+
     window._quoteDataMap = window._quoteDataMap || {};
     if (targetTk) window._quoteDataMap[targetTk] = foundQuote;
     if (foundQuote.__backendId) window._quoteDataMap[foundQuote.__backendId] = foundQuote;
     if (foundQuote.id) window._quoteDataMap[foundQuote.id] = foundQuote;
+    if (foundQuote.quote_code) window._quoteDataMap[foundQuote.quote_code] = foundQuote;
 
     if (Array.isArray(window.__qcagQuoteListCache)) {
       const exIdx = window.__qcagQuoteListCache.findIndex(q => q.quote_code === foundQuote.quote_code);
@@ -2053,6 +2177,11 @@ async function _loadBridgeStatus(backendId) {
       return;
     }
 
+    // Tự động kích hoạt nạp ngầm chi tiết vật tư đầy đủ về RAM nếu quoteData hiện tại là bản tóm tắt (Zero Lag khi click)
+    if (!_isActualQuoteItems(quoteData.items)) {
+      _ensureQuotationFullDetails(quoteData, targetTk, targetQuoteCode).catch(() => {});
+    }
+
     const q = quoteData;
     const quoteCode = q.quote_code || q.quoteCode || targetQuoteCode || '---';
     const tkCode = q.tk_code || q.tkCode || targetTk || '---';
@@ -2203,6 +2332,11 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     }
   }
 
+  // 7. Đảm bảo nạp đầy đủ chi tiết vật tư báo giá trước khi mở modal
+  if (q && !_isActualQuoteItems(q.items)) {
+    q = await _ensureQuotationFullDetails(q, targetTk, targetQuoteCode);
+  }
+
   if (!q) {
     if (typeof showToast === 'function') showToast('Yêu cầu này chưa có báo giá từ QCAG');
     return;
@@ -2292,17 +2426,11 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
   } else if (typeof q.items === 'string') {
     try { items = JSON.parse(q.items); } catch (_) { items = []; }
   }
-  if ((!items || items.length === 0) && req) {
-    if (Array.isArray(req.items)) items = req.items;
-    else if (typeof req.items === 'string') {
-      try { items = JSON.parse(req.items); } catch (_) { items = []; }
-    }
-  }
 
   // Tự động nạp chi tiết vật tư đầy đủ từ App 1 nếu ban đầu là dữ liệu tóm tắt (Zero Oversized Transfers)
-  if ((!items || items.length === 0) && (quoteCode || q.id || tkCode)) {
+  if (!_isActualQuoteItems(items) && (quoteCode || q.id || tkCode)) {
     try {
-      const qIdTarget = quoteCode || q.id || tkCode;
+      const qIdTarget = (quoteCode && quoteCode !== '---') ? quoteCode : (tkCode && tkCode !== '---' ? tkCode : q.id);
       const app1Base = (typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : (window._resolveApp1Base ? window._resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app'));
       const qDetailRes = await fetch(`${app1Base}/quotations/${encodeURIComponent(qIdTarget)}`).catch(() => null);
       if (qDetailRes && qDetailRes.ok) {
@@ -2316,11 +2444,23 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
           }
           if (fullQ.total_amount && !q.total_amount) q.total_amount = fullQ.total_amount;
           q.items = items;
+          q._fullDetailFetched = true;
           if (backendId && window._quoteDataMap) window._quoteDataMap[backendId] = Object.assign({}, q, fullQ, { items });
+          if (quoteCode && window._quoteDataMap) window._quoteDataMap[quoteCode] = Object.assign({}, q, fullQ, { items });
+          if (tkCode && window._quoteDataMap) window._quoteDataMap[tkCode] = Object.assign({}, q, fullQ, { items });
         }
       }
     } catch (e) {
       console.warn('Lazy load quote items warning:', e);
+    }
+  }
+
+  // TUYỆT ĐỐI CHỈ fallback sang req.items KHI YÊU CẦU NÀY THỰC SỰ CHƯA CÓ BÁO GIÁ (không có mã BG và tổng tiền <= 0)
+  const hasActualQuote = Boolean((quoteCode && quoteCode !== '---') || totalNum > 0);
+  if (!hasActualQuote && !_isActualQuoteItems(items) && req) {
+    if (Array.isArray(req.items)) items = req.items;
+    else if (typeof req.items === 'string') {
+      try { items = JSON.parse(req.items); } catch (_) { items = []; }
     }
   }
 
@@ -2704,23 +2844,30 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
   `;
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-  // If items are empty (lite mode cached), lazy-load full quotation details ONCE asynchronously
-  const hasLoadedItems = Array.isArray(items) && items.length > 0;
-  if (!hasLoadedItems && !q._fullDetailFetched && (q.id || q.quote_code)) {
-    const qTarget = q.quote_code ? ('quote_code=' + encodeURIComponent(q.quote_code)) : (q.id ? ('id=' + encodeURIComponent(q.id)) : '');
-    if (qTarget) {
-      const app1Base = 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
-      fetch(app1Base + '/quotations?' + qTarget)
+  // If items are not actual quotation items, lazy-load full quotation details ONCE asynchronously
+  const hasLoadedActualItems = _isActualQuoteItems(items);
+  if (!hasLoadedActualItems && !q._fullDetailFetched && (q.id || q.quote_code || tkCode)) {
+    const qTargetParam = (quoteCode && quoteCode !== '---') ? ('quote_code=' + encodeURIComponent(quoteCode)) : (tkCode && tkCode !== '---' ? ('tk_code=' + encodeURIComponent(tkCode)) : ('id=' + encodeURIComponent(q.id)));
+    if (qTargetParam) {
+      const app1Base = typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+      fetch(app1Base + '/quotations?' + qTargetParam)
         .then(r => r.ok ? r.json() : null)
         .then(data => {
-          const fullQ = Array.isArray(data) ? (data.find(x => x.quote_code === q.quote_code) || data[0]) : data;
+          const fullQ = Array.isArray(data) ? (data.find(x => x.quote_code === quoteCode || x.tk_code === tkCode) || data[0]) : data;
           if (fullQ) {
+            let fullItems = [];
+            if (Array.isArray(fullQ.items)) fullItems = fullQ.items;
+            else if (typeof fullQ.items === 'string') {
+              try { fullItems = JSON.parse(fullQ.items); } catch (_) { fullItems = []; }
+            }
+            fullQ.items = fullItems;
             fullQ._fullDetailFetched = true;
             // Cache full details to prevent repeated network transfers
             if (backendId) window._quoteDataMap[backendId] = fullQ;
             if (fullQ.quote_code) window._quoteDataMap[fullQ.quote_code] = fullQ;
+            if (fullQ.tk_code) window._quoteDataMap[fullQ.tk_code] = fullQ;
             const currentModal = document.getElementById('fullMobileQuoteModal');
-            if (currentModal) {
+            if (currentModal && _isActualQuoteItems(fullItems)) {
               openFullMobileQuoteModal(backendId, fullQ);
             }
           }
