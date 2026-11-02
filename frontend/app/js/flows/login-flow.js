@@ -310,6 +310,21 @@ function executeLogout() {
   localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem('pending_orders_v1');
   localStorage.removeItem('pendingOrders');
+  localStorage.removeItem('ks_requests');
+  localStorage.removeItem('ks_cached_user');
+  localStorage.removeItem('qcag_quotes_cache');
+  if (typeof allRequests !== 'undefined') allRequests = [];
+  if (typeof window !== 'undefined') {
+    window._quoteDataMap = {};
+    window.__qcagQuoteListCache = [];
+  }
+  try {
+    if (window.dataSdk && typeof window.dataSdk.clearUserCache === 'function') {
+      window.dataSdk.clearUserCache().catch(() => {});
+    } else if (typeof window !== 'undefined' && window.ksIdb && typeof window.ksIdb.clearAll === 'function') {
+      window.ksIdb.clearAll().catch(() => {});
+    }
+  } catch (_) {}
   try {
     if (typeof _productionApprovalItems !== 'undefined') _productionApprovalItems = [];
     if (typeof _productionApprovalBadgeCount !== 'undefined') _productionApprovalBadgeCount = 0;

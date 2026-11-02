@@ -3742,29 +3742,39 @@ app.get('/api/ks/requests', async (req, res) => {
             const params = [];
             if (salePhoneRaw) {
                 const cleanPhone = salePhoneRaw.replace(/\s+/g, '');
-                if (isLite) {
-                    params.push(salePhoneRaw, cleanPhone, cleanPhone);
-                    conds.push("(u.phone = ? OR REPLACE(COALESCE(u.phone, ''), ' ', '') = ? OR o.phone = ?)");
-                } else {
-                    params.push(salePhoneRaw, cleanPhone, cleanPhone);
-                    conds.push("(u.phone = ? OR REPLACE(COALESCE(u.phone, ''), ' ', '') = ? OR o.phone = ?)");
-                }
+                params.push(salePhoneRaw, cleanPhone, cleanPhone, 'USR_PHONE_' + cleanPhone, 'USR_PHONE_' + cleanPhone);
+                conds.push("(u.phone = ? OR REPLACE(COALESCE(u.phone, ''), ' ', '') = ? OR o.phone = ? OR u.id = ? OR r.requester_id = ?)");
             }
             if (saleCodeRaw) {
-                params.push(saleCodeRaw);
-                conds.push(isLite ? "u.username = ?" : "r.sale_code = ?");
+                params.push(saleCodeRaw, saleCodeRaw, 'USR_SALE_' + saleCodeRaw, 'USR_SALE_' + saleCodeRaw);
+                conds.push("(u.sale_code = ? OR u.username = ? OR u.id = ? OR r.requester_id = ?)");
+            }
+
+            let sinceClause = '';
+            if (updatedSince) {
+                sinceClause = ' AND (r.updated_at >= ? OR r.created_at >= ?)';
+                params.push(updatedSince, updatedSince);
             }
 
             let sql = '';
             if (isLite) {
                 const baseLite = KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/, '').trim();
-                sql = `${baseLite} AND (${conds.join(' OR ')}) ORDER BY r.created_at DESC LIMIT 200`;
+                sql = `${baseLite} AND (${conds.join(' OR ')})${sinceClause} ORDER BY r.created_at DESC LIMIT 300`;
             } else {
-                sql = `${KS_REQUESTS_SELECT_SQL} WHERE (${conds.join(' OR ')}) ORDER BY r.created_at DESC LIMIT 200`;
+                sql = `${KS_REQUESTS_SELECT_SQL} WHERE (${conds.join(' OR ')})${sinceClause} ORDER BY r.created_at DESC LIMIT 300`;
             }
 
             const [rows] = await pool.query(sql, params);
             const mapped = rows.map(r => ksRowToApp(r, isLite));
+
+            const saleEtag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
+            res.setHeader('ETag', saleEtag);
+            res.setHeader('Cache-Control', 'no-cache');
+            const clientEtag = req.headers['if-none-match'];
+            if (clientEtag && clientEtag === saleEtag && !updatedSince) {
+                return res.status(304).end();
+            }
+
             return res.json({
                 ok: true,
                 data: mapped,

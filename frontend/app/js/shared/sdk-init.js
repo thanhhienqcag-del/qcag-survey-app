@@ -394,17 +394,30 @@ async function initApp() {
   // Fast-path: Load full cached requests from IndexedDB (all 3,665+ rows, not truncated to 100)
   try {
     if (typeof window !== 'undefined' && window.ksIdb && window.ksIdb.isSupported()) {
-      const cachedRows = await window.ksIdb.getAll();
-      if (Array.isArray(cachedRows) && cachedRows.length > 0) {
-        allRequests = _ksDedupeRequests(cachedRows);
-        updateRequestCount();
-        if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-          if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
-          if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+      let activeUser = '';
+      try {
+        const ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
+        if (ses) {
+          const role = String(ses.role || '').toLowerCase();
+          if (role === 'qcag' || role === 'admin') activeUser = 'qcag_' + (ses.phone || ses.name || 'internal');
+          else activeUser = 'sale_' + (ses.saleCode || ses.userCode || ses.code || ses.phone || 'guest');
         }
-        const listEl = document.getElementById('listScreen');
-        if (listEl && listEl.classList.contains('flex')) renderRequestList();
-        try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
+      } catch (_) {}
+      const cachedUser = localStorage.getItem('ks_cached_user') || '';
+      // Chỉ phục hồi cache IndexedDB nếu khớp đúng user hiện tại (tránh nhiễm chéo dữ liệu khi đổi tài khoản)
+      if (!activeUser || !cachedUser || activeUser === cachedUser) {
+        const cachedRows = await window.ksIdb.getAll();
+        if (Array.isArray(cachedRows) && cachedRows.length > 0) {
+          allRequests = _ksDedupeRequests(cachedRows);
+          updateRequestCount();
+          if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
+            if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+            if (typeof hideLoadingOverlay === 'function') hideLoadingOverlay();
+          }
+          const listEl = document.getElementById('listScreen');
+          if (listEl && listEl.classList.contains('flex')) renderRequestList();
+          try { if (typeof setHomeStatsLoading === 'function') setHomeStatsLoading(false); } catch (e) {}
+        }
       }
     }
   } catch (_e) {}

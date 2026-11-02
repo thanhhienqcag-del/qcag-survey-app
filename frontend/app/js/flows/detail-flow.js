@@ -1798,8 +1798,9 @@ async function _ensureQuotationFullDetails(q, targetTk, targetQuoteCode) {
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
     
-    // Ưu tiên /quotations/:id vì endpoint này luôn trả về bản ghi chi tiết với quotation_items chuẩn 3NF
-    const res = await fetch(`${app1Base}/quotations/${encodeURIComponent(targetId)}`, {
+    // Ưu tiên /quotations/:id?by=code vì endpoint này luôn trả về bản ghi chi tiết với quotation_items chuẩn 3NF
+    const fetchUrl = `${app1Base}/quotations/${encodeURIComponent(targetId)}?by=code${qCode ? '&quote_code=' + encodeURIComponent(qCode) : ''}${tk ? '&tk_code=' + encodeURIComponent(tk) : ''}`;
+    const res = await fetch(fetchUrl, {
       signal: controller ? controller.signal : undefined
     }).catch(() => null);
     if (timer) clearTimeout(timer);
@@ -1807,6 +1808,18 @@ async function _ensureQuotationFullDetails(q, targetTk, targetQuoteCode) {
     if (res && res.ok) {
       const fullQ = await res.json().catch(() => null);
       if (fullQ) {
+        const fullQCode = String(fullQ.quote_code || fullQ.quoteCode || '').trim();
+        const fullTk = String(fullQ.tk_code || fullQ.tkCode || '').trim();
+        // SỢI CHỈ ĐỎ KHÓA TOÀN VẸN: Tuyệt đối không nhận báo giá khác outlet/khác mã
+        if (qCode && fullQCode && fullQCode !== qCode) {
+          console.warn('[_ensureQuotationFullDetails] Phát hiện mã báo giá không khớp (' + fullQCode + ' != ' + qCode + '), hủy gán để bảo vệ dữ liệu.');
+          return q;
+        }
+        if (tk && fullTk && tk.toLowerCase() !== fullTk.toLowerCase() && !qCode) {
+          console.warn('[_ensureQuotationFullDetails] Phát hiện mã TK không khớp (' + fullTk + ' != ' + tk + '), hủy gán để bảo vệ dữ liệu.');
+          return q;
+        }
+
         let fullItems = [];
         if (Array.isArray(fullQ.items)) fullItems = fullQ.items;
         else if (typeof fullQ.items === 'string') {
@@ -1913,11 +1926,15 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
     if (directTarget) {
       try {
         const app1Base = _resolveApp1Base();
-        const resDirect = await fetch(`${app1Base}/quotations/${encodeURIComponent(directTarget)}`).catch(() => null);
+        const resDirect = await fetch(`${app1Base}/quotations/${encodeURIComponent(directTarget)}?by=code${quoteCode ? '&quote_code=' + encodeURIComponent(quoteCode) : ''}${targetTk ? '&tk_code=' + encodeURIComponent(targetTk) : ''}`).catch(() => null);
         if (resDirect && resDirect.ok) {
           const directData = await resDirect.json().catch(() => null);
           if (directData && (directData.quote_code || directData.id)) {
-            foundQuote = foundQuote ? Object.assign(foundQuote, directData) : directData;
+            const dQuote = String(directData.quote_code || directData.quoteCode || '').trim();
+            const dTk = String(directData.tk_code || directData.tkCode || '').trim();
+            if ((!quoteCode || dQuote === quoteCode) && (!targetTk || dTk.toLowerCase() === targetTk.toLowerCase())) {
+              foundQuote = foundQuote ? Object.assign(foundQuote, directData) : directData;
+            }
           }
         }
       } catch (_) {}

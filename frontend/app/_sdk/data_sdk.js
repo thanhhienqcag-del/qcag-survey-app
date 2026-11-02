@@ -531,6 +531,37 @@
     return _activeBase;
   }
 
+  function _getSaleQueryParams() {
+    var _saleExtra = '';
+    try {
+      var _ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
+      if (!_ses && typeof window !== 'undefined' && window.currentSession) _ses = window.currentSession;
+      var _isInternalQcag = _ses && (_ses.is_internal === true || String(_ses.company || '').toUpperCase() === 'QCAG' || ['qcag', 'admin', 'operator', 'design'].indexOf(String(_ses.role || '').toLowerCase()) !== -1);
+      if (_ses && !_isInternalQcag) {
+        var _phone = _ses.phone || _ses.salePhone || _ses.userPhone || '';
+        var _code = _ses.saleCode || _ses.userCode || _ses.code || '';
+        if (_phone) _saleExtra += '&sale_phone=' + encodeURIComponent(String(_phone).trim());
+        if (_code) _saleExtra += '&sale_code=' + encodeURIComponent(String(_code).trim());
+      }
+    } catch (_) {}
+    return _saleExtra;
+  }
+
+  function _getActiveUserKey() {
+    try {
+      var _ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
+      if (!_ses && typeof window !== 'undefined' && window.currentSession) _ses = window.currentSession;
+      if (!_ses) return 'anonymous';
+      var role = String(_ses.role || '').toLowerCase();
+      if (role === 'qcag' || role === 'admin') return 'qcag_' + (_ses.phone || _ses.name || 'internal');
+      var code = String(_ses.saleCode || _ses.userCode || _ses.code || '').trim().toLowerCase();
+      var phone = String(_ses.phone || _ses.salePhone || '').replace(/\D/g, '');
+      return 'sale_' + (code || phone || 'guest');
+    } catch (_) {
+      return 'anonymous';
+    }
+  }
+
   async function _fetchStore(forceFresh) {
     var headers = {};
     if (!forceFresh && _lastEtag) headers['If-None-Match'] = _lastEtag;
@@ -544,18 +575,7 @@
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
       try {
-        var _saleExtra = '';
-        try {
-          var _ses = JSON.parse(localStorage.getItem('ks_session') || 'null');
-          if (!_ses && typeof window !== 'undefined' && window.currentSession) _ses = window.currentSession;
-          var _isInternalQcag = _ses && (_ses.is_internal === true || String(_ses.company || '').toUpperCase() === 'QCAG' || ['qcag', 'admin', 'operator', 'design'].indexOf(String(_ses.role || '').toLowerCase()) !== -1);
-          if (_ses && !_isInternalQcag) {
-            var _phone = _ses.phone || _ses.salePhone || _ses.userPhone || '';
-            var _code = _ses.saleCode || _ses.userCode || _ses.code || '';
-            if (_phone) _saleExtra += '&sale_phone=' + encodeURIComponent(String(_phone).trim());
-            if (_code) _saleExtra += '&sale_code=' + encodeURIComponent(String(_code).trim());
-          }
-        } catch (_) {}
+        var _saleExtra = _getSaleQueryParams();
         var isQcagOrAll = !_saleExtra;
         var firstUrl = endpoint + (isQcagOrAll ? '?all=1&lite=1' : ('?' + _saleExtra.slice(1) + '&all=1&lite=1'));
         var startTime = Date.now();
@@ -861,7 +881,8 @@
     for (var i = 0; i < candidates.length; i++) {
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
-      var url = endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=' + encodeURIComponent(String(_requestsPageSize)) + '&lite=1';
+      var _saleExtra = _getSaleQueryParams();
+      var url = endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=' + encodeURIComponent(String(_requestsPageSize)) + '&lite=1' + _saleExtra;
       try {
         var startTime = Date.now();
         var res = await _fetchWithDedup(url, {});
@@ -884,10 +905,36 @@
   }
 
   window.dataSdk = {
+    async clearUserCache() {
+      _store = [];
+      _lastSyncIso = '';
+      _lastEtag = null;
+      _storeTruncated = false;
+      _storeTotalHint = 0;
+      try { localStorage.removeItem(_cacheStoreKey); } catch (_) {}
+      try { localStorage.removeItem(_cacheSyncKey); } catch (_) {}
+      try { localStorage.removeItem('ks_requests'); } catch (_) {}
+      try { localStorage.removeItem('ks_cached_user'); } catch (_) {}
+      try {
+        if (typeof window !== 'undefined' && window.ksIdb && typeof window.ksIdb.clearAll === 'function') {
+          await window.ksIdb.clearAll();
+        }
+      } catch (_) {}
+    },
+
     async init(opts) {
       opts = opts || {};
       _onDataChanged = opts.onDataChanged || null;
       try {
+        var activeUser = _getActiveUserKey();
+        var cachedUser = '';
+        try { cachedUser = localStorage.getItem('ks_cached_user') || ''; } catch (_) {}
+        if (activeUser !== 'anonymous' && cachedUser && activeUser !== cachedUser) {
+          console.log('[dataSdk] Detected user account switch (' + cachedUser + ' -> ' + activeUser + '). Resetting local cache.');
+          await this.clearUserCache();
+        }
+        try { if (activeUser !== 'anonymous') localStorage.setItem('ks_cached_user', activeUser); } catch (_) {}
+
         // Step 1: Instant load from IndexedDB (0ms UI latency, displays 100% of cached requests)
         await _loadCacheAsync();
         if (_store.length && _onDataChanged) {
