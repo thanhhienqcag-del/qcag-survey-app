@@ -4013,12 +4013,26 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
 
 function qcagDesktopIsSurveySizeIncomplete(request) {
   if (!request) return false;
+  if (request.has_pending_survey === true || request.hasPendingSurvey === true) return true;
   const items = qcagDesktopParseJson(request.items, []);
   if (!Array.isArray(items)) return false;
   return items.some(item => {
     if (!item) return false;
     if (item.type === 'Hạng mục khác') return false;
-    return item.survey && (!item.surveySize || !item.surveySize.width || !item.surveySize.height);
+    const isSurvey = Boolean(
+      item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
+      item.survey_required || item.is_survey ||
+      (!item.width && !item.height && !item.useOldSize && (item.action === 'Làm mới' || (item.note && String(item.note).toLowerCase().includes('khảo sát'))))
+    );
+    if (!isSurvey) return false;
+    const hasValidSurveySize = Boolean(
+      (item.surveySize && parseFloat(item.surveySize.width) > 0 && parseFloat(item.surveySize.height) > 0) ||
+      (item.survey_width && item.survey_height && parseFloat(item.survey_width) > 0 && parseFloat(item.survey_height) > 0)
+    );
+    const hasValidDirectSize = Boolean(
+      item.width && item.height && parseFloat(item.width) > 0 && parseFloat(item.height) > 0
+    );
+    return !hasValidSurveySize && !hasValidDirectSize;
   });
 }
 

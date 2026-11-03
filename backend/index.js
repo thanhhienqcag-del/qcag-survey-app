@@ -4057,16 +4057,16 @@ async function getRequestDetailDirect(idOrTkCode) {
             const [qItemRows] = await pool.query(`
                 SELECT 
                     qi.id,
-                    ROW_NUMBER() OVER(ORDER BY qi.id ASC) AS seq,
+                    ROW_NUMBER() OVER(ORDER BY qi.sort_order ASC, qi.id ASC) AS seq,
                     COALESCE(qi.product_name, qi.item_type, 'Hạng mục khảo sát') AS type,
-                    qi.item_name AS "otherContent",
-                    'Làm mới' AS action,
+                    NULL AS "otherContent",
+                    COALESCE(qi.action, 'Làm mới') AS action,
                     qi.brand,
                     qi.width,
                     qi.height,
                     false AS "useOldSize",
-                    1 AS poles,
-                    qi.specifications AS note,
+                    CASE WHEN LOWER(COALESCE(qi.product_name, '')) LIKE '%trụ%' THEN COALESCE(ROUND(qi.qty::numeric), 1) ELSE 0 END AS poles,
+                    qi.note,
                     false AS "brandChangedByQcag",
                     false AS "brandChangedByQCAG",
                     NULL AS "brandChangedBy",
@@ -4081,12 +4081,16 @@ async function getRequestDetailDirect(idOrTkCode) {
                     NULL AS "editedByQcagAt",
                     NULL AS "editedByQCAGAt",
                     false AS "survey",
-                    NULL AS "surveySize"
+                    CASE 
+                      WHEN qi.width IS NOT NULL AND qi.height IS NOT NULL AND qi.width > 0 AND qi.height > 0 
+                      THEN json_build_object('width', qi.width, 'height', qi.height)
+                      ELSE NULL 
+                    END AS "surveySize"
                 FROM quotations q
                 JOIN quotation_items qi ON qi.quotation_code = q.quote_code
-                WHERE q.tk_code = ? AND COALESCE(q.is_deleted, false) = false
-                ORDER BY qi.id ASC
-            `, [tkCode]);
+                WHERE (q.tk_code = ? OR q.request_tk_code = ?) AND COALESCE(q.is_deleted, false) = false
+                ORDER BY qi.sort_order ASC, qi.id ASC
+            `, [tkCode, tkCode]);
             if (qItemRows && qItemRows.length) {
                 finalItems = qItemRows;
             }
@@ -4324,8 +4328,8 @@ app.post("/api/ks/requests", async (req, res) => {
 
         console.log(`[ks/create] Attempting request creation for outletCode="${outletCode}", isPlaceholder=${isPlaceholderOutlet}, allowDuplicate=${allowDuplicate}, backendId=${backendId}`);
 
-        // Outlet Exclusivity Check: Prevent creating a new survey request if this outlet is already in progress
-        if (outletCode && !isPlaceholderOutlet && !allowDuplicate) {
+        // Outlet Exclusivity Check: BẮT BUỘC chặn tạo yêu cầu mới nếu outlet đang có yêu cầu/báo giá chưa ra đơn hàng (Zero-Trust)
+        if (outletCode && !isPlaceholderOutlet) {
             // 1. Check if an active survey request already exists for this outlet (loại trừ các request đã có báo giá ra đơn hàng)
             const [activeReqRows] = await pool.query(
                 `SELECT r.tk_code, r.status 
@@ -4971,6 +4975,39 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         VALUES (?, 'request', ?, 'acceptance', ?, ?, NOW())
                         ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url
                     `, [astId, tkCode, u.trim(), i + 1]);
+                }
+            }
+        }
+
+        // Chặn hoàn thành nếu còn hạng mục khảo sát chưa nhập kích thước (Zero-Trust Backend Check)
+        if (b.status === 'done' || b.status === 'completed') {
+            const [pendingSurvey] = await pool.query(
+                `SELECT 1 FROM request_items 
+                 WHERE request_tk_code = ? 
+                   AND COALESCE(survey, false) = true 
+                   AND (survey_width IS NULL OR survey_width <= 0 OR survey_height IS NULL OR survey_height <= 0)
+                   AND (width IS NULL OR width <= 0 OR height IS NULL OR height <= 0)
+                 LIMIT 1`,
+                [tkCode]
+            );
+            if (pendingSurvey && pendingSurvey.length > 0) {
+                let payloadFixesSurvey = false;
+                if (Array.isArray(b.items) && b.items.length > 0) {
+                    const stillIncomplete = b.items.some(it => {
+                        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
+                        if (!isSurvey) return false;
+                        const hasW = it.surveySize ? (parseFloat(it.surveySize.width) > 0) : (parseFloat(it.survey_width || it.width) > 0);
+                        const hasH = it.surveySize ? (parseFloat(it.surveySize.height) > 0) : (parseFloat(it.survey_height || it.height) > 0);
+                        return !hasW || !hasH;
+                    });
+                    payloadFixesSurvey = !stillIncomplete;
+                }
+                if (!payloadFixesSurvey) {
+                    return res.status(400).json({
+                        ok: false,
+                        error: 'survey_size_incomplete',
+                        message: 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành!'
+                    });
                 }
             }
         }
