@@ -4393,7 +4393,7 @@ app.post("/api/ks/requests", async (req, res) => {
                  FROM requests r 
                  WHERE (r.outlet_id = ? OR r.outlet_id = ('OUT_' || ?) OR REGEXP_REPLACE(LOWER(r.outlet_id::text), '^out_', '') = LOWER(?))
                    AND (r.is_deleted = false OR r.is_deleted IS NULL)
-                   AND r.status NOT IN ('cancelled', 'completed', 'done', 'exported')
+                   AND r.status NOT IN ('cancelled', 'rejected', 'bao_huy')
                    AND NOT EXISTS (
                        SELECT 1 FROM quotations q
                        JOIN order_quotes oq ON oq.quotation_code = q.quote_code
