@@ -2747,23 +2747,43 @@
               hiện trạng <span class="text-red-500">*</span></label>
             <div id="statusImagesPreview" class="flex flex-wrap gap-2 mb-2"></div>
             <label id="statusUploadLabel"
-              class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-50">
+              class="w-full py-3 border-2 border-dashed border-gray-300 dark:border-slate-700 rounded-xl text-gray-500 dark:text-slate-400 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-50 dark:active:bg-slate-800 transition-colors">
               <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               <span>Upload ảnh hiện trạng</span>
-              <input type="file" accept="image/*" multiple class="hidden" onchange="handleStatusImages(this)">
+              <input type="file" id="statusUploadInput" accept="image/*" multiple class="hidden" onchange="handleStatusImages(this)">
             </label>
+            <!-- Thanh hành động ảnh khi đã có ảnh -->
+            <div id="statusActionsBar" class="hidden flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-slate-800">
+              <button type="button" onclick="triggerStatusUploadAgain()" class="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                <span>Thêm / Chọn lại ảnh</span>
+              </button>
+              <button type="button" onclick="clearAllStatusImages()" class="text-xs font-medium text-rose-500 hover:text-rose-700 flex items-center gap-1 cursor-pointer">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                <span>Xóa tất cả ảnh</span>
+              </button>
+            </div>
           </div>
-          <!-- Fallback Location Picker (shown only if coordinates are missing on submit) -->
-          <div id="outletLocationContainer" class="hidden pt-4 border-t border-gray-100 mb-4">
-            <label id="outletLocationLabel" class="block text-sm font-medium mb-1.5 text-red-600 font-semibold">Ảnh
-              không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:</label>
-            <div class="flex items-center gap-3 w-full location-row">
-              <button id="btn-locate-outlet" type="button" class="outlet-locate-btn px-4 py-2 rounded-lg flex-shrink-0"
-                onclick="openLocationModal()" title="Chọn định vị Outlet">Chọn định vị Outlet</button>
-              <span id="locationPreviewText" class="text-xs text-gray-500 truncate">Chưa có vị trí</span>
+          <!-- Realtime Location Status Card (Luôn hiển thị phản hồi trạng thái GPS EXIF) -->
+          <div id="outletLocationContainer" class="pt-4 border-t border-gray-100 dark:border-slate-800 mb-4">
+            <div id="gpsStatusCard" class="p-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50/80 dark:bg-slate-800/60 transition-all">
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                  <span id="gpsStatusIcon" class="text-base flex-shrink-0">📍</span>
+                  <div class="min-w-0 flex-1">
+                    <div id="outletLocationLabel" class="text-xs font-semibold text-gray-800 dark:text-gray-200 leading-snug">Chưa có vị trí định vị điểm bán</div>
+                    <div id="locationPreviewText" class="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">Vui lòng upload ảnh có GPS hoặc mở bản đồ để chọn</div>
+                  </div>
+                </div>
+                <button id="btn-locate-outlet" type="button" class="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-gray-900 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500 hover:bg-gray-800 flex-shrink-0 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  onclick="openLocationModal()" title="Mở bản đồ chọn vị trí">
+                  <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                  <span id="btnLocateOutletText">Mở bản đồ</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

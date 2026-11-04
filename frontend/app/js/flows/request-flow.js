@@ -1697,9 +1697,14 @@ function resetNewRequestForm() {
     const locSourceEl = document.getElementById('locationSource');
     if (locSourceEl) locSourceEl.value = 'manual';
     const locContainer = document.getElementById('outletLocationContainer');
-    if (locContainer) locContainer.classList.add('hidden');
+    if (locContainer) locContainer.classList.remove('hidden');
+    const actBar = document.getElementById('statusActionsBar');
+    if (actBar) actBar.classList.add('hidden');
   } catch (e) {}
-  try { if (typeof clearLocationPreview === 'function') clearLocationPreview(); else document.getElementById('locationPreview').textContent = 'Chưa có vị trí'; } catch (e) {}
+  try { 
+    if (typeof updateGpsStatusUI === 'function') updateGpsStatusUI('none');
+    if (typeof clearLocationPreview === 'function') clearLocationPreview(); 
+  } catch (e) {}
   // ensure quick-fill UI is in initial (expanded) state
   try { if (typeof updateQuickFillCollapsed === 'function') updateQuickFillCollapsed(); } catch (e) {}
   // reset New Outlet toggle and related UI (ensure it is OFF)
@@ -2224,10 +2229,25 @@ function fillOutletFieldsFromExisting(ex) {
     setIf('phone', ex.phone || ex.outletPhone || ex.outlet_phone || '');
     const lat = ex.outletLat || ex.latitude;
     const lng = ex.outletLng || ex.longitude;
-    if (lat) setIf('outletLat', lat);
-    if (lng) setIf('outletLng', lng);
-    if (lat && lng) {
+    const hasValidGps = (typeof isValidCoordinate === 'function')
+      ? isValidCoordinate(lat, lng)
+      : (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng)) && Math.abs(Number(lat)) > 0.0001);
+
+    if (hasValidGps) {
+      setIf('outletLat', lat);
+      setIf('outletLng', lng);
       window.isOutletLockedLocation = true;
+      if (typeof updateGpsStatusUI === 'function') {
+        updateGpsStatusUI('from_outlet', { lat: parseFloat(lat), lng: parseFloat(lng) });
+      }
+    } else {
+      // Outlet mồ côi hoặc không có định vị: Xóa trắng để ảnh hiện trường nạp GPS EXIF tự do!
+      const elLat = document.getElementById('outletLat'); if (elLat) elLat.value = '';
+      const elLng = document.getElementById('outletLng'); if (elLng) elLng.value = '';
+      window.isOutletLockedLocation = false;
+      if (typeof updateGpsStatusUI === 'function') {
+        updateGpsStatusUI('none');
+      }
     }
     if (ex.region) {
       const regInput = document.getElementById('newReqSelectedRegion');

@@ -417,9 +417,40 @@ async function handleWarrantyImages(input) {
   try { input.value = ''; } catch (_) {}
 }
 
+function triggerStatusUploadAgain() {
+  const input = document.getElementById('statusUploadInput');
+  if (input) input.click();
+}
+
+function clearAllStatusImages() {
+  if (typeof statusImages !== 'undefined' && Array.isArray(statusImages)) {
+    statusImages.forEach(function(url) { try { URL.revokeObjectURL(url); } catch (e) {} });
+    statusImages.length = 0;
+  }
+  if (typeof _statusImageFiles !== 'undefined' && Array.isArray(_statusImageFiles)) {
+    _statusImageFiles.length = 0;
+  }
+  renderImagePreviews('statusImagesPreview', statusImages, 'status');
+  const input = document.getElementById('statusUploadInput');
+  if (input) input.value = '';
+  if (typeof updateGpsStatusUI === 'function') {
+    const curLat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
+    const curLng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
+    if (typeof isValidCoordinate === 'function' && isValidCoordinate(curLat, curLng)) {
+      updateGpsStatusUI('from_outlet', { lat: curLat, lng: curLng });
+    } else {
+      updateGpsStatusUI('none');
+    }
+  }
+}
+
 function renderImagePreviews(containerId, images, type) {
   const container = document.getElementById(containerId);
   if (!container) return;
+  const actionsBar = document.getElementById('statusActionsBar');
+  if (actionsBar && type === 'status') {
+    actionsBar.classList.toggle('hidden', !images || images.length === 0);
+  }
   container.innerHTML = images.map(function (img, idx) {
     var isHeic = typeof img === 'string' && img.indexOf(_HEIC_SENTINEL_PREFIX) === 0;
     var label = isHeic ? img.slice(_HEIC_SENTINEL_PREFIX.length) : '';
@@ -441,7 +472,7 @@ function renderImagePreviews(containerId, images, type) {
         '</span>' +
         '</div>';
     } else {
-      mediaHtml = '<img src="' + img + '" class="image-preview rounded-lg object-cover" style="width:80px;height:80px;display:block;" onerror="_imgBrokenFallback(this)">';
+      mediaHtml = '<img src="' + img + '" class="image-preview rounded-lg object-cover cursor-pointer hover:opacity-90 active:scale-95 transition-all shadow-sm" style="width:80px;height:80px;display:block;" onclick="if(typeof showImageFull===\'function\'){showImageFull(statusImages, false, ' + idx + ');}" title="Bấm để phóng to xem chi tiết ảnh" onerror="_imgBrokenFallback(this)">';
     }
 
     return '<div class="relative inline-block" style="width:80px;height:80px;">' +
@@ -550,19 +581,8 @@ function applyLocationToForm(loc) {
 }
 
 function processBatchLocations(files) {
-  // 1. Check if Outlet Code already set the location (locked)
-  if (window.isOutletLockedLocation) {
-    console.log('[GPS] Location is locked by Outlet Code, skipping EXIF.');
-    return;
-  }
-  
-  // 2. Or if coordinates are manually set already
   const currentLat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
   const currentLng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
-  if (currentLat && currentLng) {
-    console.log('[GPS] Coordinates already set, skipping auto-fetch.');
-    return;
-  }
 
   const promises = files.map(function(file) {
     const isCaptured = (Date.now() - file.lastModified) < 30000;
@@ -577,36 +597,41 @@ function processBatchLocations(files) {
   });
 
   Promise.all(promises).then(function(results) {
-    const validLocs = results.filter(function(l) { return l && l.lat && l.lng; });
-    if (validLocs.length === 0) return; // No EXIF, leaving blank
-
-    // Clustering logic (radius 300m)
-    let clusters = [];
-    validLocs.forEach(function(loc) {
-      let added = false;
-      for (var i = 0; i < clusters.length; i++) {
-        const center = clusters[i][0];
-        if (getHaversineDistance(loc.lat, loc.lng, center.lat, center.lng) <= 300) {
-          clusters[i].push(loc);
-          added = true;
-          break;
-        }
-      }
-      if (!added) {
-        clusters.push([loc]);
-      }
+    const validLocs = results.filter(function(l) { 
+      return l && l.lat && l.lng && (typeof isValidCoordinate !== 'function' || isValidCoordinate(l.lat, l.lng)); 
     });
 
-    if (clusters.length === 1) {
-      applyLocationToForm(clusters[0][0]);
-    } else if (clusters.length > 1) {
-      const centerCoords = clusters.map(function(c) { return c[0]; });
-      if (typeof showMultiLocationPicker === 'function') {
-        showMultiLocationPicker(centerCoords);
+    if (validLocs.length === 0) {
+      // ẢNH KHÔNG CÓ GPS (EXIF không chứa tọa độ)
+      console.warn('[GPS] Uploaded images contain no valid GPS EXIF.');
+      const hasValidOutletGps = typeof isValidCoordinate === 'function' && isValidCoordinate(currentLat, currentLng);
+      if (hasValidOutletGps) {
+        if (typeof updateGpsStatusUI === 'function') {
+          updateGpsStatusUI('from_outlet', { lat: currentLat, lng: currentLng });
+        }
+        if (typeof showToast === 'function') {
+          showToast('Ảnh không có GPS. Hệ thống sử dụng định vị từ hồ sơ điểm bán.');
+        }
       } else {
-        // Fallback if not implemented yet
-        applyLocationToForm(clusters[0][0]);
+        if (typeof updateGpsStatusUI === 'function') {
+          updateGpsStatusUI('no_exif');
+        }
+        if (typeof showToast === 'function') {
+          showToast('Ảnh chụp không chứa GPS định vị! Vui lòng bấm [Mở bản đồ] để ghim vị trí.', 'warning');
+        }
       }
+      return;
+    }
+
+    // ẢNH CÓ GPS EXIF HỢP LỆ -> Luôn ưu tiên định vị từ ảnh hiện trường!
+    let chosenLoc = validLocs[0];
+    applyLocationToForm(chosenLoc);
+    window.isOutletLockedLocation = false; // Mở khóa để nhận GPS ảnh thực tế
+    if (typeof updateGpsStatusUI === 'function') {
+      updateGpsStatusUI('from_exif', chosenLoc);
+    }
+    if (typeof showToast === 'function') {
+      showToast('Đã trích xuất thành công GPS từ ảnh hiện trường!', 'success');
     }
   }).catch(function(err) {
     console.warn('[GPS] Batch location extraction error:', err);

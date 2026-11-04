@@ -391,6 +391,82 @@ function savePickedLocation() {
   }
 }
 
+function isValidCoordinate(lat, lng) {
+  if (lat == null || lng == null) return false;
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+  if (isNaN(nLat) || isNaN(nLng)) return false;
+  if (nLat === 0 && nLng === 0) return false;
+  if (Math.abs(nLat) < 0.0001 && Math.abs(nLng) < 0.0001) return false;
+  return (nLat >= 5 && nLat <= 25 && nLng >= 100 && nLng <= 112);
+}
+
+function updateGpsStatusUI(state, data) {
+  const card = document.getElementById('gpsStatusCard');
+  const icon = document.getElementById('gpsStatusIcon');
+  const label = document.getElementById('outletLocationLabel');
+  const subtext = document.getElementById('locationPreviewText');
+  const btnText = document.getElementById('btnLocateOutletText');
+  const container = document.getElementById('outletLocationContainer');
+
+  if (container) container.classList.remove('hidden');
+  if (!card) return;
+
+  const latInput = document.getElementById('outletLat');
+  const lngInput = document.getElementById('outletLng');
+  const lat = (data && data.lat != null) ? data.lat : (latInput ? latInput.value : '');
+  const lng = (data && data.lng != null) ? data.lng : (lngInput ? lngInput.value : '');
+
+  // Reset base classes
+  card.className = 'p-3 rounded-xl border transition-all ';
+
+  if (state === 'from_exif' || state === 'from_map' || (state !== 'no_exif' && isValidCoordinate(lat, lng))) {
+    // ==== ĐÃ CÓ GPS HỢP LỆ (Emerald Success) ====
+    card.classList.add('border-emerald-300', 'bg-emerald-50/70', 'dark:border-emerald-600/40', 'dark:bg-emerald-950/20');
+    if (icon) icon.textContent = '✓';
+    
+    let sourceLabel = 'GPS ảnh hiện trường (EXIF)';
+    if (state === 'from_map') sourceLabel = 'Đã chọn trên bản đồ';
+    else if (state === 'from_outlet') sourceLabel = 'Hồ sơ điểm bán';
+
+    if (label) {
+      label.className = 'text-xs font-semibold text-emerald-800 dark:text-emerald-300 leading-snug';
+      label.textContent = 'Đã xác định vị trí (' + sourceLabel + '):';
+    }
+    if (subtext) {
+      subtext.className = 'text-[11px] font-mono text-emerald-700 dark:text-emerald-400 truncate mt-0.5';
+      subtext.textContent = Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6);
+    }
+    if (btnText) btnText.textContent = 'Xem / Đổi';
+  } else if (state === 'no_exif') {
+    // ==== CẢNH BÁO: ẢNH KHÔNG CÓ GPS (Amber Warning) ====
+    card.classList.add('border-amber-300', 'bg-amber-50/80', 'dark:border-amber-600/40', 'dark:bg-amber-950/25');
+    if (icon) icon.textContent = '⚠';
+    if (label) {
+      label.className = 'text-xs font-semibold text-amber-800 dark:text-amber-300 leading-snug';
+      label.textContent = 'Ảnh chụp không có GPS định vị!';
+    }
+    if (subtext) {
+      subtext.className = 'text-[11px] text-amber-700 dark:text-amber-400 mt-0.5';
+      subtext.textContent = 'Vui lòng bấm mở bản đồ để chọn vị trí điểm bán:';
+    }
+    if (btnText) btnText.textContent = 'Mở bản đồ';
+  } else {
+    // ==== TRẠNG THÁI CHƯA CÓ VỊ TRÍ BAN ĐẦU ====
+    card.classList.add('border-gray-200', 'dark:border-slate-700', 'bg-gray-50/80', 'dark:bg-slate-800/60');
+    if (icon) icon.textContent = '📍';
+    if (label) {
+      label.className = 'text-xs font-semibold text-gray-800 dark:text-gray-200 leading-snug';
+      label.textContent = 'Chưa có vị trí định vị điểm bán';
+    }
+    if (subtext) {
+      subtext.className = 'text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5';
+      subtext.textContent = 'Vui lòng upload ảnh có GPS hoặc mở bản đồ để chọn';
+    }
+    if (btnText) btnText.textContent = 'Mở bản đồ';
+  }
+}
+
 function setLocationPreview(displayText, lat, lng) {
   document.getElementById('outletLat').value = lat;
   document.getElementById('outletLng').value = lng;
@@ -407,41 +483,14 @@ function setLocationPreview(displayText, lat, lng) {
     actionBtn.onclick = function () { openSavedLocation(lat, lng); };
     actionBtn.classList.remove('hidden');
   }
-  // also update the single outlet locate button label (fixed-size, ellipsis)
-  const outletBtn = document.getElementById('btn-locate-outlet');
-  if (outletBtn) {
-    outletBtn.textContent = displayText;
-    outletBtn.title = displayText;
-  }
-  const locLabel = document.getElementById('outletLocationLabel');
-  if (locLabel) {
-    locLabel.textContent = 'Đã xác định vị trí thành công:';
-    locLabel.classList.remove('text-red-600');
-    locLabel.classList.add('text-green-600');
-  }
+  updateGpsStatusUI('from_map', { lat, lng });
 }
 
 function clearLocationPreview() {
   try {
     document.getElementById('outletLat').value = '';
     document.getElementById('outletLng').value = '';
-    const previewText = document.getElementById('locationPreviewText');
-    const actionBtn = document.getElementById('locationActionBtn');
-    if (actionBtn) { actionBtn.classList.add('hidden'); actionBtn.textContent = ''; }
-    if (previewText) {
-      previewText.classList.remove('hidden');
-      previewText.textContent = 'Chưa có vị trí';
-      previewText.classList.remove('text-green-600', 'font-semibold');
-      previewText.classList.add('text-gray-500');
-    }
-    const outletBtn = document.getElementById('btn-locate-outlet');
-    if (outletBtn) { outletBtn.textContent = 'Chọn định vị Outlet'; outletBtn.title = 'Chọn định vị Outlet'; }
-    const locLabel = document.getElementById('outletLocationLabel');
-    if (locLabel) {
-      locLabel.textContent = 'Ảnh không có GPS (EXIF không chứa tọa độ), vui lòng chọn vị trí thủ công:';
-      locLabel.classList.remove('text-green-600');
-      locLabel.classList.add('text-red-600');
-    }
+    updateGpsStatusUI('none');
   } catch (e) {}
 }
 

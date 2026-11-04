@@ -4651,12 +4651,15 @@ app.post("/api/ks/requests", async (req, res) => {
             const foundOutlets = outletSearchRes ? outletSearchRes[0] : null;
             if (foundOutlets && foundOutlets.length > 0) {
                 outletId = foundOutlets[0].id;
-                // Nếu Sale gửi định vị mới cho điểm bán có sẵn, luôn cập nhật tọa độ vào bảng outlets
-                const lat = b.outletLat && !isNaN(Number(b.outletLat)) ? Number(b.outletLat) : (b.latitude && !isNaN(Number(b.latitude)) ? Number(b.latitude) : null);
-                const lng = b.outletLng && !isNaN(Number(b.outletLng)) ? Number(b.outletLng) : (b.longitude && !isNaN(Number(b.longitude)) ? Number(b.longitude) : null);
-                if (lat != null || lng != null) {
+                // Nếu Sale gửi định vị mới cho điểm bán có sẵn, luôn cập nhật tọa độ vào bảng outlets (chỉ khi tọa độ hợp lệ, không lưu 0 hoặc 0.0)
+                const rawLat = b.outletLat != null ? b.outletLat : b.latitude;
+                const rawLng = b.outletLng != null ? b.outletLng : b.longitude;
+                const lat = (rawLat != null && !isNaN(Number(rawLat))) ? Number(rawLat) : null;
+                const lng = (rawLng != null && !isNaN(Number(rawLng))) ? Number(rawLng) : null;
+                const isValidGps = (lat != null && lng != null && Math.abs(lat) > 0.0001 && Math.abs(lng) > 0.0001 && lat >= 5 && lat <= 25 && lng >= 100 && lng <= 112);
+                if (isValidGps) {
                     await pool.query(
-                        "UPDATE outlets SET latitude = COALESCE(?, latitude), longitude = COALESCE(?, longitude), updated_at = NOW() WHERE id = ?",
+                        "UPDATE outlets SET latitude = ?, longitude = ?, updated_at = NOW() WHERE id = ?",
                         [lat, lng, outletId]
                     );
                 }
