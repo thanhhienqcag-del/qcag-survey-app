@@ -21,16 +21,23 @@ function saveAllRequestsToStorage() {
   try {
     if (!Array.isArray(allRequests)) return;
     const activeRequests = allRequests.filter(_isKsRequestActive);
-    const slim = activeRequests.slice(0, 50).map(r => ({
-      id: r.id,
-      __backendId: r.__backendId,
-      tkCode: r.tkCode,
-      status: r.status,
-      outletName: r.outletName,
-      outletCode: r.outletCode,
-      createdAt: r.createdAt,
-      updatedAt: r.updatedAt
-    }));
+    const slim = [];
+    const maxCount = Math.min(activeRequests.length, 50);
+    for (let i = 0; i < maxCount; i++) {
+      const r = activeRequests[i];
+      if (r) {
+        slim.push({
+          id: r.id,
+          __backendId: r.__backendId,
+          tkCode: r.tkCode,
+          status: r.status,
+          outletName: r.outletName,
+          outletCode: r.outletCode,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt
+        });
+      }
+    }
     localStorage.setItem('ks_requests', JSON.stringify(slim));
   } catch (e) {
     console.warn('Failed to save requests to localStorage', e);

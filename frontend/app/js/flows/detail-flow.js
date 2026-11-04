@@ -4719,6 +4719,63 @@ function attachEditRequestPaste() {
 }
 
 function _resolveCurrentOrQuoteRequest() {
+  const origin = (typeof window !== 'undefined' && window._editRequestOrigin) || '';
+
+  // 1. ƯU TIÊN SỐ 1: Nếu mở từ Modal Báo giá (quote_modal), BẮT BUỘC ưu tiên báo giá đang mở
+  if (origin === 'quote_modal' || (!origin && typeof window !== 'undefined' && window._currentModalQuote)) {
+    if (typeof window._currentModalQuoteReq !== 'undefined' && window._currentModalQuoteReq && window._currentModalQuoteReq.__backendId) {
+      window.currentDetailRequest = window._currentModalQuoteReq;
+      return window.currentDetailRequest;
+    }
+    const q = window._currentModalQuote || window._lastLoadedQuoteData;
+    if (q && typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+      const qTk = String(q.tk_code || q.tkCode || '').trim().toLowerCase();
+      const qTkDigits = qTk.replace(/\D/g, '');
+      const qQuote = String(q.quote_code || q.quoteCode || '').trim().toLowerCase();
+
+      const found = allRequests.find(r => {
+        if (!r) return false;
+        const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
+        const rTkDigits = rTk.replace(/\D/g, '');
+        const rQuote = String(r.quoteCode || r.quote_code || '').trim().toLowerCase();
+
+        if (qQuote && rQuote && qQuote === rQuote) return true;
+        if (qTk && rTk && qTk === rTk) return true;
+        if (qTkDigits && qTkDigits.length >= 4 && rTkDigits && qTkDigits === rTkDigits) return true;
+        return false;
+      });
+
+      if (found) {
+        window.currentDetailRequest = found;
+        window._currentModalQuoteReq = found;
+        return found;
+      }
+    }
+    // Fallback: Nếu là báo giá PO tay từ App 1 chưa có survey request trong allRequests
+    if (q) {
+      const fallbackReq = {
+        __backendId: q.id || q.quote_code || q.tk_code,
+        quoteCode: q.quote_code,
+        tkCode: q.tk_code,
+        outletCode: q.outlet_code,
+        outletName: q.outlet_name || q.shop_name || 'Outlet',
+        address: q.address || '',
+        phone: q.phone || '',
+        comments: '[]',
+        isQuoteOnly: true
+      };
+      window.currentDetailRequest = fallbackReq;
+      return fallbackReq;
+    }
+  }
+
+  // 2. ƯU TIÊN SỐ 2: Nếu mở từ Trình xem Maquette (design), BẮT BUỘC lấy request của bản vẽ đang xem
+  if (origin === 'design' && typeof window !== 'undefined' && window._dv_currentDesignReq && window._dv_currentDesignReq.__backendId) {
+    window.currentDetailRequest = window._dv_currentDesignReq;
+    return window._dv_currentDesignReq;
+  }
+
+  // 3. ƯU TIÊN SỐ 3: Mở từ màn hình chi tiết yêu cầu hiện hành
   if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest && currentDetailRequest.__backendId) {
     return currentDetailRequest;
   }
@@ -4737,7 +4794,6 @@ function _resolveCurrentOrQuoteRequest() {
       const rTk = String(r.tkCode || r.tk_code || '').trim().toLowerCase();
       const rTkDigits = rTk.replace(/\D/g, '');
       const rQuote = String(r.quoteCode || r.quote_code || '').trim().toLowerCase();
-      const rOutlet = String(r.outletCode || r.outlet_code || '').trim().toLowerCase();
 
       if (qQuote && rQuote && qQuote === rQuote) return true;
       if (qTk && rTk && qTk === rTk) return true;
