@@ -159,14 +159,49 @@ if ('serviceWorker' in navigator) {
           });
         } else if (type === 'new' || type === 'warranty') {
           if (backendId) {
+            const richData = data.request || {
+              __backendId: backendId,
+              id: backendId,
+              tkCode: data.tk_code || data.tkCode || '',
+              type: type,
+              outletCode: data.outlet_code || data.outletCode || '',
+              outletName: data.outlet_name || data.outletName || (body ? body.replace(/^.*?cho Outlet\s*/i, '').replace(/\.$/, '').trim() : 'Điểm bán'),
+              region: data.region || '',
+              status: data.status || 'pending',
+              requester: data.requester || JSON.stringify({
+                saleName: data.saleName || data.sale_name || 'Sale Heineken',
+                region: data.region || ''
+              }),
+              createdAt: data.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
             window.__ksOnInvalidate({
               resource: 'ks_requests',
               action: 'create',
               id: backendId,
-              data: data.request || { __backendId: backendId, tkCode: data.tk_code, type: type, outletName: body || 'Điểm bán' }
+              data: richData
             });
+
+            // Ngay lập tức fetch full record từ server để nạp toàn bộ items, hình ảnh và metadata
+            if (window.dataSdk) {
+              if (typeof window.dataSdk.getOne === 'function') {
+                window.dataSdk.getOne(backendId).then(function (res) {
+                  if (res && res.data && typeof window.__ksOnInvalidate === 'function') {
+                    window.__ksOnInvalidate({ resource: 'ks_requests', action: 'create', id: backendId, data: res.data });
+                  }
+                }).catch(function () {});
+              }
+              if (typeof window.dataSdk.refresh === 'function') {
+                window.dataSdk.refresh(true).catch(function () {});
+              }
+            }
           }
         }
+      }
+
+      // Luôn kích hoạt revalidation dataSdk khi có bất kỳ push notification nào
+      if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+        window.dataSdk.refresh(true).catch(function () {});
       }
     } catch (e) {}
   });

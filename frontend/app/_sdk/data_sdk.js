@@ -261,11 +261,13 @@
               clearTimeout(_idleEsTimer);
               _idleEsTimer = null;
             }
-            // Tab visible lại: nếu SSE vẫn đang mở bình thường thì KHÔNG cần làm gì cả (realtime 100% không bị ngắt)
-            // Chỉ reconnect và refresh nhẹ nhàng khi SSE thật sự đã bị đóng
+            // Tab visible lại: kiểm tra SSE và luôn lên lịch refresh nhẹ nhàng (ETag check tốn 0 bytes nếu không đổi)
             if (!_es || _es.readyState === 2 /* CLOSED */) {
               _openSse();
-              _scheduleRefresh(300, false);
+              _scheduleRefresh(200, false);
+            } else {
+              // Ngay cả khi SSE đang mở, tab vừa quay lại từ nền nên luôn đồng bộ nhanh (coalesce/throttled)
+              _scheduleRefresh(200, false);
             }
           });
         }
@@ -985,7 +987,7 @@
     },
 
     async refresh(force) {
-      if (typeof document !== 'undefined' && document.hidden) {
+      if (!force && typeof document !== 'undefined' && document.hidden) {
         return { isOk: false, reason: 'hidden' };
       }
       if (_refreshInFlight) {
@@ -1204,6 +1206,9 @@
             fullItem.oldContent = true;
           }
           _store[idx] = Object.assign({}, _store[idx], fullItem);
+        } else {
+          _store.unshift(fullItem);
+          _triggerStoreUpdated();
         }
         if (typeof window !== 'undefined' && window.ksIdb) {
           window.ksIdb.upsertMany([fullItem]);

@@ -341,9 +341,12 @@ window.__ksOnInvalidate = function (payload) {
       if (!storeExists) window.dataSdk._store.unshift(data);
     }
 
-    // In-Place DOM Render: Thẻ xuất hiện ngay lập tức trên màn hình
+    // In-Place DOM Render: Thẻ xuất hiện ngay lập tức trên màn hình (bỏ qua fingerprint cache)
     if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
-      if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
+      if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList(true);
+      if (typeof qcagNavRenderList === 'function') {
+        try { qcagNavRenderList(); } catch (_) {}
+      }
       if (typeof updateDesktopTaskBadge === 'function') updateDesktopTaskBadge();
       if (typeof renderQcagTaskList === 'function') {
         var taskDd = document.getElementById('qcagTaskDropdown');

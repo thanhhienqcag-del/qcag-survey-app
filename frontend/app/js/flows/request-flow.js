@@ -1502,8 +1502,11 @@ async function submitNewRequest() {
       // the same VAPID keys that were used when QCAG subscribed, avoiding key-mismatch.
       try {
         const outletLabel = request.outletName || request.outletCode || 'Outlet';
-        const tkCode = (result.data && result.data.__backendId) || request.__backendId || '';
+        const createdBid = (result.data && result.data.__backendId) || request.__backendId || '';
+        const createdTk = (result.data && result.data.tkCode) || request.tkCode || '';
         const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
+        const senderPhone = (typeof currentSession !== 'undefined' && currentSession && currentSession.phone) || '';
+        const reqRegion = request.region || (typeof currentSession !== 'undefined' && currentSession && currentSession.region) || '';
         var pushUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
           ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
           : '/api/ks/push/send';
@@ -1513,7 +1516,24 @@ async function submitNewRequest() {
           body: JSON.stringify({
             title: 'QCAG — Yêu cầu mới từ Heineken',
             body: senderName + ' vừa gửi yêu cầu mới cho Outlet ' + outletLabel + '.',
-            data: { backendId: tkCode },
+            data: {
+              backendId: createdBid,
+              tk_code: createdTk,
+              tkCode: createdTk,
+              outlet_code: request.outletCode || '',
+              outletCode: request.outletCode || '',
+              outlet_name: outletLabel,
+              outletName: outletLabel,
+              region: reqRegion,
+              status: 'pending',
+              type: request.type || 'new',
+              saleName: senderName,
+              requester: JSON.stringify({
+                saleName: senderName,
+                phone: senderPhone,
+                region: reqRegion
+              })
+            },
             role: 'qcag',
           }),
         }).catch(function (e) { console.warn('[push/new-req]', e); });
