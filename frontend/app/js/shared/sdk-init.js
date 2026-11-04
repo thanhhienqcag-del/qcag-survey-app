@@ -9,10 +9,19 @@ function generateBackendId() {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function _isKsRequestActive(r) {
+  if (!r) return false;
+  if (r.isDeleted === true || r.is_deleted === true) return false;
+  if (r.deleteStatus === 'approved' || r.delete_status === 'approved') return false;
+  if (r.status === 'cancelled' || r.status === 'deleted') return false;
+  return true;
+}
+
 function saveAllRequestsToStorage() {
   try {
     if (!Array.isArray(allRequests)) return;
-    const slim = allRequests.slice(0, 50).map(r => ({
+    const activeRequests = allRequests.filter(_isKsRequestActive);
+    const slim = activeRequests.slice(0, 50).map(r => ({
       id: r.id,
       __backendId: r.__backendId,
       tkCode: r.tkCode,
@@ -32,7 +41,8 @@ function loadAllRequestsFromStorage() {
   try {
     const raw = localStorage.getItem('ks_requests');
     if (raw) {
-      allRequests = JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      allRequests = Array.isArray(parsed) ? parsed.filter(_isKsRequestActive) : [];
     } else {
       allRequests = [];
     }
@@ -329,10 +339,16 @@ window.__ksOnInvalidate = function (payload) {
       if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
     }
 
-    // In-Place Full Cache Update: Cache full data (including items) immediately for Desktop QCAG
+    // In-Place Full Cache Update: Chỉ cache vào full cache nếu đã có ảnh thực tế (tránh chặn Phase 2)
     if (typeof _qcagDesktopFullRequestCache !== 'undefined' && data) {
-      _qcagDesktopFullRequestCache[bid] = Object.assign({}, data);
-      if (data.tkCode) _qcagDesktopFullRequestCache[data.tkCode] = _qcagDesktopFullRequestCache[bid];
+      var _hasRealImgs = data.statusImages && data.statusImages !== '[]' && data.statusImages !== '["..."]';
+      if (_hasRealImgs) {
+        _qcagDesktopFullRequestCache[bid] = Object.assign({}, data);
+        if (data.tkCode) _qcagDesktopFullRequestCache[data.tkCode] = _qcagDesktopFullRequestCache[bid];
+      } else {
+        delete _qcagDesktopFullRequestCache[bid];
+        if (data.tkCode) delete _qcagDesktopFullRequestCache[data.tkCode];
+      }
     }
 
     // In-Place DataSdk Store Update
@@ -361,7 +377,7 @@ window.__ksOnInvalidate = function (payload) {
     return;
   }
 
-  // Cập nhật request hiện hữu (action: 'update')
+  // Cập nhật request hiện hữu (action: 'update' hoặc khi data đầy đủ được kéo về)
   if (prev) {
     // Editing requested (Sale asked for changes)
     if (data.editingRequestedAt && !prev.editingRequestedAt) {
@@ -373,6 +389,40 @@ window.__ksOnInvalidate = function (payload) {
     }
     // Update snapshot
     _ksKnownRequestIds[bid] = { status: data.status || '', editingRequestedAt: data.editingRequestedAt || null, designImages: data.designImages || '[]' };
+
+    // Cập nhật dữ liệu mới (đặc biệt là statusImages và items) vào allRequests và _qcagDesktopFullRequestCache
+    if (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) {
+      var exIdx = allRequests.findIndex(function (r) {
+        return r && (r.__backendId === bid || (data.tkCode && r.tkCode === data.tkCode));
+      });
+      if (exIdx !== -1) {
+        for (var k in data) {
+          if (data[k] != null && data[k] !== '' && data[k] !== '[]' && data[k] !== '["..."]') {
+            allRequests[exIdx][k] = data[k];
+          }
+        }
+        if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
+          _qcagDesktopFullRequestCache[bid] = Object.assign({}, _qcagDesktopFullRequestCache[bid] || {}, allRequests[exIdx]);
+          if (data.tkCode) _qcagDesktopFullRequestCache[data.tkCode] = _qcagDesktopFullRequestCache[bid];
+        }
+      }
+    }
+
+    // Nếu người dùng đang mở xem chi tiết request này trên Desktop QCAG, cập nhật in-place ngay lập tức
+    if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest &&
+        (currentDetailRequest.__backendId === bid || (data.tkCode && currentDetailRequest.tkCode === data.tkCode))) {
+      for (var f in data) {
+        if (data[f] != null && data[f] !== '' && data[f] !== '[]' && data[f] !== '["..."]') {
+          currentDetailRequest[f] = data[f];
+        }
+      }
+      if (typeof _qcagDesktopInPlaceRefresh === 'function') {
+        _qcagDesktopInPlaceRefresh(currentDetailRequest);
+      }
+      if (typeof qcagDesktopRefreshStatusThumbnails === 'function' && currentDetailRequest.statusImages) {
+        qcagDesktopRefreshStatusThumbnails(currentDetailRequest.statusImages);
+      }
+    }
   }
 };
 
@@ -411,7 +461,7 @@ async function initApp() {
       if (!activeUser || !cachedUser || activeUser === cachedUser) {
         const cachedRows = await window.ksIdb.getAll();
         if (Array.isArray(cachedRows) && cachedRows.length > 0) {
-          allRequests = _ksDedupeRequests(cachedRows);
+          allRequests = _ksDedupeRequests(cachedRows).filter(_isKsRequestActive);
           updateRequestCount();
           if (typeof shouldUseQCAGDesktop === 'function' && shouldUseQCAGDesktop()) {
             if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
@@ -447,7 +497,7 @@ async function initApp() {
     try {
       const result = await window.dataSdk.init({
       onDataChanged: (data) => {
-        allRequests = _ksDedupeRequests(data);
+        allRequests = _ksDedupeRequests(data).filter(_isKsRequestActive);
         if (typeof _qcagDesktopFullRequestCache !== 'undefined' && typeof qcagDesktopMergePreserveImageFields === 'function') {
           (allRequests || []).forEach(r => {
             if (r && r.__backendId && _qcagDesktopFullRequestCache[r.__backendId]) {

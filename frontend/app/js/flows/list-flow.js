@@ -204,6 +204,15 @@ function getRequestDesignState(req) {
   return 'has_mq';
 }
 
+function _isRequestActive(r) {
+  if (!r) return false;
+  if (r.isDeleted === true || r.is_deleted === true) return false;
+  if (r.deleteStatus === 'approved' || r.delete_status === 'approved') return false;
+  if (r.status === 'cancelled' || r.status === 'deleted') return false;
+  return true;
+}
+
+
 // ── Update home screen dashboard stats ──────────────────────────────
 function updateHomeStats() {
   const allEl      = document.getElementById('statAll');
@@ -218,7 +227,7 @@ function updateHomeStats() {
   let warrantyPending = 0, warrantyDone = 0;
   // Only count requests owned by current session
   const ownedRequests = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
-    ? allRequests.filter(_isRequestOwnedBySession)
+    ? allRequests.filter(r => _isRequestOwnedBySession(r) && _isRequestActive(r))
     : [];
   const newRequests = ownedRequests.filter(r => r.type === 'new');
   newRequests.forEach(req => {
@@ -243,7 +252,7 @@ function updateHomeStats() {
   if (wPendEl) wPendEl.textContent = warrantyPending;
   if (wDoneEl) wDoneEl.textContent = warrantyDone;
   // When initial data is loading, show subtle placeholders instead of zeros (chỉ khi chưa có request nào).
-  const reqs = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests : [];
+  const reqs = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.filter(_isRequestActive) : [];
   if (window._homeStatsLoading && reqs.length === 0) {
     const ph = '…';
     if (allEl) allEl.textContent = ph;
@@ -264,9 +273,9 @@ function updateHomeStats() {
 }
 
 function updateRequestCount() {
-  // Only count requests owned by current session
+  // Only count active requests owned by current session
   const owned = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
-    ? allRequests.filter(_isRequestOwnedBySession)
+    ? allRequests.filter(r => _isRequestOwnedBySession(r) && _isRequestActive(r))
     : [];
   const newCount = owned.filter(r => r.type === 'new').length;
   const warrantyCount = owned.filter(r => r.type === 'warranty').length;
@@ -521,6 +530,7 @@ function _renderHkDesktopCardHtml(req, preview, hasDesignPlaceholder, isEditing,
         '<div class="hk-outlet-name" title="' + (req.outletName || '') + '">' + (req.outletName || 'Chưa có tên') + '</div>' +
         '<div class="hk-code-group">' +
           '<span class="hk-outlet-code"><span class="hk-code-label">Outlet Code:</span>' + (req.outletCode || '---') + '</span>' +
+          ((req.tkCode || req.tk_code) ? ('<span class="hk-card-tk-code ml-2 font-semibold text-sky-500">Mã TK: ' + (req.tkCode || req.tk_code) + '</span>') : '') +
           (req.type === 'warranty' ? '<span class="hk-warranty-tag">Bảo hành</span>' : '') +
         '</div>' +
       '</div>' +
@@ -850,6 +860,9 @@ function renderRequestList() {
   const hasSearch = !!currentListSearchQuery;
   let filtered = hasSearch ? allRequests.slice() : allRequests.filter(r => r.type === currentListTab);
 
+  // Filter out deleted / cancelled requests
+  filtered = filtered.filter(_isRequestActive);
+
   // Restrict visibility: users only see requests they created
   filtered = filtered.filter(_isRequestOwnedBySession);
 
@@ -1107,6 +1120,7 @@ function renderRequestList() {
           <div class="px-2 pt-2 pb-1 flex-1 flex flex-col gap-[2px]">
             <div class="hk-outlet-name line-clamp-2 leading-snug">${req.outletName}</div>
             <div class="hk-outlet-code text-[11px] font-medium truncate">${req.outletCode}</div>
+            ${(req.tkCode || req.tk_code) ? `<div class="hk-card-tk-code text-[11px] font-semibold text-sky-600 dark:text-sky-400 truncate">Mã TK: ${req.tkCode || req.tk_code}</div>` : ''}
             <div class="hk-card-date text-[10px]">Gửi: ${dateStr}</div>
             ${tkName ? `<div class="hk-card-tk text-[10px] truncate">TK: ${tkName}</div>` : ''}
             ${lastUpdated ? `<div class="hk-card-updated text-[10px] truncate whitespace-nowrap">${lastUpdated}</div>` : ''}
@@ -1164,6 +1178,7 @@ function renderRequestList() {
              <div class="flex-1 min-w-0">
                <div class="hk-outlet-name leading-tight mb-0.5">${req.outletName}</div>
                <div class="hk-outlet-code text-xs font-medium truncate mb-0.5">${req.outletCode}</div>
+               ${(req.tkCode || req.tk_code) ? `<div class="hk-card-tk-code text-xs font-semibold text-sky-600 dark:text-sky-400 truncate mb-0.5">Mã TK: ${req.tkCode || req.tk_code}</div>` : ''}
                <div class="hk-card-date text-xs">Gửi: ${dateStr}</div>
                ${tkName ? `<div class="hk-card-tk text-xs truncate">TK: ${tkName}</div>` : ''}
                ${lastUpdated ? `<div class="hk-card-updated text-xs truncate whitespace-nowrap">${lastUpdated}</div>` : ''}

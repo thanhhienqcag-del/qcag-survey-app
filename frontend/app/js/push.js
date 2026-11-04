@@ -182,12 +182,12 @@ if ('serviceWorker' in navigator) {
               data: richData
             });
 
-            // Ngay lập tức fetch full record từ server để nạp toàn bộ items, hình ảnh và metadata
+            // Ngay lập tức fetch full record từ server để nạp toàn bộ items, hình ảnh hiện trạng và metadata
             if (window.dataSdk) {
               if (typeof window.dataSdk.getOne === 'function') {
                 window.dataSdk.getOne(backendId).then(function (res) {
                   if (res && res.data && typeof window.__ksOnInvalidate === 'function') {
-                    window.__ksOnInvalidate({ resource: 'ks_requests', action: 'create', id: backendId, data: res.data });
+                    window.__ksOnInvalidate({ resource: 'ks_requests', action: 'update', id: backendId, data: res.data });
                   }
                 }).catch(function () {});
               }

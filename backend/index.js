@@ -3767,6 +3767,39 @@ app.get('/api/ks/requests', async (req, res) => {
             const [rows] = await pool.query(sql, params);
             const mapped = rows.map(r => ksRowToApp(r, isLite));
 
+            // Return tombstones for deleted/cancelled requests during incremental sync so client caches purge them
+            if (updatedSince) {
+                try {
+                    const baseParams = params.slice(0, conds.length === 1 ? (salePhoneRaw ? 5 : 4) : 9);
+                    const [delRows] = await pool.query(
+                        `SELECT r.id, r.tk_code, r.updated_at
+                         FROM requests r
+                         LEFT JOIN users u ON r.requester_id = u.id
+                         LEFT JOIN outlets o ON r.outlet_id = o.id
+                         WHERE (${conds.join(' OR ')})
+                           AND (r.is_deleted = true OR r.delete_status = 'approved' OR r.status = 'cancelled')
+                           AND (r.updated_at >= ? OR r.deleted_at >= ?)`,
+                        [...baseParams, updatedSince, updatedSince]
+                    );
+                    (delRows || []).forEach(dr => {
+                        mapped.push({
+                            id: String(dr.id),
+                            __backendId: String(dr.id),
+                            tk_code: dr.tk_code,
+                            tkCode: dr.tk_code,
+                            is_deleted: true,
+                            isDeleted: true,
+                            delete_status: 'approved',
+                            deleteStatus: 'approved',
+                            status: 'cancelled',
+                            updatedAt: dr.updated_at
+                        });
+                    });
+                } catch (delErr) {
+                    console.warn('[Sale Requests] Fetching deleted tombstones failed:', delErr && delErr.message);
+                }
+            }
+
             const saleEtag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
             res.setHeader('ETag', saleEtag);
             res.setHeader('Cache-Control', 'no-cache');
@@ -3823,6 +3856,30 @@ app.get('/api/ks/requests', async (req, res) => {
                 [updatedSince, updatedSince]
             );
             const mapped = rows.map(r => ksRowToApp(r, isLite));
+            try {
+                const [delRows] = await pool.query(
+                    `SELECT r.id, r.tk_code, r.updated_at
+                     FROM requests r
+                     WHERE (r.is_deleted = true OR r.delete_status = 'approved' OR r.status = 'cancelled')
+                       AND (r.updated_at >= ? OR r.deleted_at >= ?)
+                     ORDER BY r.updated_at DESC LIMIT 50`,
+                    [updatedSince, updatedSince]
+                );
+                (delRows || []).forEach(dr => {
+                    mapped.push({
+                        id: String(dr.id),
+                        __backendId: String(dr.id),
+                        tk_code: dr.tk_code,
+                        tkCode: dr.tk_code,
+                        is_deleted: true,
+                        isDeleted: true,
+                        delete_status: 'approved',
+                        deleteStatus: 'approved',
+                        status: 'cancelled',
+                        updatedAt: dr.updated_at
+                    });
+                });
+            } catch (_) {}
             return res.json({
                 ok: true,
                 data: mapped,

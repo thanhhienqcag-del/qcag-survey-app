@@ -374,6 +374,10 @@
       if (typeof window !== 'undefined' && window.ksIdb && window.ksIdb.isSupported()) {
         var rows = await window.ksIdb.getAll();
         if (Array.isArray(rows) && rows.length > 0) {
+          // Filter out any stale deleted/cancelled requests immediately upon cache load
+          rows = rows.filter(function (r) {
+            return !r.isDeleted && !r.is_deleted && r.deleteStatus !== 'approved' && r.delete_status !== 'approved' && r.status !== 'cancelled' && r.status !== 'deleted';
+          });
           _store = _normalizeRequestRows(rows);
           _storeTruncated = false;
           _storeTotalHint = _store.length;
@@ -829,6 +833,22 @@
       var nid = next.__backendId || next.id;
       if (nid == null) continue;
       var key = String(nid);
+
+      // Tombstone handler: If server reports this request is deleted / approved-for-delete / cancelled, purge it from local store
+      if (next.is_deleted === true || next.isDeleted === true || next.delete_status === 'approved' || next.deleteStatus === 'approved' || next.status === 'cancelled' || next.status === 'deleted') {
+        var targetBid = String(nid || '');
+        var targetTk = String(next.tkCode || next.tk_code || '');
+        for (var di = _store.length - 1; di >= 0; di--) {
+          var sItem = _store[di];
+          var sBid = String(sItem.__backendId || sItem.id || '');
+          var sTk = String(sItem.tkCode || sItem.tk_code || '');
+          if ((targetBid && sBid === targetBid) || (targetTk && sTk && targetTk === sTk)) {
+            _store.splice(di, 1);
+            changed = true;
+          }
+        }
+        continue;
+      }
       if (Object.prototype.hasOwnProperty.call(indexById, key)) {
         var idx = indexById[key];
         var prev = _store[idx] || {};
@@ -957,7 +977,28 @@
                 console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
               } else if (Array.isArray(fetchResult) && fetchResult.length) {
                 var normalizedIncoming = _normalizeRequestRows(fetchResult);
-                var hasChanges = _mergeLatestRows(normalizedIncoming);
+                // Prune ghost records: Any existing record in local cache that is missing from authoritative server catalog is deleted
+                var activeKeys = {};
+                for (var ak = 0; ak < normalizedIncoming.length; ak++) {
+                  var akRow = normalizedIncoming[ak];
+                  if (akRow.__backendId) activeKeys[String(akRow.__backendId)] = true;
+                  if (akRow.id) activeKeys[String(akRow.id)] = true;
+                  if (akRow.tkCode) activeKeys[String(akRow.tkCode)] = true;
+                  if (akRow.tk_code) activeKeys[String(akRow.tk_code)] = true;
+                }
+                var pruned = false;
+                for (var pi = _store.length - 1; pi >= 0; pi--) {
+                  var pItem = _store[pi];
+                  var pBid = pItem.__backendId ? String(pItem.__backendId) : '';
+                  var pId = pItem.id ? String(pItem.id) : '';
+                  var pTk = pItem.tkCode ? String(pItem.tkCode) : (pItem.tk_code ? String(pItem.tk_code) : '');
+                  var isPresent = (pBid && activeKeys[pBid]) || (pId && activeKeys[pId]) || (pTk && activeKeys[pTk]);
+                  if (!isPresent && !pItem._isOfflinePending) {
+                    _store.splice(pi, 1);
+                    pruned = true;
+                  }
+                }
+                var hasChanges = _mergeLatestRows(normalizedIncoming) || pruned;
                 if (hasChanges) {
                   _triggerStoreUpdated();
                 }

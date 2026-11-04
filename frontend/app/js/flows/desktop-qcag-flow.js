@@ -3346,6 +3346,25 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
 // ── In-place targeted section refresh (thay thế full re-render) ──────
 // Cập nhật từng section DOM riêng lẻ thay vì gọi openQCAGDesktopRequest.
 // Tránh flicker, tránh nhảy scroll, tránh race condition với onDataChanged.
+// ── Helper: refresh status thumbnails in-place ──
+function qcagDesktopRefreshStatusThumbnails(statusImages) {
+  const statusThumbEl = document.getElementById('qcagStatusThumbGrid');
+  if (!statusThumbEl) return;
+  const newSImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(statusImages, []));
+  if (newSImgs.length === 0) {
+    statusThumbEl.innerHTML = '<span class="qcag-detail-muted">Đang trống</span>';
+  } else {
+    const enc = encodeURIComponent(JSON.stringify(newSImgs));
+    const first = newSImgs[0];
+    if (newSImgs.length === 1) {
+      statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="showImageFull('${first}',false)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"></div>`;
+    } else {
+      statusThumbEl.innerHTML = `<div class="qcag-gallery-rep" onclick="qcagOpenGalleryEncoded('${enc}',0)"><img src="${first}" alt="hiện trạng" onerror="_imgBrokenFallback(this)"><div class="qcag-img-more">+${newSImgs.length - 1}</div></div>`;
+    }
+  }
+}
+window.qcagDesktopRefreshStatusThumbnails = qcagDesktopRefreshStatusThumbnails;
+
 function _qcagDesktopInPlaceRefresh(updatedRequest) {
   if (!updatedRequest) return;
 
@@ -3406,6 +3425,11 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
 
   // 3. Refresh MQ preview + complete button
   qcagDesktopRefreshMQInPlace(updatedRequest);
+
+  // 3b. Refresh status images (ảnh hiện trạng) in-place
+  if (updatedRequest && updatedRequest.statusImages) {
+    qcagDesktopRefreshStatusThumbnails(updatedRequest.statusImages);
+  }
 
   // 4. Refresh old designs section for this outlet
   if (updatedRequest.__backendId) {
@@ -4975,7 +4999,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
     }
     return false;
   };
-  const _needsFullFetch = !_cachedFull || (!isWarrantyReq && !_hasReqItems(request));
+  const _hasRealStatusImgs = (r) => {
+    if (!r || !r.statusImages) return false;
+    const v = String(r.statusImages).trim();
+    return v !== '' && v !== '[]' && v !== '["..."]' && v !== 'null';
+  };
+  const _needsFullFetch = !_cachedFull || (!isWarrantyReq && !_hasReqItems(request)) || !_hasRealStatusImgs(request);
 
   const _prevDetail = currentDetailRequest;
   const isSameReq = _qcagDesktopCurrentId === id;
