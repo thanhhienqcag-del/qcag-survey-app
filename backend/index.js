@@ -1050,7 +1050,10 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(q_lat.quote_code, '') AS quote_code,
             COALESCE(q_lat.total_amount, 0)::numeric AS total_amount,
             COALESCE(q_lat.order_number, '') AS order_number,
-            COALESCE(q_lat.production_approval_status, '') AS production_approval_status
+            COALESCE(q_lat.production_approval_status, '') AS production_approval_status,
+            COALESCE(q_lat.quote_status, '') AS quote_status,
+            COALESCE(q_lat.spo_status, '') AS spo_status,
+            COALESCE(q_lat.qcag_tam_huy, false) AS qcag_tam_huy
         FROM requests r
         LEFT JOIN outlets o ON (r.outlet_id = o.id OR r.outlet_id = o.code)
         LEFT JOIN users u ON r.requester_id = u.id::text
@@ -1058,9 +1061,13 @@ async function checkOutletActiveState(conn, inOutletCode) {
             SELECT 
                 q_sub.quote_code, 
                 q_sub.total_amount, 
+                q_sub.status AS quote_status,
+                q_sub.spo_status,
+                q_sub.qcag_tam_huy,
                 ord_sub.order_no AS order_number,
-                COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status
+                COALESCE(oq_sub.approval_status, pa_sub.status, q_sub.status) AS production_approval_status
             FROM quotations q_sub
+            LEFT JOIN ks_production_approvals pa_sub ON pa_sub.quote_code = q_sub.quote_code
             LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
             LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
             WHERE (q_sub.tk_code = r.tk_code OR q_sub.request_tk_code = r.tk_code)
@@ -1096,10 +1103,14 @@ async function checkOutletActiveState(conn, inOutletCode) {
             COALESCE(q2.quote_code, '') AS quote_code,
             COALESCE(q2.total_amount, 0)::numeric AS total_amount,
             COALESCE(ord_lat2.order_no, '') AS order_number,
-            COALESCE(ord_lat2.approval_status, q2.status, '') AS production_approval_status
+            COALESCE(ord_lat2.approval_status, pa_sub2.status, q2.status, '') AS production_approval_status,
+            COALESCE(q2.status, '') AS quote_status,
+            COALESCE(q2.spo_status, '') AS spo_status,
+            COALESCE(q2.qcag_tam_huy, false) AS qcag_tam_huy
         FROM quotations q2
         LEFT JOIN outlets o2 ON (q2.outlet_id = o2.id OR q2.outlet_id = o2.code)
         LEFT JOIN users u2 ON (q2.sales_id = u2.id::text OR q2.sales_id = u2.username)
+        LEFT JOIN ks_production_approvals pa_sub2 ON pa_sub2.quote_code = q2.quote_code
         LEFT JOIN LATERAL (
             SELECT 
                 ord2.order_no, 
@@ -1151,11 +1162,51 @@ async function checkOutletActiveState(conn, inOutletCode) {
         return { state: 'unlocked', reason: 'clean_outlet' };
     }
 
-    // Ca 5: Đã duyệt sản xuất nhưng chưa có số đơn hàng
+    // Helper kiểm tra hồ sơ đã KẾT THÚC / HỦY VĨNH VIỄN (Permanently Terminated)
+    // Lưu ý: TẠM HỦY (qcag_tam_huy = true / tam_huy) TUYỆT ĐỐI KHÔNG COI LÀ ĐÃ HỦY VĨ NHIỄN, BẮT BUỘC PHẢI GIỮ Ở NHÓM 3 (ĐANG TREO/DỞ DANG)
+    function isRecordPermanentlyTerminated(r) {
+        if (!r) return false;
+        if (r.qcag_tam_huy === true || r.qcag_tam_huy === 1 || r.qcag_tam_huy === 'true') {
+            return false;
+        }
+        const st = String(r.status || '').toLowerCase().trim();
+        if (st === 'tam_huy' || st === 'qcag_tam_huy' || st.includes('tạm hủy') || st.includes('tam huy')) {
+            return false;
+        }
+        const qSt = String(r.quote_status || '').toLowerCase().trim();
+        if (qSt === 'tam_huy' || qSt === 'qcag_tam_huy' || qSt.includes('tạm hủy') || qSt.includes('tam huy')) {
+            return false;
+        }
+
+        const appSt = String(r.production_approval_status || '').toLowerCase().trim();
+        const spoSt = String(r.spo_status || '').toLowerCase().trim();
+
+        if (st === 'rejected' || st === 'cancelled' || st === 'bao_huy') return true;
+        if (qSt === 'rejected' || qSt === 'cancelled' || qSt === 'bao_huy') return true;
+        if (appSt === 'rejected' || appSt === 'cancelled') return true;
+
+        if (
+            spoSt.includes('sales rep rejected') ||
+            spoSt.includes('sales admin cancelled') ||
+            spoSt.includes('asm cancelled') ||
+            spoSt.includes('spo không có') ||
+            spoSt.includes('spo bị mất') ||
+            spoSt.includes('spo bi mat') ||
+            spoSt === 'cancelled' ||
+            spoSt === 'cancel' ||
+            spoSt === 'rejected'
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    // Ca 5: Đã duyệt sản xuất nhưng chưa có số đơn hàng (chỉ tính nếu chưa bị hủy/từ chối vĩnh viễn)
     const approvedNoPo = rows.find(r => {
         const isApproved = r.production_approval_status === 'approved';
         const hasOrder = Boolean(r.order_number && String(r.order_number).trim() !== '' && String(r.order_number).trim() !== '---');
-        return isApproved && !hasOrder;
+        const isTerminated = isRecordPermanentlyTerminated(r);
+        return isApproved && !hasOrder && !isTerminated;
     });
     if (approvedNoPo) {
         const hasQuote = Boolean(approvedNoPo.quote_code && String(approvedNoPo.quote_code).trim() !== '' && String(approvedNoPo.quote_code).trim() !== '-');
@@ -1183,11 +1234,13 @@ async function checkOutletActiveState(conn, inOutletCode) {
         };
     }
 
-    // Ca 2: Chưa ra đơn hàng
+    // Ca 2: Chưa ra đơn hàng (Bất kỳ request hoặc quotation nào ĐANG THỰC SỰ ACTIVE chưa ra đơn)
+    // Loại trừ các hồ sơ đã bị từ chối duyệt hoặc SPO đã hủy vĩnh viễn (nhưng vẫn giữ lại hồ sơ tạm hủy)
     const pendingActive = rows.find(r => {
         const hasOrder = Boolean(r.order_number && String(r.order_number).trim() !== '' && String(r.order_number).trim() !== '---');
         const isCompleted = String(r.status || '').toLowerCase() === 'completed';
-        return !hasOrder && !isCompleted;
+        const isTerminated = isRecordPermanentlyTerminated(r);
+        return !hasOrder && !isCompleted && !isTerminated;
     });
     if (pendingActive) {
         const hasQuote = Boolean(pendingActive.quote_code && String(pendingActive.quote_code).trim() !== '' && String(pendingActive.quote_code).trim() !== '-');
@@ -1241,6 +1294,29 @@ async function checkOutletActiveState(conn, inOutletCode) {
             canCreateNewPhase: true,
             canOverride: true,
             record: producedItem
+        };
+    }
+
+    // Nếu tất cả hồ sơ trước đó đều đã bị HỦY VĨNH VIỄN (không có hồ sơ nào active dở dang)
+    const hasCancelledOld = rows.some(isRecordPermanentlyTerminated);
+    if (hasCancelledOld) {
+        const lastCancelled = rows.find(isRecordPermanentlyTerminated) || {};
+        return {
+            state: 'unlocked',
+            reason: 'all_previous_cancelled',
+            outletCode: cleanCode,
+            outletName: lastCancelled.outlet_name || '',
+            address: lastCancelled.address || '',
+            outletPhone: lastCancelled.outlet_phone || '',
+            latitude: lastCancelled.latitude || '',
+            longitude: lastCancelled.longitude || '',
+            region: lastCancelled.region || '',
+            previousCancelledRecord: {
+                quoteCode: lastCancelled.quote_code || '',
+                tkCode: lastCancelled.tk_code || '',
+                spoStatus: lastCancelled.spo_status || '',
+                approvalStatus: lastCancelled.production_approval_status || ''
+            }
         };
     }
 
@@ -4387,7 +4463,7 @@ app.post("/api/ks/requests", async (req, res) => {
 
         // Outlet Exclusivity Check: BẮT BUỘC chặn tạo yêu cầu mới nếu outlet đang có yêu cầu/báo giá chưa ra đơn hàng (Zero-Trust)
         if (outletCode && !isPlaceholderOutlet) {
-            // 1. Check if an active survey request already exists for this outlet (loại trừ các request đã có báo giá ra đơn hàng)
+            // 1. Check if an active survey request already exists for this outlet (loại trừ các request đã có báo giá ra đơn hàng HOẶC báo giá đã bị HỦY VĨNH VIỄN)
             const [activeReqRows] = await pool.query(
                 `SELECT r.tk_code, r.status 
                  FROM requests r 
@@ -4399,6 +4475,26 @@ app.post("/api/ks/requests", async (req, res) => {
                        JOIN order_quotes oq ON oq.quotation_code = q.quote_code
                        JOIN orders ord ON ord.id = oq.order_id AND (ord.is_deleted = false OR ord.is_deleted IS NULL)
                        WHERE (q.tk_code = r.tk_code OR q.request_tk_code = r.tk_code)
+                   )
+                   -- Nếu request này đã có Báo giá bị HỦY VĨ NHIỄN trên SPO (và KHÔNG phải tạm hủy) -> Không chặn Sale tạo đợt mới!
+                   AND NOT EXISTS (
+                       SELECT 1 FROM quotations q_rej
+                       LEFT JOIN ks_production_approvals pa_rej ON (pa_rej.quote_code = q_rej.quote_code OR pa_rej.tk_code = r.tk_code)
+                       WHERE (q_rej.tk_code = r.tk_code OR q_rej.request_tk_code = r.tk_code)
+                         AND (q_rej.qcag_tam_huy = false OR q_rej.qcag_tam_huy IS NULL)
+                         AND (
+                             q_rej.status IN ('rejected', 'cancelled', 'bao_huy')
+                             OR pa_rej.status IN ('rejected', 'cancelled')
+                             OR q_rej.spo_status ILIKE '%sales rep rejected%'
+                             OR q_rej.spo_status ILIKE '%sales admin cancelled%'
+                             OR q_rej.spo_status ILIKE '%asm cancelled%'
+                             OR q_rej.spo_status ILIKE '%spo không có%'
+                             OR q_rej.spo_status ILIKE '%spo bị mất%'
+                             OR q_rej.spo_status ILIKE '%spo bi mat%'
+                             OR q_rej.spo_status = 'cancelled'
+                             OR q_rej.spo_status = 'cancel'
+                             OR q_rej.spo_status = 'rejected'
+                         )
                    )
                  LIMIT 1`,
                 [outletCode, outletCode, outletCode]
@@ -4413,7 +4509,7 @@ app.post("/api/ks/requests", async (req, res) => {
                 });
             }
 
-            // 2. Check if an active quotation already exists for this outlet (loại trừ các báo giá đã ra đơn hàng hoặc hoàn tất)
+            // 2. Check if an active quotation already exists for this outlet (loại trừ các báo giá đã ra đơn hàng hoặc hoàn tất HOẶC đã hủy vĩnh viễn)
             const [activeQuoteRows] = await pool.query(
                 `SELECT q.quote_code, q.tk_code, q.request_tk_code 
                  FROM quotations q
@@ -4426,6 +4522,21 @@ app.post("/api/ks/requests", async (req, res) => {
                        SELECT 1 FROM order_quotes oq 
                        JOIN orders ord ON ord.id = oq.order_id AND (ord.is_deleted = false OR ord.is_deleted IS NULL)
                        WHERE oq.quotation_code = q.quote_code
+                   )
+                   -- Nếu báo giá đã bị HỦY VĨ NHIỄN trên SPO (và KHÔNG phải tạm hủy) -> Không chặn Sale tạo đợt mới!
+                   AND NOT (
+                       (q.qcag_tam_huy = false OR q.qcag_tam_huy IS NULL)
+                       AND (
+                           q.spo_status ILIKE '%sales rep rejected%'
+                           OR q.spo_status ILIKE '%sales admin cancelled%'
+                           OR q.spo_status ILIKE '%asm cancelled%'
+                           OR q.spo_status ILIKE '%spo không có%'
+                           OR q.spo_status ILIKE '%spo bị mất%'
+                           OR q.spo_status ILIKE '%spo bi mat%'
+                           OR q.spo_status = 'cancelled'
+                           OR q.spo_status = 'cancel'
+                           OR q.spo_status = 'rejected'
+                       )
                    )
                  LIMIT 1`,
                 [outletCode, outletCode, outletCode]
