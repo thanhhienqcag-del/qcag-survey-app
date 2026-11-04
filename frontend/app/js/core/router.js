@@ -185,6 +185,11 @@ function switchTab(tab) {
   // Update Tab 3 UI depending on items in Tab 2 (some logic lives in request-flow)
   if (tab === 3) {
     try { if (typeof updateTab3UI === 'function') updateTab3UI(); } catch (e) {}
+    try {
+      setTimeout(() => {
+        if (typeof refreshTab3MiniMap === 'function') refreshTab3MiniMap();
+      }, 150);
+    } catch (e) {}
   }
 }
 

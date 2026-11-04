@@ -417,40 +417,9 @@ async function handleWarrantyImages(input) {
   try { input.value = ''; } catch (_) {}
 }
 
-function triggerStatusUploadAgain() {
-  const input = document.getElementById('statusUploadInput');
-  if (input) input.click();
-}
-
-function clearAllStatusImages() {
-  if (typeof statusImages !== 'undefined' && Array.isArray(statusImages)) {
-    statusImages.forEach(function(url) { try { URL.revokeObjectURL(url); } catch (e) {} });
-    statusImages.length = 0;
-  }
-  if (typeof _statusImageFiles !== 'undefined' && Array.isArray(_statusImageFiles)) {
-    _statusImageFiles.length = 0;
-  }
-  renderImagePreviews('statusImagesPreview', statusImages, 'status');
-  const input = document.getElementById('statusUploadInput');
-  if (input) input.value = '';
-  if (typeof updateGpsStatusUI === 'function') {
-    const curLat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
-    const curLng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
-    if (typeof isValidCoordinate === 'function' && isValidCoordinate(curLat, curLng)) {
-      updateGpsStatusUI('from_outlet', { lat: curLat, lng: curLng });
-    } else {
-      updateGpsStatusUI('none');
-    }
-  }
-}
-
 function renderImagePreviews(containerId, images, type) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  const actionsBar = document.getElementById('statusActionsBar');
-  if (actionsBar && type === 'status') {
-    actionsBar.classList.toggle('hidden', !images || images.length === 0);
-  }
   container.innerHTML = images.map(function (img, idx) {
     var isHeic = typeof img === 'string' && img.indexOf(_HEIC_SENTINEL_PREFIX) === 0;
     var label = isHeic ? img.slice(_HEIC_SENTINEL_PREFIX.length) : '';
@@ -539,6 +508,15 @@ function removeImage(type, idx) {
     statusImages.splice(idx, 1);
     _statusImageFiles.splice(idx, 1);
     renderImagePreviews('statusImagesPreview', statusImages, 'status');
+    if (statusImages.length === 0) {
+      const curLat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
+      const curLng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
+      if (typeof isValidCoordinate === 'function' && isValidCoordinate(curLat, curLng)) {
+        if (typeof updateGpsStatusUI === 'function') updateGpsStatusUI('from_outlet', { lat: curLat, lng: curLng });
+      } else {
+        if (typeof updateGpsStatusUI === 'function') updateGpsStatusUI('none');
+      }
+    }
   } else if (type === 'warranty') {
     try { URL.revokeObjectURL(warrantyImages[idx]); } catch (e) {}
     warrantyImages.splice(idx, 1);

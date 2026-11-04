@@ -1698,8 +1698,6 @@ function resetNewRequestForm() {
     if (locSourceEl) locSourceEl.value = 'manual';
     const locContainer = document.getElementById('outletLocationContainer');
     if (locContainer) locContainer.classList.remove('hidden');
-    const actBar = document.getElementById('statusActionsBar');
-    if (actBar) actBar.classList.add('hidden');
   } catch (e) {}
   try { 
     if (typeof updateGpsStatusUI === 'function') updateGpsStatusUI('none');

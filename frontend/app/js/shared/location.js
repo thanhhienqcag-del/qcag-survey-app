@@ -15,6 +15,10 @@ let _labelsLayer = null; // Transparent POI/label overlay for satellite mode
 // Default map mode: set to 'satellite' so map opens in satellite view
 let _currentMapMode = 'satellite'; // 'normal' or 'satellite'
 
+// Tab 3 Mini Map widget state
+let _tab3MiniMap = null;
+let _tab3MiniMarker = null;
+
 function openLocationModal() {
   setMapExifStatus(null);
   document.getElementById('mapModal').classList.remove('hidden');
@@ -401,8 +405,95 @@ function isValidCoordinate(lat, lng) {
   return (nLat >= 5 && nLat <= 25 && nLng >= 100 && nLng <= 112);
 }
 
+function renderTab3MiniMap(lat, lng) {
+  const container = document.getElementById('tab3MiniMap');
+  const overlay = document.getElementById('miniMapEmptyOverlay');
+  const badge = document.getElementById('miniMapExpandBadge');
+  if (!container || typeof L === 'undefined') return;
+
+  const hasCoords = isValidCoordinate(lat, lng);
+  const nLat = parseFloat(lat);
+  const nLng = parseFloat(lng);
+
+  if (overlay) overlay.classList.toggle('hidden', hasCoords);
+  if (badge) badge.classList.toggle('hidden', !hasCoords);
+
+  let defaultCenter = [10.7769, 106.7009];
+  try {
+    const cached = localStorage.getItem('ks_last_gps_location');
+    if (cached) {
+      const p = JSON.parse(cached);
+      if (p && p.lat && p.lng) defaultCenter = [parseFloat(p.lat), parseFloat(p.lng)];
+    }
+  } catch (e) {}
+
+  const targetCenter = hasCoords ? [nLat, nLng] : defaultCenter;
+  const zoomLevel = hasCoords ? 17 : 14;
+
+  if (!_tab3MiniMap) {
+    try {
+      _tab3MiniMap = L.map('tab3MiniMap', {
+        zoomControl: false,
+        attributionControl: false,
+        dragging: false,
+        touchZoom: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false
+      }).setView(targetCenter, zoomLevel);
+
+      L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        subdomains: '0123',
+        maxZoom: 22
+      }).addTo(_tab3MiniMap);
+    } catch (e) {
+      console.warn('[MiniMap] init error:', e);
+    }
+  } else {
+    try {
+      _tab3MiniMap.setView(targetCenter, zoomLevel);
+    } catch (e) {}
+  }
+
+  if (hasCoords) {
+    const pinHtml = '<div style="transform: translate(-50%, -100%);">' +
+      '<svg width="28" height="34" viewBox="0 0 24 30" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+      '<path d="M12 0C5.373 0 0 5.373 0 12C0 19.5 12 30 12 30C12 30 24 19.5 24 12C24 5.373 18.627 0 12 0Z" fill="#ef4444"/>' +
+      '<circle cx="12" cy="11" r="4.5" fill="#ffffff"/>' +
+      '</svg></div>';
+    const redPin = L.divIcon({
+      className: 'tab3-mini-pin',
+      html: pinHtml,
+      iconSize: [0, 0]
+    });
+
+    if (!_tab3MiniMarker) {
+      _tab3MiniMarker = L.marker([nLat, nLng], { icon: redPin }).addTo(_tab3MiniMap);
+    } else {
+      _tab3MiniMarker.setLatLng([nLat, nLng]);
+    }
+  } else {
+    if (_tab3MiniMarker) {
+      _tab3MiniMarker.remove();
+      _tab3MiniMarker = null;
+    }
+  }
+
+  setTimeout(() => {
+    try { if (_tab3MiniMap) _tab3MiniMap.invalidateSize(); } catch (e) {}
+  }, 120);
+}
+
+function refreshTab3MiniMap() {
+  const lat = document.getElementById('outletLat') ? document.getElementById('outletLat').value : '';
+  const lng = document.getElementById('outletLng') ? document.getElementById('outletLng').value : '';
+  renderTab3MiniMap(lat, lng);
+}
+
 function updateGpsStatusUI(state, data) {
   const card = document.getElementById('gpsStatusCard');
+  const iconWrap = document.getElementById('gpsStatusIconWrap');
   const icon = document.getElementById('gpsStatusIcon');
   const label = document.getElementById('outletLocationLabel');
   const subtext = document.getElementById('locationPreviewText');
@@ -418,52 +509,75 @@ function updateGpsStatusUI(state, data) {
   const lng = (data && data.lng != null) ? data.lng : (lngInput ? lngInput.value : '');
 
   // Reset base classes
-  card.className = 'p-3 rounded-xl border transition-all ';
+  card.className = 'rounded-2xl border shadow-sm overflow-hidden transition-all ';
 
-  if (state === 'from_exif' || state === 'from_map' || (state !== 'no_exif' && isValidCoordinate(lat, lng))) {
-    // ==== ĐÃ CÓ GPS HỢP LỆ (Emerald Success) ====
+  const hasCoords = isValidCoordinate(lat, lng);
+
+  if (state === 'from_exif' || state === 'from_map' || (state !== 'no_exif' && hasCoords)) {
+    // ==== ĐÃ CÓ TỌA ĐỘ GPS HỢP LỆ (Emerald Success) ====
     card.classList.add('border-emerald-300', 'bg-emerald-50/70', 'dark:border-emerald-600/40', 'dark:bg-emerald-950/20');
-    if (icon) icon.textContent = '✓';
+    if (iconWrap) {
+      iconWrap.className = 'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 transition-colors';
+    }
+    if (icon) {
+      icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+    }
     
-    let sourceLabel = 'GPS ảnh hiện trường (EXIF)';
-    if (state === 'from_map') sourceLabel = 'Đã chọn trên bản đồ';
-    else if (state === 'from_outlet') sourceLabel = 'Hồ sơ điểm bán';
+    let sourceLabel = 'Ảnh chụp có tọa độ GPS điểm bán';
+    if (state === 'from_map') sourceLabel = 'Đã chọn tọa độ trên bản đồ';
+    else if (state === 'from_outlet') sourceLabel = 'Đã lưu tọa độ điểm bán';
 
     if (label) {
-      label.className = 'text-xs font-semibold text-emerald-800 dark:text-emerald-300 leading-snug';
-      label.textContent = 'Đã xác định vị trí (' + sourceLabel + '):';
+      label.className = 'text-xs font-semibold text-emerald-800 dark:text-emerald-300 leading-snug truncate';
+      label.textContent = sourceLabel;
     }
     if (subtext) {
       subtext.className = 'text-[11px] font-mono text-emerald-700 dark:text-emerald-400 truncate mt-0.5';
       subtext.textContent = Number(lat).toFixed(6) + ', ' + Number(lng).toFixed(6);
     }
-    if (btnText) btnText.textContent = 'Xem / Đổi';
+    if (btnText) btnText.textContent = 'Đổi vị trí';
+
+    renderTab3MiniMap(lat, lng);
   } else if (state === 'no_exif') {
     // ==== CẢNH BÁO: ẢNH KHÔNG CÓ GPS (Amber Warning) ====
     card.classList.add('border-amber-300', 'bg-amber-50/80', 'dark:border-amber-600/40', 'dark:bg-amber-950/25');
-    if (icon) icon.textContent = '⚠';
+    if (iconWrap) {
+      iconWrap.className = 'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 transition-colors';
+    }
+    if (icon) {
+      icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+    }
     if (label) {
-      label.className = 'text-xs font-semibold text-amber-800 dark:text-amber-300 leading-snug';
-      label.textContent = 'Ảnh chụp không có GPS định vị!';
+      label.className = 'text-xs font-semibold text-amber-800 dark:text-amber-300 leading-snug truncate';
+      label.textContent = 'Chưa có tọa độ điểm bán';
     }
     if (subtext) {
-      subtext.className = 'text-[11px] text-amber-700 dark:text-amber-400 mt-0.5';
-      subtext.textContent = 'Vui lòng bấm mở bản đồ để chọn vị trí điểm bán:';
+      subtext.className = 'text-[11px] text-amber-700 dark:text-amber-400 truncate mt-0.5';
+      subtext.textContent = 'Chạm bản đồ bên dưới để thả ghim vị trí';
     }
     if (btnText) btnText.textContent = 'Mở bản đồ';
+
+    renderTab3MiniMap(null, null);
   } else {
-    // ==== TRẠNG THÁI CHƯA CÓ VỊ TRÍ BAN ĐẦU ====
-    card.classList.add('border-gray-200', 'dark:border-slate-700', 'bg-gray-50/80', 'dark:bg-slate-800/60');
-    if (icon) icon.textContent = '📍';
+    // ==== TRẠNG THÁI BAN ĐẦU CHƯA CÓ VỊ TRÍ ====
+    card.classList.add('border-gray-200', 'dark:border-slate-800', 'bg-gray-50/80', 'dark:bg-slate-800/50');
+    if (iconWrap) {
+      iconWrap.className = 'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-200/70 dark:bg-slate-700 text-gray-500 dark:text-gray-400 transition-colors';
+    }
+    if (icon) {
+      icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>';
+    }
     if (label) {
-      label.className = 'text-xs font-semibold text-gray-800 dark:text-gray-200 leading-snug';
+      label.className = 'text-xs font-semibold text-gray-800 dark:text-gray-200 leading-snug truncate';
       label.textContent = 'Chưa có vị trí định vị điểm bán';
     }
     if (subtext) {
       subtext.className = 'text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5';
-      subtext.textContent = 'Vui lòng upload ảnh có GPS hoặc mở bản đồ để chọn';
+      subtext.textContent = 'Chạm vào bản đồ để thả ghim vị trí';
     }
     if (btnText) btnText.textContent = 'Mở bản đồ';
+
+    renderTab3MiniMap(null, null);
   }
 }
 
