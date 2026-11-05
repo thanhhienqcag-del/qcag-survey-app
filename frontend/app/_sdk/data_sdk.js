@@ -1309,15 +1309,10 @@
       if (!req) return { isOk: false };
       var idParam = req.__backendId || req.id || req.tkCode;
       if (!idParam) return { isOk: false };
-      try {
-        var response = await _fetchJsonWithRetry('/api/ks/requests/' + encodeURIComponent(idParam), {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: reason || '' })
-        });
-        var targetBid = String(req.__backendId || '');
-        var targetId = String(req.id || '');
-        var targetTk = String(req.tkCode || '');
+      var targetBid = String(req.__backendId || '');
+      var targetId = String(req.id || '');
+      var targetTk = String(req.tkCode || '');
+      var removeLocal = function () {
         for (var di = _store.length - 1; di >= 0; di--) {
           var item = _store[di];
           var b = String(item.__backendId || '');
@@ -1329,9 +1324,24 @@
         }
         _lastEtag = null;
         _triggerStoreUpdated();
+      };
+      try {
+        var response = await _fetchJsonWithRetry('/api/ks/requests/' + encodeURIComponent(idParam), {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason || '' })
+        });
+        removeLocal();
         return { isOk: true };
       } catch (e) {
         console.error('[dataSdk] delete error:', e);
+        // Nếu server báo 404 hoặc không tìm thấy (bản ghi rác đã bị xóa trên DB), xóa sạch khỏi store local
+        var status = e && (e.status || (e.response && e.response.status));
+        var msg = String((e && e.message) || '');
+        if (status === 404 || msg.indexOf('404') !== -1 || msg.indexOf('not_found') !== -1) {
+          removeLocal();
+          return { isOk: true, cleanedLocal: true };
+        }
         return { isOk: false };
       }
     }

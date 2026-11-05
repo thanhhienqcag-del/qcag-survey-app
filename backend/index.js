@@ -5447,7 +5447,14 @@ app.delete('/api/ks/requests/:id', async (req, res) => {
             [id, id]
         );
         if (!reqRows || reqRows.length === 0) {
-            return res.status(404).json({ ok: false, error: 'not_found' });
+            // Bản ghi đã bị xóa hoặc không tồn tại trong DB V12 -> Trả về ok: true và thông báo websocket để client dọn sạch khỏi store
+            wsInvalidate('ks_requests', {
+                action: 'delete',
+                id: id,
+                backendId: id,
+                tkCode: id
+            });
+            return res.json({ ok: true, deleted: 0, message: 'already_deleted_or_not_found', id });
         }
 
         const row = reqRows[0];

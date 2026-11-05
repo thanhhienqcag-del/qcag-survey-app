@@ -655,8 +655,21 @@ async function showRequestDetail(id) {
                   let sizeMobileHtml = '-';
                   if (!isOther) {
                     if (item.survey) {
-                      if (item.surveySize && item.surveySize.width && item.surveySize.height) {
-                        const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.surveySize.width, item.surveySize.height) : `${item.surveySize.width}m x ${item.surveySize.height}m`;
+                      let sW = null, sH = null;
+                      if (item.surveySize) {
+                        if (typeof item.surveySize === 'string') {
+                          try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) {}
+                        } else if (typeof item.surveySize === 'object') {
+                          sW = item.surveySize.width; sH = item.surveySize.height;
+                        }
+                      }
+                      if (sW == null && item.survey_width != null) sW = item.survey_width;
+                      if (sH == null && item.survey_height != null) sH = item.survey_height;
+                      if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
+                      if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
+                      const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
+                      if (hasSurveyDim) {
+                        const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
                         const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
                         sizeMobileHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap">${dim}${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
                       } else {
@@ -866,8 +879,21 @@ async function showRequestDetail(id) {
                     let sizeHtml = '-';
                     if (!isOther) {
                       if (item.survey) {
-                        if (item.surveySize && item.surveySize.width && item.surveySize.height) {
-                          const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.surveySize.width, item.surveySize.height) : `${item.surveySize.width}m x ${item.surveySize.height}m`;
+                        let sW = null, sH = null;
+                        if (item.surveySize) {
+                          if (typeof item.surveySize === 'string') {
+                            try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) {}
+                          } else if (typeof item.surveySize === 'object') {
+                            sW = item.surveySize.width; sH = item.surveySize.height;
+                          }
+                        }
+                        if (sW == null && item.survey_width != null) sW = item.survey_width;
+                        if (sH == null && item.survey_height != null) sH = item.survey_height;
+                        if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
+                        if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
+                        const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
+                        if (hasSurveyDim) {
+                          const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
                           const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
                           sizeHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap"><span class="font-mono text-xs font-semibold">${dim}</span>${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
                         } else {
