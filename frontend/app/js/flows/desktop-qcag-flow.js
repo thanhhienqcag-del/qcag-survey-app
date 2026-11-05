@@ -561,19 +561,19 @@ function assignStandardTags(req) {
 
   // Processing / Yêu cầu (new)
   if (String(req.type || '').toLowerCase() === 'new') {
+    const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed');
+    const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey);
+    const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+    const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
+
+    // 1. Chờ khảo sát (ƯU TIÊN CAO NHẤT OVERLAY TRÊN HẾT)
+    if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
+      tags.push('Chờ khảo sát');
+    }
+    // 2. Chờ chỉnh sửa
     if (qcagDesktopIsPendingEditRequest(req)) {
       tags.push('Chờ chỉnh sửa');
     }
-    // any item marked as survey *without* a confirmed surveySize -> Chờ khảo sát (CHỈ khi đơn chưa hoàn thành)
-    try {
-      const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed');
-      const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey);
-      const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
-      const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
-      if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
-        tags.push('Chờ khảo sát');
-      }
-    } catch (e) { }
     // No MQ at all and NOT an edit request and NOT waiting for survey -> Chờ thiết kế
     const isPendingSurvey = tags.indexOf('Chờ khảo sát') !== -1;
     if (!qcagDesktopIsPendingEditRequest(req) && !isPendingSurvey && (!Array.isArray(designImgs) || designImgs.length === 0)) {
@@ -2116,26 +2116,30 @@ function qcagDesktopStatusBadge(req) {
     return { label: 'Chờ kiểm tra', cls: 'processing' };
   }
 
-  // 1. ƯU TIÊN SỐ 1: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG (luôn ưu tiên cao nhất)
-  if (qcagDesktopIsPendingEditRequest(req)) {
-    return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
-  }
-
-  // 2. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  // 1. ƯU TIÊN SỐ 1 CAO NHẤT OVERLAY TRÊN HẾT: Chờ khảo sát
+  // (Nếu đơn chưa hoàn thành và có hạng mục cần số đo khảo sát mà chưa có số đo, BẮT BUỘC hiển thị Chờ khảo sát)
   const s = String(req && req.status || 'pending').toLowerCase();
   const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
-  if (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) {
-    return { label: 'Hoàn thành', cls: 'done' };
-  }
+  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) && !qcagDesktopIsPendingEditRequest(req);
 
-  // 3. Chờ khảo sát: Sale chọn cần khảo sát mà chưa có số đo khảo sát (chỉ khi đơn chưa hoàn thành)
   const stdTags = Array.isArray(req.standardTags) ? req.standardTags : ((typeof assignStandardTags === 'function' ? assignStandardTags(req) : []) || []);
   const items = qcagDesktopParseJson(req && (req.items || req.surveyItems), []);
   const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
   const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey || (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1));
   const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
-  if (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone)) {
+
+  if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
     return { label: 'Chờ khảo sát', cls: 'pending-survey' };
+  }
+
+  // 2. ƯU TIÊN SỐ 2: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG (sau khi đã có số đo khảo sát)
+  if (qcagDesktopIsPendingEditRequest(req)) {
+    return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
+  }
+
+  // 3. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  if (isDone) {
+    return { label: 'Hoàn thành', cls: 'done' };
   }
 
   // 4. Kiểm tra ảnh MQ thiết kế
@@ -3586,20 +3590,33 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
     }
   }
 
-  // Check completion conditions
+  // Check completion conditions & update Button state
   const cond = qcagCheckCompletionConditions(updatedRequest);
   const completeBtn = document.querySelector('.qcag-complete-btn');
+  const editOnlyWrap = document.getElementById('qcagEditOnlyWrap');
+
   if (completeBtn) {
     const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
     const reqStatus = String(updatedRequest.status || '').toLowerCase();
-    const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
+    const hasQuote = Boolean(updatedRequest.quoteCode || updatedRequest.quote_code || (updatedRequest.bridge && (updatedRequest.bridge.quote_code || updatedRequest.bridge.quoteCode)));
+    const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed' || hasQuote) && !isPendingEdit;
 
     if (isDone) {
       completeBtn.textContent = 'Đã hoàn thành';
       completeBtn.disabled = true;
       completeBtn.classList.add('qcag-complete-btn--disabled');
+      completeBtn.classList.remove('qcag-btn-waiting-survey');
       completeBtn.title = 'Yêu cầu này đã được hoàn thành';
+      if (editOnlyWrap) editOnlyWrap.style.display = 'none';
+    } else if (cond.isSurveySizeIncomplete) {
+      // Gộp trực tiếp cảnh báo vào button block: Chờ Khảo Sát
+      completeBtn.textContent = 'Chờ Khảo Sát';
+      completeBtn.disabled = true;
+      completeBtn.classList.add('qcag-complete-btn--disabled', 'qcag-btn-waiting-survey');
+      completeBtn.title = 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành';
+      if (editOnlyWrap) editOnlyWrap.style.display = 'none';
     } else {
+      completeBtn.classList.remove('qcag-btn-waiting-survey');
       const label = isPendingEdit
         ? 'Đã chỉnh sửa'
         : ((reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') ? 'Cập nhật MQ' : 'Hoàn thành');
@@ -3608,57 +3625,25 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
         completeBtn.disabled = false;
         completeBtn.classList.remove('qcag-complete-btn--disabled');
         completeBtn.removeAttribute('title');
+        if (editOnlyWrap) editOnlyWrap.style.display = 'none';
       } else {
         completeBtn.disabled = true;
         completeBtn.classList.add('qcag-complete-btn--disabled');
-        completeBtn.title = !cond.canComplete
-          ? `Chưa đủ điều kiện hoàn thành: ${cond.missing.join(', ')}`
-          : (isPendingEdit ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa' : 'Vui lòng upload MQ thiết kế trước');
+        completeBtn.title = isPendingEdit
+          ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
+          : 'Vui lòng upload MQ thiết kế trước khi hoàn thành';
+        if (editOnlyWrap) {
+          editOnlyWrap.style.display = (isPendingEdit && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) ? 'block' : 'none';
+        }
       }
     }
   }
 
-  // 1. Cập nhật cảnh báo Khảo sát lên HEADER của block Upload MQ thiết kế (bỏ badge ở dưới)
+  // Dọn sạch hoàn toàn các badge / alert rườm rà
   const headerSurveyEl = document.getElementById('qcagHeaderSurveyWarn');
-  const needsSurvey = !isDone && cond.isSurveySizeIncomplete;
-  if (needsSurvey) {
-    if (!headerSurveyEl) {
-      const cardTitle = document.querySelector('.qcag-actions .qcag-subcard .qcag-card-title');
-      if (cardTitle) {
-        const span = document.createElement('span');
-        span.id = 'qcagHeaderSurveyWarn';
-        span.className = 'qcag-header-survey-tag';
-        span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(245,158,11,0.25);margin-left:auto;';
-        span.textContent = 'Chờ kích thước khảo sát';
-        cardTitle.appendChild(span);
-      }
-    }
-  } else if (headerSurveyEl) {
-    headerSurveyEl.remove();
-  }
-
-  // 2. Chế độ chỉnh sửa: Ghi gọn gàng dạng text nhẹ nhàng, BỎ BADGE to rườm rà (thiết kế mới không hiển thị gì)
-  const footerLeft = document.querySelector('.qcag-mq-footer-left');
-  let alertEl = document.getElementById('qcagCompletionAlert');
-  if (isPendingEdit && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) {
-    const hintHtml = `<span>Upload bản vẽ mới</span><span style="opacity:0.4">•</span><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11.5px;color:var(--text-accent, #38bdf8);text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button>`;
-    if (alertEl) {
-      alertEl.className = 'qcag-edit-mq-hint';
-      alertEl.style.cssText = 'font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
-      alertEl.innerHTML = hintHtml;
-    } else if (footerLeft) {
-      const node = document.createElement('div');
-      node.id = 'qcagCompletionAlert';
-      node.className = 'qcag-edit-mq-hint';
-      node.style.cssText = 'font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
-      node.innerHTML = hintHtml;
-      footerLeft.appendChild(node);
-    }
-  } else if (alertEl) {
-    alertEl.remove();
-  }
-
-  // Clean up legacy survey warning if present
+  if (headerSurveyEl) headerSurveyEl.remove();
+  const alertEl = document.getElementById('qcagCompletionAlert');
+  if (alertEl) alertEl.remove();
   const oldWarn = document.querySelector('.qcag-survey-warning');
   if (oldWarn) oldWarn.remove();
 
@@ -5342,22 +5327,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         <div class="qcag-card">
           <div class="qcag-actions qcag-split-cards">
             <div class="qcag-subcard">
-              ${(() => {
-                const condH = qcagCheckCompletionConditions(request);
-                const isPendingH = qcagDesktopIsPendingEditRequest(request);
-                const isDoneH = (['done', 'processed', 'quoted', 'completed'].includes(String(request.status || '').toLowerCase()) || Boolean(request.quoteCode || request.quote_code)) && !isPendingH;
-                const surveyTag = (!isDoneH && condH.isSurveySizeIncomplete)
-                  ? `<span id="qcagHeaderSurveyWarn" class="qcag-header-survey-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(245,158,11,0.25);margin-left:auto;">Chờ kích thước khảo sát</span>`
-                  : '';
-                return `
               <div class="qcag-card-title" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
                 <div style="display:flex;align-items:center;min-width:0;">
                   <span>${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}</span>
                   <span id="qcagMQFilenameTitle" class="qcag-mq-filename text-xs font-normal text-gray-500 ml-2" style="color: #6b7280; font-size: 12px; font-weight: normal; margin-left: 8px;">${(!isWarranty && request.designFilename) ? `(${escapeHtml(request.designFilename.replace(/\.[^/.]+$/, ""))})` : ''}</span>
                 </div>
-                ${surveyTag}
-              </div>`;
-              })()}
+              </div>
               <div class="qcag-subcard-body">
                 <div class="qcag-action-block">
                   <label class="qcag-upload-square qcag-mq-upload-square" data-upload-target="mq" title="${isWarranty ? 'Upload ảnh nghiệm thu (kéo thả hoặc click phải để dán)' : 'Upload MQ thiết kế (kéo thả hoặc click phải để dán)'}">
@@ -5449,26 +5424,41 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed' || hasQuote) && !isPendingEdit;
 
         const showCompleteBtn = _qcagDesktopStatusFilter !== 'done';
-        const completeDisabled = isDone || !cond.canComplete;
-        const completeTitle = isDone
-          ? 'Yêu cầu đã hoàn thành'
-          : (!cond.canComplete
-            ? `Chưa đủ điều kiện hoàn thành: ${cond.missing.join(', ')}`
-            : (designImgs.length === 0 ? escapeHtml(completeBtnDisabledTitle) : (cond.isSurveySizeIncomplete ? 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành' : '')));
+        let finalBtnLabel = 'Hoàn thành';
+        let completeDisabled = false;
+        let completeTitle = '';
+        let extraBtnClass = '';
 
-        let warning = '';
-        if (isPendingEdit && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) {
-          warning = `<div class="qcag-edit-mq-hint" id="qcagCompletionAlert" style="font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>Upload bản vẽ mới</span><span style="opacity:0.4">•</span><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11.5px;color:var(--text-accent, #38bdf8);text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button></div>`;
+        if (isDone) {
+          finalBtnLabel = 'Đã hoàn thành';
+          completeDisabled = true;
+          completeTitle = 'Yêu cầu đã hoàn thành';
+        } else if (cond.isSurveySizeIncomplete) {
+          // Gộp trực tiếp cảnh báo vào button block: Chờ Khảo Sát
+          finalBtnLabel = 'Chờ Khảo Sát';
+          completeDisabled = true;
+          completeTitle = 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành';
+          extraBtnClass = ' qcag-btn-waiting-survey';
+        } else {
+          finalBtnLabel = isPendingEdit
+            ? 'Đã chỉnh sửa'
+            : ((reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') ? 'Cập nhật MQ' : completeBtnLabel);
+          completeDisabled = !cond.canComplete;
+          if (!cond.canComplete) {
+            completeTitle = isPendingEdit
+              ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
+              : 'Vui lòng upload MQ thiết kế trước khi hoàn thành';
+          }
         }
 
-        const finalBtnLabel = isDone
-          ? 'Đã hoàn thành'
-          : (isPendingEdit ? 'Đã chỉnh sửa' : ((reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') ? 'Cập nhật MQ' : completeBtnLabel));
+        const showEditOnlyLink = isPendingEdit && !isDone && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'));
+        const editOnlyLink = `<div id="qcagEditOnlyWrap" style="text-align:right;margin-top:4px;${showEditOnlyLink ? '' : 'display:none;'}"><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11px;color:#64748b;text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button></div>`;
+
         const btn = showCompleteBtn
-          ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}" ${completeDisabled ? `disabled title="${escapeHtml(completeTitle)}"` : ''}>${escapeHtml(finalBtnLabel)}</button>`
+          ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}${extraBtnClass}" ${completeDisabled ? `disabled title="${escapeHtml(completeTitle)}"` : ''}>${escapeHtml(finalBtnLabel)}</button>${editOnlyLink}`
           : '';
 
-        return `<div class="qcag-mq-footer-left"><div class="${creatorClass}">${creatorLine}</div><div class="${editedClass}">${editedLine}</div>${warning}</div><div class="qcag-mq-footer-right">${btn}</div>`;
+        return `<div class="qcag-mq-footer-left"><div class="${creatorClass}">${creatorLine}</div><div class="${editedClass}">${editedLine}</div></div><div class="qcag-mq-footer-right">${btn}</div>`;
       })()}
                 </div>
               </div>

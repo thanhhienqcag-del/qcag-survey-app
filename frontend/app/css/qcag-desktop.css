@@ -1853,6 +1853,20 @@
   .qcag-complete-btn--disabled:hover,
   .qcag-complete-btn:disabled:hover { opacity: 1 !important; }
 
+  .qcag-complete-btn.qcag-btn-waiting-survey {
+    background: rgba(245, 158, 11, 0.12) !important;
+    color: #f59e0b !important;
+    border: 1px dashed rgba(245, 158, 11, 0.45) !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+  }
+  html.light .qcag-complete-btn.qcag-btn-waiting-survey,
+  body.theme-light .qcag-complete-btn.qcag-btn-waiting-survey {
+    background: #fef3c7 !important;
+    color: #b45309 !important;
+    border: 1px dashed #f59e0b !important;
+  }
+
   .qcag-desktop-edit-btn {
     position: static;
     background: #e11d48;
