@@ -567,7 +567,9 @@ function assignStandardTags(req) {
     const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
 
     // 1. Chờ khảo sát (ƯU TIÊN CAO NHẤT OVERLAY TRÊN HẾT)
-    if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
+    const hasItems = Array.isArray(items) && items.length > 0;
+    const isWaitingSurvey = hasItems ? hasSurveyItemNeedSize : (hasSurveyFlag && !hasSurveyDone);
+    if (!isDone && isWaitingSurvey) {
       tags.push('Chờ khảo sát');
     }
     // 2. Chờ chỉnh sửa
@@ -2128,7 +2130,10 @@ function qcagDesktopStatusBadge(req) {
   const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey || (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1));
   const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
 
-  if (!isDone && (hasSurveyItemNeedSize || (hasSurveyFlag && !hasSurveyDone))) {
+  const hasItems = Array.isArray(items) && items.length > 0;
+  const isWaitingSurvey = hasItems ? hasSurveyItemNeedSize : (hasSurveyFlag && !hasSurveyDone);
+
+  if (!isDone && isWaitingSurvey) {
     return { label: 'Chờ khảo sát', cls: 'pending-survey' };
   }
 
@@ -4226,8 +4231,8 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
       ? `<div class="qcag-item-actions-cell"><button class="qcag-item-edit-btn" onclick="qcagDesktopOpenEditItemModal(${idx})" title="Sửa hạng mục"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button><button class="qcag-item-delete-btn" onclick="qcagDesktopRemoveItem(${idx})" title="Xóa hạng mục">✕</button></div>`
       : '<div></div>';
     const isBrandChanged = !!(item && (item.brandChangedByQCAG || item.brandChangedByQcag || item.brand_changed_by_qcag));
-    const isAdded = !!(item && (item.addedByQCAG || item.addedByQcag || item.added_by_qcag));
-    const isEdited = !!(item && (item.editedByQCAG || item.editedByQcag || item.edited_by_qcag));
+    const isAdded = !!(item && (item.addedByQCAG || item.addedByQcag || item.added_by_qcag || item.addedByQCAGBy || item.addedByQcagBy || item.added_by_qcag_by));
+    const isEdited = !!(item && (item.editedByQCAG || item.editedByQcag || item.edited_by_qcag || item.editedByQCAGBy || item.editedByQcagBy || item.edited_by_qcag_by));
 
     const brandBadge = isBrandChanged
       ? `<span class="qcag-brand-changed-badge" title="${escapeHtml('Brand được ' + (item.brandChangedBy || item.brand_changed_by || 'QCAG') + ' QCAG đổi theo yêu cầu của sale')}"></span>`
@@ -4445,22 +4450,45 @@ async function qcagConfirmSurveySize() {
 
   const items = qcagDesktopParseJson(currentDetailRequest.items, []);
   if (!items[_qcagSurveyEditingIndex]) return qcagCloseSurveySizeModal();
-  items[_qcagSurveyEditingIndex].surveySize = { width: w, height: h };
+  const curItem = items[_qcagSurveyEditingIndex];
+  curItem.surveySize = { width: w, height: h };
+  curItem.survey = true;
+  curItem.survey_width = w;
+  curItem.survey_height = h;
+  if (!curItem.width || parseFloat(curItem.width) <= 0) curItem.width = w;
+  if (!curItem.height || parseFloat(curItem.height) <= 0) curItem.height = h;
 
   // Append a system comment recording this confirmation
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   const now = new Date().toISOString();
   const displayTime = new Date(now).toLocaleString('vi-VN');
   const outletName = currentDetailRequest.outletName || '-';
-  const itemType = items[_qcagSurveyEditingIndex].type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
+  const itemType = curItem.type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
   const autoCommentText = `Outlet ${outletName}: Xác nhận kích thước khảo sát ${itemType} là ${qcagFormatDimensionText(w, h)} vào ${displayTime}.`;
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
 
-  const stillNeedsSurvey = items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+  const stillNeedsSurvey = items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+  
+  const reqBackendId = currentDetailRequest.__backendId || currentDetailRequest.id;
+  const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === reqBackendId || r.id === reqBackendId || (currentDetailRequest.tkCode && (r.tkCode === currentDetailRequest.tkCode || r.tk_code === currentDetailRequest.tkCode))) : null;
+  if (inAll) {
+    inAll.items = JSON.stringify(items);
+    inAll.hasPendingSurvey = stillNeedsSurvey;
+    inAll.has_pending_survey = stillNeedsSurvey;
+    if (typeof assignStandardTags === 'function') inAll.standardTags = assignStandardTags(inAll);
+  }
+
   const updated = { ...currentDetailRequest, items: JSON.stringify(items), hasPendingSurvey: stillNeedsSurvey, has_pending_survey: stillNeedsSurvey, comments: JSON.stringify(comments), updatedAt: now };
   const ok = await qcagDesktopPersistRequest(updated, 'Đã lưu kích thước khảo sát');
   if (ok) {
     qcagCloseSurveySizeModal();
+    renderQCAGDesktopList();
+    const newBadge = qcagDesktopStatusBadge(updated);
+    const detailBadgeEl = document.querySelector('#qcagDesktopDetail .qcag-detail-title-row .qcag-status-badge');
+    if (detailBadgeEl && newBadge) {
+      detailBadgeEl.className = `qcag-status-badge ${newBadge.cls}`;
+      detailBadgeEl.textContent = newBadge.label;
+    }
     const dtModal = document.getElementById('requestDetailModal');
     if (dtModal && !dtModal.classList.contains('hidden') && typeof showRequestDetail === 'function') {
       showRequestDetail(currentDetailRequest.__backendId);
@@ -4474,23 +4502,41 @@ async function qcagReopenSurveyForItem() {
   const items = qcagDesktopParseJson(currentDetailRequest.items, []);
   if (!items[_qcagSurveyEditingIndex]) return qcagCloseSurveySizeModal();
 
-  // Remove confirmed size so item becomes 'Chờ khảo sát'
-  try { delete items[_qcagSurveyEditingIndex].surveySize; } catch (e) { items[_qcagSurveyEditingIndex].surveySize = null; }
-  items[_qcagSurveyEditingIndex].survey = true;
+  const curItem = items[_qcagSurveyEditingIndex];
+  try { delete curItem.surveySize; } catch (e) { curItem.surveySize = null; }
+  curItem.survey = true;
+  curItem.survey_width = null;
+  curItem.survey_height = null;
 
   // Append a system comment recording this action
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   const now = new Date().toISOString();
   const displayTime = new Date(now).toLocaleString('vi-VN');
   const outletName = currentDetailRequest.outletName || '-';
-  const itemType = items[_qcagSurveyEditingIndex].type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
+  const itemType = curItem.type || `hạng mục #${_qcagSurveyEditingIndex + 1}`;
   const autoCommentText = `Outlet ${outletName}: Đặt lại trạng thái khảo sát cho ${itemType} vào ${displayTime}.`;
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
+
+  const reqBackendId = currentDetailRequest.__backendId || currentDetailRequest.id;
+  const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === reqBackendId || r.id === reqBackendId || (currentDetailRequest.tkCode && (r.tkCode === currentDetailRequest.tkCode || r.tk_code === currentDetailRequest.tkCode))) : null;
+  if (inAll) {
+    inAll.items = JSON.stringify(items);
+    inAll.hasPendingSurvey = true;
+    inAll.has_pending_survey = true;
+    if (typeof assignStandardTags === 'function') inAll.standardTags = assignStandardTags(inAll);
+  }
 
   const updated = { ...currentDetailRequest, items: JSON.stringify(items), hasPendingSurvey: true, has_pending_survey: true, comments: JSON.stringify(comments), updatedAt: now };
   const ok = await qcagDesktopPersistRequest(updated, 'Đã đặt lại trạng thái khảo sát');
   if (ok) {
     qcagCloseSurveySizeModal();
+    renderQCAGDesktopList();
+    const newBadge = qcagDesktopStatusBadge(updated);
+    const detailBadgeEl = document.querySelector('#qcagDesktopDetail .qcag-detail-title-row .qcag-status-badge');
+    if (detailBadgeEl && newBadge) {
+      detailBadgeEl.className = `qcag-status-badge ${newBadge.cls}`;
+      detailBadgeEl.textContent = newBadge.label;
+    }
     const dtModal = document.getElementById('requestDetailModal');
     if (dtModal && !dtModal.classList.contains('hidden') && typeof showRequestDetail === 'function') {
       showRequestDetail(currentDetailRequest.__backendId);

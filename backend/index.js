@@ -3201,8 +3201,25 @@ const KS_REQUESTS_SELECT_SQL = `
           'poles', ri.poles,
           'note', ri.note,
           'brandChangedByQcag', ri.brand_changed_by_qcag,
+          'brandChangedByQCAG', ri.brand_changed_by_qcag,
+          'brandChangedBy', ri.brand_changed_by,
           'addedByQcag', ri.added_by_qcag,
+          'addedByQCAG', ri.added_by_qcag,
+          'added_by_qcag', ri.added_by_qcag,
+          'addedByQcagBy', ri.added_by_qcag_by,
+          'addedByQCAGBy', ri.added_by_qcag_by,
+          'added_by_qcag_by', ri.added_by_qcag_by,
+          'editedByQcag', ri.edited_by_qcag,
+          'editedByQCAG', ri.edited_by_qcag,
+          'edited_by_qcag', ri.edited_by_qcag,
+          'editedByQcagBy', ri.edited_by_qcag_by,
+          'editedByQCAGBy', ri.edited_by_qcag_by,
+          'edited_by_qcag_by', ri.edited_by_qcag_by,
+          'editedByQcagAt', ri.edited_by_qcag_at,
+          'editedByQCAGAt', ri.edited_by_qcag_at,
           'survey', COALESCE(ri.survey, false),
+          'survey_width', ri.survey_width,
+          'survey_height', ri.survey_height,
           'surveySize', CASE 
             WHEN ri.survey_width IS NOT NULL AND ri.survey_height IS NOT NULL AND ri.survey_width > 0 AND ri.survey_height > 0 
             THEN json_build_object('width', ri.survey_width, 'height', ri.survey_height)
@@ -3388,7 +3405,24 @@ const KS_REQUESTS_LITE_SQL = `
           'action', ri.action,
           'brand', ri.brand,
           'width', ri.width,
-          'height', ri.height
+          'height', ri.height,
+          'survey', COALESCE(ri.survey, false),
+          'survey_width', ri.survey_width,
+          'survey_height', ri.survey_height,
+          'surveySize', CASE 
+            WHEN ri.survey_width IS NOT NULL AND ri.survey_height IS NOT NULL AND ri.survey_width > 0 AND ri.survey_height > 0 
+            THEN json_build_object('width', ri.survey_width, 'height', ri.survey_height)
+            ELSE NULL 
+          END,
+          'brandChangedByQcag', ri.brand_changed_by_qcag,
+          'addedByQcag', ri.added_by_qcag,
+          'addedByQCAG', ri.added_by_qcag,
+          'addedByQcagBy', ri.added_by_qcag_by,
+          'addedByQCAGBy', ri.added_by_qcag_by,
+          'editedByQcag', ri.edited_by_qcag,
+          'editedByQCAG', ri.edited_by_qcag,
+          'editedByQcagBy', ri.edited_by_qcag_by,
+          'editedByQCAGBy', ri.edited_by_qcag_by
         ) ORDER BY ri.seq)::text
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
@@ -4968,47 +5002,55 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
             parsedArr = rawComments;
         }
         if (!Array.isArray(parsedArr) || parsedArr.length === 0) return;
-        const lastComment = parsedArr[parsedArr.length - 1];
-        if (!lastComment || (!lastComment.text && !lastComment.content)) return;
 
-        const cText = String(lastComment.text || lastComment.content).trim();
-        if (!cText) return;
-        const cAuthor = String(lastComment.authorName || lastComment.author || 'QCAG Thiết Kế').trim();
-        const cType = String(lastComment.commentType || lastComment.noteType || 'comment').trim();
-        let cImg = Array.isArray(lastComment.images) && lastComment.images.length > 0 ? lastComment.images[0] : null;
-        if (typeof cImg !== 'string' || !cImg.trim() || cImg.startsWith('data:image')) cImg = null;
+        // Xử lý tối đa 10 comment gần nhất trong mảng để không bỏ sót thao tác thêm/sửa hàng loạt
+        const candidateComments = parsedArr.slice(-10);
 
-        const isEditResolved = cType === 'edit-resolved' || cText.includes('đã chỉnh sửa xong');
+        for (const item of candidateComments) {
+            if (!item || (!item.text && !item.content)) continue;
+            const cText = String(item.text || item.content).trim();
+            if (!cText) continue;
 
-        // Bỏ qua chặn trùng lặp đối với edit-resolved để luôn ghi nhận mốc thời gian hoàn thành mới nhất
-        if (!isEditResolved) {
-            const [existing] = await pool.query(
-                `SELECT id FROM notes WHERE ref_type = 'request' AND ref_id = ? AND content = ? LIMIT 1`,
-                [tkCode, cText]
-            );
-            if (existing && existing.length > 0) return;
-        }
+            const cAuthor = String(item.authorName || item.author || 'QCAG Thiết Kế').trim();
+            const cType = String(item.commentType || item.noteType || 'comment').trim();
+            let cImg = Array.isArray(item.images) && item.images.length > 0 ? item.images[0] : null;
+            if (typeof cImg !== 'string' || !cImg.trim() || cImg.startsWith('data:image')) cImg = null;
 
-        const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        await pool.query(`
-            INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
-            VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
-        `, [noteId, tkCode, isEditResolved ? 'edit-resolved' : cType, cText, cAuthor, cImg]);
+            const isEditResolved = cType === 'edit-resolved' || cText.includes('đã chỉnh sửa xong');
 
-        // Nếu là giải quyết yêu cầu sửa, ghi thêm note edit-resolved cho quotation liên quan nếu có
-        if (isEditResolved) {
-            try {
-                const [qRows] = await pool.query(`SELECT quote_code FROM quotations WHERE request_tk_code = ? LIMIT 1`, [tkCode]);
-                if (qRows && qRows.length > 0 && qRows[0].quote_code) {
-                    const qCode = qRows[0].quote_code;
-                    const qNoteId = `nt_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
-                    await pool.query(`
-                        INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
-                        VALUES (?, 'quotation', ?, 'edit-resolved', ?, ?, ?, NOW())
-                    `, [qNoteId, qCode, cText, cAuthor, cImg]);
+            // Chống duplicate: Chỉ chặn nếu cùng một ref_id và cùng content vừa mới được ghi trong vòng 15 giây
+            if (!isEditResolved) {
+                const [existing] = await pool.query(
+                    `SELECT id FROM notes 
+                     WHERE ref_type = 'request' AND ref_id = ? AND content = ? 
+                       AND created_at > NOW() - INTERVAL '15 seconds' 
+                     LIMIT 1`,
+                    [tkCode, cText]
+                );
+                if (existing && existing.length > 0) continue;
+            }
+
+            const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            await pool.query(`
+                INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
+                VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
+            `, [noteId, tkCode, isEditResolved ? 'edit-resolved' : cType, cText, cAuthor, cImg]);
+
+            // Nếu là giải quyết yêu cầu sửa, ghi thêm note edit-resolved cho quotation liên quan nếu có
+            if (isEditResolved) {
+                try {
+                    const [qRows] = await pool.query(`SELECT quote_code FROM quotations WHERE request_tk_code = ? LIMIT 1`, [tkCode]);
+                    if (qRows && qRows.length > 0 && qRows[0].quote_code) {
+                        const qCode = qRows[0].quote_code;
+                        const qNoteId = `nt_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
+                        await pool.query(`
+                            INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
+                            VALUES (?, 'quotation', ?, 'edit-resolved', ?, ?, ?, NOW())
+                        `, [qNoteId, qCode, cText, cAuthor, cImg]);
+                    }
+                } catch (qErr) {
+                    console.warn('[saveCommentPayloadToNotes] quotation note sync warning:', qErr && qErr.message);
                 }
-            } catch (qErr) {
-                console.warn('[saveCommentPayloadToNotes] quotation note sync warning:', qErr && qErr.message);
             }
         }
     } catch (e) {
@@ -5274,15 +5316,15 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const poles = Number(it.poles) || 0;
                     const note = toNullableString(it.note);
                     const otherContent = toNullableString(it.otherContent || it.subType);
-                    const isSurvey = Boolean(it.survey);
-                    const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : null;
-                    const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : null;
+                    const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : ((it.survey_width && !isNaN(Number(it.survey_width))) ? Number(it.survey_width) : null);
+                    const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : ((it.survey_height && !isNaN(Number(it.survey_height))) ? Number(it.survey_height) : null);
+                    const isSurvey = Boolean(it.survey || (surveyW && surveyH));
                     const brandChangedByQcag = Boolean(it.brandChangedByQCAG || it.brandChangedByQcag || it.brand_changed_by_qcag);
                     const brandChangedBy = toNullableString(it.brandChangedBy || it.brand_changed_by);
-                    const addedByQcag = Boolean(it.addedByQCAG || it.addedByQcag || it.added_by_qcag);
                     const addedByQcagBy = toNullableString(it.addedByQCAGBy || it.addedByQcagBy || it.added_by_qcag_by);
-                    const editedByQcag = Boolean(it.editedByQCAG || it.editedByQcag || it.edited_by_qcag);
+                    const addedByQcag = Boolean(it.addedByQCAG || it.addedByQcag || it.added_by_qcag || addedByQcagBy);
                     const editedByQcagBy = toNullableString(it.editedByQCAGBy || it.editedByQcagBy || it.edited_by_qcag_by);
+                    const editedByQcag = Boolean(it.editedByQCAG || it.editedByQcag || it.edited_by_qcag || editedByQcagBy);
                     const editedByQcagAt = (it.editedByQCAGAt || it.editedByQcagAt || it.edited_by_qcag_at) ? new Date(it.editedByQCAGAt || it.editedByQcagAt || it.edited_by_qcag_at) : null;
 
                     await pool.query(`
@@ -5306,15 +5348,15 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             use_old_size = EXCLUDED.use_old_size,
                             poles = EXCLUDED.poles,
                             note = EXCLUDED.note,
-                            survey = EXCLUDED.survey,
-                            survey_width = EXCLUDED.survey_width,
-                            survey_height = EXCLUDED.survey_height,
-                            brand_changed_by_qcag = EXCLUDED.brand_changed_by_qcag,
-                            brand_changed_by = COALESCE(EXCLUDED.brand_changed_by, request_items.brand_changed_by),
-                            added_by_qcag = EXCLUDED.added_by_qcag,
-                            added_by_qcag_by = COALESCE(EXCLUDED.added_by_qcag_by, request_items.added_by_qcag_by),
-                            edited_by_qcag = EXCLUDED.edited_by_qcag,
-                            edited_by_qcag_by = COALESCE(EXCLUDED.edited_by_qcag_by, request_items.edited_by_qcag_by),
+                            survey = (EXCLUDED.survey OR request_items.survey OR (EXCLUDED.survey_width IS NOT NULL AND EXCLUDED.survey_width > 0) OR (request_items.survey_width IS NOT NULL AND request_items.survey_width > 0)),
+                            survey_width = COALESCE(EXCLUDED.survey_width, request_items.survey_width),
+                            survey_height = COALESCE(EXCLUDED.survey_height, request_items.survey_height),
+                            brand_changed_by_qcag = (EXCLUDED.brand_changed_by_qcag OR request_items.brand_changed_by_qcag),
+                            brand_changed_by = COALESCE(NULLIF(EXCLUDED.brand_changed_by, ''), request_items.brand_changed_by),
+                            added_by_qcag = (EXCLUDED.added_by_qcag OR request_items.added_by_qcag OR (request_items.added_by_qcag_by IS NOT NULL AND request_items.added_by_qcag_by != '') OR (EXCLUDED.added_by_qcag_by IS NOT NULL AND EXCLUDED.added_by_qcag_by != '')),
+                            added_by_qcag_by = COALESCE(NULLIF(EXCLUDED.added_by_qcag_by, ''), request_items.added_by_qcag_by),
+                            edited_by_qcag = (EXCLUDED.edited_by_qcag OR request_items.edited_by_qcag OR (request_items.edited_by_qcag_by IS NOT NULL AND request_items.edited_by_qcag_by != '') OR (EXCLUDED.edited_by_qcag_by IS NOT NULL AND EXCLUDED.edited_by_qcag_by != '')),
+                            edited_by_qcag_by = COALESCE(NULLIF(EXCLUDED.edited_by_qcag_by, ''), request_items.edited_by_qcag_by),
                             edited_by_qcag_at = COALESCE(EXCLUDED.edited_by_qcag_at, request_items.edited_by_qcag_at)
                     `, [
                         itemId, tkCode, seq, itemType, otherContent, action, brand,
