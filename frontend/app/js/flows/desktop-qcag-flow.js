@@ -3618,28 +3618,40 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
     }
   }
 
-  // Refresh completion alert / warning inside MQ footer
+  // 1. Cập nhật cảnh báo Khảo sát lên HEADER của block Upload MQ thiết kế (bỏ badge ở dưới)
+  const headerSurveyEl = document.getElementById('qcagHeaderSurveyWarn');
+  const needsSurvey = !isDone && cond.isSurveySizeIncomplete;
+  if (needsSurvey) {
+    if (!headerSurveyEl) {
+      const cardTitle = document.querySelector('.qcag-actions .qcag-subcard .qcag-card-title');
+      if (cardTitle) {
+        const span = document.createElement('span');
+        span.id = 'qcagHeaderSurveyWarn';
+        span.className = 'qcag-header-survey-tag';
+        span.style.cssText = 'display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(245,158,11,0.25);margin-left:auto;';
+        span.textContent = 'Chờ kích thước khảo sát';
+        cardTitle.appendChild(span);
+      }
+    }
+  } else if (headerSurveyEl) {
+    headerSurveyEl.remove();
+  }
+
+  // 2. Chế độ chỉnh sửa: Ghi gọn gàng dạng text nhẹ nhàng, BỎ BADGE to rườm rà (thiết kế mới không hiển thị gì)
   const footerLeft = document.querySelector('.qcag-mq-footer-left');
   let alertEl = document.getElementById('qcagCompletionAlert');
-  const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
-  const reqStatus = String(updatedRequest.status || '').toLowerCase();
-  const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
-
-  const shouldShowAlert = !isDone && !cond.canComplete;
-
-  if (shouldShowAlert) {
-    const hasMqMissing = isPendingEdit && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'));
-    const skipMqLink = hasMqMissing
-      ? ` <button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="margin-left:6px;font-size:11px;text-decoration:underline;color:var(--text-accent, #38bdf8);background:none;border:none;cursor:pointer;">Chỉ sửa nội dung/hạng mục (không đổi MQ)</button>`
-      : '';
-    const alertHtml = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Cần bổ sung: <strong>${escapeHtml(cond.missing.join(', '))}</strong>${skipMqLink}</span>`;
+  if (isPendingEdit && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) {
+    const hintHtml = `<span>Upload bản vẽ mới</span><span style="opacity:0.4">•</span><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11.5px;color:var(--text-accent, #38bdf8);text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button>`;
     if (alertEl) {
-      alertEl.innerHTML = alertHtml;
+      alertEl.className = 'qcag-edit-mq-hint';
+      alertEl.style.cssText = 'font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+      alertEl.innerHTML = hintHtml;
     } else if (footerLeft) {
       const node = document.createElement('div');
       node.id = 'qcagCompletionAlert';
-      node.className = 'qcag-incomplete-alert';
-      node.innerHTML = alertHtml;
+      node.className = 'qcag-edit-mq-hint';
+      node.style.cssText = 'font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;';
+      node.innerHTML = hintHtml;
       footerLeft.appendChild(node);
     }
   } else if (alertEl) {
@@ -5330,7 +5342,22 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         <div class="qcag-card">
           <div class="qcag-actions qcag-split-cards">
             <div class="qcag-subcard">
-              <div class="qcag-card-title">${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}<span id="qcagMQFilenameTitle" class="qcag-mq-filename text-xs font-normal text-gray-500 ml-2" style="color: #6b7280; font-size: 12px; font-weight: normal; margin-left: 8px;">${(!isWarranty && request.designFilename) ? `(${escapeHtml(request.designFilename.replace(/\.[^/.]+$/, ""))})` : ''}</span></div>
+              ${(() => {
+                const condH = qcagCheckCompletionConditions(request);
+                const isPendingH = qcagDesktopIsPendingEditRequest(request);
+                const isDoneH = (['done', 'processed', 'quoted', 'completed'].includes(String(request.status || '').toLowerCase()) || Boolean(request.quoteCode || request.quote_code)) && !isPendingH;
+                const surveyTag = (!isDoneH && condH.isSurveySizeIncomplete)
+                  ? `<span id="qcagHeaderSurveyWarn" class="qcag-header-survey-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:6px;border:1px solid rgba(245,158,11,0.25);margin-left:auto;">Chờ kích thước khảo sát</span>`
+                  : '';
+                return `
+              <div class="qcag-card-title" style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+                <div style="display:flex;align-items:center;min-width:0;">
+                  <span>${isWarranty ? 'Nghiệm thu bảo hành' : 'Upload MQ thiết kế'}</span>
+                  <span id="qcagMQFilenameTitle" class="qcag-mq-filename text-xs font-normal text-gray-500 ml-2" style="color: #6b7280; font-size: 12px; font-weight: normal; margin-left: 8px;">${(!isWarranty && request.designFilename) ? `(${escapeHtml(request.designFilename.replace(/\.[^/.]+$/, ""))})` : ''}</span>
+                </div>
+                ${surveyTag}
+              </div>`;
+              })()}
               <div class="qcag-subcard-body">
                 <div class="qcag-action-block">
                   <label class="qcag-upload-square qcag-mq-upload-square" data-upload-target="mq" title="${isWarranty ? 'Upload ảnh nghiệm thu (kéo thả hoặc click phải để dán)' : 'Upload MQ thiết kế (kéo thả hoặc click phải để dán)'}">
@@ -5430,12 +5457,8 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             : (designImgs.length === 0 ? escapeHtml(completeBtnDisabledTitle) : (cond.isSurveySizeIncomplete ? 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành' : '')));
 
         let warning = '';
-        if (!isDone && !cond.canComplete) {
-          const hasMqMissing = isPendingEdit && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'));
-          const skipMqLink = hasMqMissing
-            ? ` <button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="margin-left:6px;font-size:11px;text-decoration:underline;color:var(--text-accent, #38bdf8);background:none;border:none;cursor:pointer;">Chỉ sửa nội dung/hạng mục (không đổi MQ)</button>`
-            : '';
-          warning = `<div class="qcag-incomplete-alert" id="qcagCompletionAlert"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>Cần bổ sung: <strong>${escapeHtml(cond.missing.join(', '))}</strong>${skipMqLink}</span></div>`;
+        if (isPendingEdit && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) {
+          warning = `<div class="qcag-edit-mq-hint" id="qcagCompletionAlert" style="font-size:11.5px;color:#94a3b8;margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>Upload bản vẽ mới</span><span style="opacity:0.4">•</span><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11.5px;color:var(--text-accent, #38bdf8);text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button></div>`;
         }
 
         const finalBtnLabel = isDone
