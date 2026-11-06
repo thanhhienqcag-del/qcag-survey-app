@@ -6014,6 +6014,45 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
             console.warn('[approve-production] sync order_quotes warning:', oqErr && oqErr.message);
         }
 
+        // 2.5 CẬP NHẬT BẢNG LỊCH SỬ PHÊ DUYỆT SẢN XUẤT: ks_production_approvals (Lưu vĩnh viễn và đồng bộ 2 App)
+        try {
+            let foundTkCode = targetCode;
+            let foundOutletCode = outletCode || '';
+            try {
+                const [qRows] = await pool.query(
+                    `SELECT q.quote_code, COALESCE(q.request_tk_code, q.tk_code, '') AS tk_code, COALESCE(o.code, q.outlet_id, '') AS outlet_code 
+                     FROM quotations q 
+                     LEFT JOIN outlets o ON q.outlet_id = o.id 
+                     WHERE q.quote_code = ? OR q.request_tk_code = ? OR q.tk_code = ? LIMIT 1`,
+                    [targetCode, targetCode, targetCode]
+                );
+                if (qRows && qRows.length > 0) {
+                    if (qRows[0].tk_code) foundTkCode = qRows[0].tk_code;
+                    if (qRows[0].outlet_code) foundOutletCode = qRows[0].outlet_code;
+                }
+            } catch (_) {}
+
+            const [updResult] = await pool.query(`
+                UPDATE ks_production_approvals 
+                SET status = 'approved', 
+                    approved_by = ?, 
+                    approved_at = NOW(), 
+                    reject_reason = NULL,
+                    updated_at = NOW() 
+                WHERE quote_code = ? OR (tk_code IS NOT NULL AND tk_code = ?)
+            `, [approvedBy, targetCode, targetCode]);
+
+            const affected = (updResult && (updResult.rowCount || updResult.affectedRows)) || 0;
+            if (affected === 0) {
+                await pool.query(`
+                    INSERT INTO ks_production_approvals (quote_code, tk_code, outlet_code, status, approved_by, approved_at, created_at, updated_at)
+                    VALUES (?, ?, ?, 'approved', ?, NOW(), NOW(), NOW())
+                `, [targetCode, foundTkCode, foundOutletCode, approvedBy]);
+            }
+        } catch (paErr) {
+            console.warn('[approve-production] sync ks_production_approvals warning:', paErr && paErr.message);
+        }
+
         // 3. GHI LỊCH SỬ CHUẨN 3NF: notes
         try {
             const noteId = `nt_appr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -6089,6 +6128,45 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
             console.warn('[reject-production] sync order_quotes warning:', oqErr && oqErr.message);
         }
 
+        // 2.5 CẬP NHẬT BẢNG LỊCH SỬ PHÊ DUYỆT SẢN XUẤT: ks_production_approvals
+        try {
+            let foundTkCode = targetCode;
+            let foundOutletCode = outletCode || '';
+            try {
+                const [qRows] = await pool.query(
+                    `SELECT q.quote_code, COALESCE(q.request_tk_code, q.tk_code, '') AS tk_code, COALESCE(o.code, q.outlet_id, '') AS outlet_code 
+                     FROM quotations q 
+                     LEFT JOIN outlets o ON q.outlet_id = o.id 
+                     WHERE q.quote_code = ? OR q.request_tk_code = ? OR q.tk_code = ? LIMIT 1`,
+                    [targetCode, targetCode, targetCode]
+                );
+                if (qRows && qRows.length > 0) {
+                    if (qRows[0].tk_code) foundTkCode = qRows[0].tk_code;
+                    if (qRows[0].outlet_code) foundOutletCode = qRows[0].outlet_code;
+                }
+            } catch (_) {}
+
+            const [updResult] = await pool.query(`
+                UPDATE ks_production_approvals 
+                SET status = 'rejected', 
+                    reject_reason = ?, 
+                    approved_by = ?, 
+                    approved_at = NOW(), 
+                    updated_at = NOW() 
+                WHERE quote_code = ? OR (tk_code IS NOT NULL AND tk_code = ?)
+            `, [reason, rejectedBy, targetCode, targetCode]);
+
+            const affected = (updResult && (updResult.rowCount || updResult.affectedRows)) || 0;
+            if (affected === 0) {
+                await pool.query(`
+                    INSERT INTO ks_production_approvals (quote_code, tk_code, outlet_code, status, reject_reason, approved_by, approved_at, created_at, updated_at)
+                    VALUES (?, ?, ?, 'rejected', ?, ?, NOW(), NOW(), NOW())
+                `, [targetCode, foundTkCode, foundOutletCode, reason, rejectedBy]);
+            }
+        } catch (paErr) {
+            console.warn('[reject-production] sync ks_production_approvals warning:', paErr && paErr.message);
+        }
+
         // 3. GHI LỊCH SỬ CHUẨN 3NF: notes
         try {
             const noteId = `nt_rej_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -6121,6 +6199,76 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
     } catch (err) {
         console.error('POST /api/ks/requests/:id/reject-production error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'reject_failed' });
+    }
+});
+
+// ── POST /api/ks/requests/:id/revert-production-approval ────────────────
+app.post(['/api/ks/requests/:id/revert-production-approval', '/api/ks/requests/:id/undo-approve-production'], async (req, res) => {
+    try {
+        const rawId = String(req.params.id || '').trim();
+        if (!rawId) return res.status(400).json({ ok: false, error: 'missing_id' });
+
+        const extractCleanCode = (s) => {
+            if (!s) return '';
+            const m = String(s).match(/po_q_([A-Za-z0-9]+)_/);
+            return m && m[1] ? m[1] : String(s).trim();
+        };
+        const cleanCode = extractCleanCode(rawId);
+        const targetCode = cleanCode || rawId;
+
+        // 1. Cập nhật quotations
+        try {
+            await pool.query(`
+                UPDATE quotations 
+                SET is_confirmed = 0, 
+                    updated_at = NOW() 
+                WHERE quote_code = ? OR request_tk_code = ?
+            `, [targetCode, targetCode]);
+        } catch (_) {}
+
+        // 2. Cập nhật order_quotes
+        try {
+            await pool.query(`
+                UPDATE order_quotes 
+                SET approval_status = 'pending', 
+                    approved_by = NULL, 
+                    approved_at = NULL, 
+                    reject_reason = NULL 
+                WHERE quotation_code = ?
+            `, [targetCode]);
+        } catch (_) {}
+
+        // 3. Cập nhật ks_production_approvals
+        try {
+            await pool.query(`
+                UPDATE ks_production_approvals 
+                SET status = 'pending', 
+                    approved_by = NULL, 
+                    approved_at = NULL, 
+                    reject_reason = NULL, 
+                    updated_at = NOW() 
+                WHERE quote_code = ? OR tk_code = ?
+            `, [targetCode, targetCode]);
+        } catch (_) {}
+
+        // 4. Ghi chú 3NF
+        try {
+            const noteId = `nt_rev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            await pool.query(`
+                INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, created_at)
+                VALUES (?, 'quotation', ?, 'system', 'Đã hoàn tác trạng thái sản xuất về Chờ duyệt.', 'Hệ thống', NOW())
+            `, [noteId, targetCode]);
+        } catch (_) {}
+
+        wsInvalidate('pending_orders');
+        wsInvalidate('ks_requests', { action: 'update', id: targetCode });
+        wsInvalidate('quotations');
+        sseBroadcast({ type: 'production_approval', action: 'revert', quoteCode: targetCode });
+
+        return res.json({ ok: true, status: 'pending', quoteCode: targetCode });
+    } catch (err) {
+        console.error('POST /api/ks/requests/:id/revert-production-approval error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'revert_failed' });
     }
 });
 
