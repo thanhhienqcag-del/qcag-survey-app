@@ -3250,7 +3250,8 @@ const KS_REQUESTS_SELECT_SQL = `
         'region', COALESCE(u.region, o.area, ''),
         'ssName', COALESCE(u.ss_name, ''),
         'ssCode', '',
-        'isTBA', COALESCE(r.is_tba, false)
+        'isTBA', COALESCE(r.is_tba, false),
+        'isNPP', (EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%')
       )::text AS requester,
       '[]'::text AS comments,
       COALESCE((
@@ -3274,6 +3275,11 @@ const KS_REQUESTS_SELECT_SQL = `
       CASE 
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
+          AND NOT (
+            COALESCE(r.status, '') IN ('done', 'completed')
+            AND d_lat.created_at IS NOT NULL 
+            AND d_lat.created_at >= n_edit.created_at
+          )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
@@ -3297,6 +3303,7 @@ const KS_REQUESTS_SELECT_SQL = `
       '' AS ss_code,
       r.region,
       COALESCE(r.is_tba, false) AS is_tba,
+      COALESCE((EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%'), false) AS is_npp,
       COALESCE(r.delete_requested, false) AS delete_requested,
       COALESCE(r.delete_reason, '') AS delete_reason,
       r.delete_requested_at,
@@ -3452,7 +3459,8 @@ const KS_REQUESTS_LITE_SQL = `
         'region', COALESCE(u.region, o.area, ''),
         'ssName', COALESCE(u.ss_name, ''),
         'ssCode', '',
-        'isTBA', COALESCE(r.is_tba, false)
+        'isTBA', COALESCE(r.is_tba, false),
+        'isNPP', (EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%')
       )::text AS requester,
       '[]'::text AS comments,
       '[]'::text AS status_images,
@@ -3462,6 +3470,11 @@ const KS_REQUESTS_LITE_SQL = `
       CASE 
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
+          AND NOT (
+            COALESCE(r.status, '') IN ('done', 'completed')
+            AND d_lat.created_at IS NOT NULL 
+            AND d_lat.created_at >= n_edit.created_at
+          )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
@@ -3485,6 +3498,7 @@ const KS_REQUESTS_LITE_SQL = `
       '' AS ss_code,
       COALESCE(u.region, o.area, '') AS region,
       COALESCE(r.is_tba, false) AS is_tba,
+      COALESCE((EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%'), false) AS is_npp,
       COALESCE(r.delete_requested, false) AS delete_requested,
       COALESCE(r.delete_reason, '') AS delete_reason,
       r.delete_requested_at,
@@ -4091,6 +4105,7 @@ async function getRequestDetailDirect(idOrTkCode) {
             r.status,
             COALESCE(r.sub_status, 'pending')::varchar(32) AS design_status,
             COALESCE(r.is_tba, false) AS is_tba,
+      COALESCE((EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%'), false) AS is_npp,
             COALESCE(r.is_deleted, false) AS is_deleted,
             COALESCE(r.delete_requested, false) AS delete_requested,
             r.delete_requested_at,
@@ -4128,7 +4143,8 @@ async function getRequestDetailDirect(idOrTkCode) {
                 'region', COALESCE(u.region, o.area, ''),
                 'ssName', COALESCE(u.ss_name, ''),
                 'ssCode', '',
-                'isTBA', COALESCE(r.is_tba, false)
+                'isTBA', COALESCE(r.is_tba, false),
+        'isNPP', (EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%')
             )::text AS requester,
             r.mq_folder,
             COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
@@ -4310,6 +4326,16 @@ async function getRequestDetailDirect(idOrTkCode) {
                 }
             }
             editingRequestedAt = firstEditAfterRes ? (firstEditAfterRes.createdAt || firstEditAfterRes.created_at) : null;
+        }
+    }
+    // Chặn trường hợp đơn đã xong và đã cập nhật thiết kế sau mốc yêu cầu sửa
+    if (editingRequestedAt && ['done', 'completed'].includes(String(row.status || '').toLowerCase())) {
+        const editTime = new Date(editingRequestedAt).getTime();
+        const designUpdatedTime = (designRows && designRows.length > 0 && (designRows[0].updated_at || designRows[0].created_at)) 
+            ? new Date(designRows[0].updated_at || designRows[0].created_at).getTime() 
+            : 0;
+        if (designUpdatedTime >= editTime) {
+            editingRequestedAt = null;
         }
     }
     row.editing_requested_at = editingRequestedAt;
@@ -5452,17 +5478,25 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             try {
                 const [lastEditReqRows] = await pool.query(
                     `SELECT created_at FROM notes 
-                     WHERE ref_type = 'request' AND ref_id = ? AND note_type IN ('edit-request', 'edit_request')
+                     WHERE (
+                         (ref_type = 'request' AND (ref_id = ? OR ref_id = ?))
+                         OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ?))
+                     )
+                     AND note_type IN ('edit-request', 'edit_request')
                      ORDER BY created_at DESC LIMIT 1`,
-                    [tkCode]
+                    [tkCode, currentReq.id, tkCode]
                 );
                 if (lastEditReqRows && lastEditReqRows.length > 0) {
                     const lastEditTime = lastEditReqRows[0].created_at;
                     const [resolvedRows] = await pool.query(
                         `SELECT id FROM notes 
-                         WHERE ref_type = 'request' AND ref_id = ? AND note_type = 'edit-resolved' AND created_at >= ?
+                         WHERE (
+                             (ref_type = 'request' AND (ref_id = ? OR ref_id = ?))
+                             OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ?))
+                         )
+                         AND note_type = 'edit-resolved' AND created_at >= ?
                          LIMIT 1`,
-                        [tkCode, lastEditTime]
+                        [tkCode, currentReq.id, tkCode, lastEditTime]
                     );
                     if (!resolvedRows || resolvedRows.length === 0) {
                         const resNoteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;

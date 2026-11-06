@@ -665,12 +665,15 @@ function qcagGetWaitBadgeInfo(req) {
   }
 
   // Nhận diện trạng thái Chờ chỉnh sửa
-  const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
-  const isPendingEdit = Boolean(
-    s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit' ||
-    req.editingRequestedAt || req.editing_requested_at || req.hasEditRequest || req.isEditPending ||
-    (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req))
-  );
+  const isPendingEdit = (typeof qcagDesktopIsPendingEditRequest === 'function')
+    ? qcagDesktopIsPendingEditRequest(req)
+    : (() => {
+        if (!req || req.hasEditRequest === false || req.isEditPending === false) return false;
+        const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
+        if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') return true;
+        if (req.editingRequestedAt || req.editing_requested_at) return true;
+        return false;
+      })();
 
   let dateRef = req.createdAt || req.created_at;
   let hasHadDesign = false;

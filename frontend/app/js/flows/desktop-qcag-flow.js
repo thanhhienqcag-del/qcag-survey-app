@@ -99,7 +99,13 @@ function qcagDesktopGetRequestRegionKey(r) {
   if (r._cachedRegKey) return r._cachedRegKey;
   const requester = qcagDesktopParseJson(r.requester, {});
   const saleType = String(r.saleType || requester.saleType || '').toLowerCase();
-  const isNPP = saleType === 'npp' || Boolean(r.isNPP) || Boolean(requester.isNPP);
+  const hasNppItem = (() => {
+    try {
+      const items = Array.isArray(r.items) ? r.items : qcagDesktopParseJson(r.items, []);
+      return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
+    } catch (_) { return false; }
+  })();
+  const isNPP = saleType === 'npp' || Boolean(r.isNPP || r.is_npp) || Boolean(requester.isNPP || requester.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(r.outletName || r.outlet_name || ''));
   if (isNPP) {
     r._cachedRegKey = 'npp';
     return 'npp';
@@ -668,7 +674,8 @@ function qcagDesktopHasHeinekenEditRequest(req) {
   const latestEditReqIdx = (() => {
     for (let i = comments.length - 1; i >= 0; i -= 1) {
       const c = comments[i] || {};
-      if (String(c.commentType || '').toLowerCase() === 'edit-request') return i;
+      const ct = String(c.commentType || c.type || '').toLowerCase();
+      if (ct === 'edit-request' || ct === 'edit_request') return i;
     }
     return -1;
   })();
@@ -676,7 +683,10 @@ function qcagDesktopHasHeinekenEditRequest(req) {
   if (latestEditReqIdx === -1) return false;
 
   const hasResolvedAfter = comments.some((c, idx) =>
-    idx > latestEditReqIdx && String((c && c.commentType) || '').toLowerCase() === 'edit-resolved'
+    idx > latestEditReqIdx && (
+      String((c && (c.commentType || c.type)) || '').toLowerCase() === 'edit-resolved' ||
+      /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(String((c && (c.text || c.content)) || ''))
+    )
   );
 
   return !hasResolvedAfter;
@@ -694,12 +704,20 @@ function qcagDesktopHasLaterEditResolvedComment(comments, index) {
 
 function qcagDesktopIsPendingEditRequest(req) {
   if (!req) return false;
+  // Chặn cờ phủ quyết nếu client/server đã xác nhận không còn pending edit
+  if (req.hasEditRequest === false || req.isEditPending === false) {
+    return false;
+  }
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
     return true;
   }
   if (req.editingRequestedAt || req.editing_requested_at || req.hasEditRequest || req.isEditPending) {
     return true;
+  }
+  // Nếu status đã hoàn thành/done/quoted mà không có editing_requested_at từ backend thì tuyệt đối không tự ý xem là pending edit
+  if (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted') {
+    return false;
   }
   return Boolean(qcagDesktopHasHeinekenEditRequest(req));
 }
@@ -2883,12 +2901,18 @@ function renderQCAGDesktopList(forceRebuild = false) {
           <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(String(saleName || '-').toUpperCase())}</span> • ${escapeHtml(region)}</div>
           <div class="qcag-request-ss">${(() => {
           const sType = String((requester && requester.saleType) || '').toLowerCase();
-          const isNpp = sType === 'npp' || Boolean(requester && requester.isNPP);
-          const isTba = sType === 'tba' || Boolean(requester && requester.isTBA);
-          if (isTba) return '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
+          const hasNppItem = (() => {
+            try {
+              const items = Array.isArray(req.items) ? req.items : qcagDesktopParseJson(req.items, []);
+              return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
+            } catch (_) { return false; }
+          })();
+          const isNpp = sType === 'npp' || Boolean(requester && (requester.isNPP || requester.is_npp)) || Boolean(req.isNPP || req.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(req.outletName || req.outlet_name || ''));
+          const isTba = (sType === 'tba' || Boolean(requester && requester.isTBA) || Boolean(req.is_tba || req.isTba)) && !isNpp;
           if (isNpp) return '<span class="qcag-ss-npp" style="color:#10b981;font-size:11px;font-weight:600;font-style:normal;">Kênh NPP</span>';
-          const ss = (requester && requester.ssName) || '';
-          return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
+          if (isTba) return '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
+          const ss = (requester && requester.ssName) || (req && req.ssName) || (req && req.ss_name) || '';
+          return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-none" style="color:#64748b;font-size:11px;font-style:italic;">Chưa có SS</span>';
         })()}</div>
           <div class="qcag-request-footer">
             <div class="qcag-request-footer-left">
@@ -5208,8 +5232,16 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             <div><span>Khu vực</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || requester.area || request.region || '-'))}</strong></div>
             <div><span>${(() => {
           const sType = String(requester.saleType || '').toLowerCase();
-          if (sType === 'npp' || Boolean(requester.isNPP)) return 'Phân loại</span><strong style="color:#10b981;">Kênh NPP</strong>';
-          if (sType === 'tba' || Boolean(requester.isTBA)) return 'Phân loại</span><strong style="color:#f97316;">Kênh TBA</strong>';
+          const hasNppItem = (() => {
+            try {
+              const items = Array.isArray(request.items) ? request.items : qcagDesktopParseJson(request.items, []);
+              return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
+            } catch (_) { return false; }
+          })();
+          const isNpp = sType === 'npp' || Boolean(requester.isNPP || requester.is_npp) || Boolean(request.isNPP || request.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(request.outletName || request.outlet_name || ''));
+          const isTba = (sType === 'tba' || Boolean(requester.isTBA) || Boolean(request.is_tba || request.isTba)) && !isNpp;
+          if (isNpp) return 'Phân loại</span><strong style="color:#10b981;">Kênh NPP</strong>';
+          if (isTba) return 'Phân loại</span><strong style="color:#f97316;">Kênh TBA</strong>';
           return 'Tên SS/SE</span><strong>' + escapeHtml(String(requester.ssName || requester.ss_name || requester.seName || requester.se_name || '-').toUpperCase()) + '</strong>';
         })()}</div>
           </div>
