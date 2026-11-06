@@ -709,13 +709,21 @@ function qcagDesktopIsPendingEditRequest(req) {
     return false;
   }
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
+  const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
+
+  // 1. Ưu tiên tuyệt đối: sub_status từ DB là pending_edit hoặc edit_requested
+  if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
+    return true;
+  }
+  // 2. Status chính là yêu cầu chỉnh sửa
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
     return true;
   }
+  // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at || req.hasEditRequest || req.isEditPending) {
     return true;
   }
-  // Nếu status đã hoàn thành/done/quoted mà không có editing_requested_at từ backend thì tuyệt đối không tự ý xem là pending edit
+  // 4. Nếu status đã hoàn thành/done/quoted mà không có cờ chỉnh sửa thì không xem là pending edit
   if (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted') {
     return false;
   }
@@ -758,6 +766,10 @@ function qcagDesktopCanEditItems(req) {
 
 function qcagDesktopIsDone(req) {
   if (!req) return false;
+  // Nếu đơn đang có yêu cầu chỉnh sửa thì TUYỆT ĐỐI không coi là Done/Hoàn thành!
+  if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
+    return false;
+  }
   const s = String((req.status || '')).toLowerCase();
   return s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed';
 }
@@ -769,11 +781,11 @@ function qcagGetSaleProductionApprovalStatus(req) {
   // 1. Tra cứu ưu tiên từ cache Map toàn cục từ DB (đồng bộ 100% với App 1)
   if (typeof window !== 'undefined' && window._qcagProductionApprovalStatusMap) {
     const map = window._qcagProductionApprovalStatusMap;
+    // Tuyệt đối chỉ tra theo quote_code và tk_code (Sợi chỉ đỏ nghiệp vụ)
+    // Nghiêm cấm dùng req.id (PK DB) hoặc outlet_code vì gây nhầm lẫn giữa các đơn
     const keys = [
       req.quoteCode, req.quote_code,
-      req.tkCode, req.tk_code,
-      req.outletCode, req.outlet_code,
-      req.__backendId, req.id
+      req.tkCode, req.tk_code
     ].filter(Boolean);
 
     for (let i = 0; i < keys.length; i++) {

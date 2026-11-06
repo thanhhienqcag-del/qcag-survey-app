@@ -3137,6 +3137,8 @@ function ksRowToApp(row, lightweight = false) {
         comments: commentsStr,
         requester: JSON.stringify(requesterObj),
         status: row.status || 'pending',
+        subStatus: row.sub_status || row.design_status || 'pending',
+        sub_status: row.sub_status || row.design_status || 'pending',
         deleteRequested: Boolean(row.delete_requested),
         deleteReason: row.delete_reason || '',
         deleteRequestedAt: safeIsoDate(row.delete_requested_at),
@@ -3242,6 +3244,7 @@ const KS_REQUESTS_SELECT_SQL = `
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
       r.status,
+      COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
@@ -3451,6 +3454,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
       r.status,
+      COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
@@ -5799,7 +5803,6 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                     if (cleanCode) { map[cleanCode] = item; map[cleanCode.toLowerCase()] = item; }
                     if (rawCode) { map[rawCode] = item; map[rawCode.toLowerCase()] = item; }
                     if (tkCode) { map[tkCode] = item; map[tkCode.toLowerCase()] = item; }
-                    if (outletCode) { map[outletCode] = item; map[outletCode.toLowerCase()] = item; }
                 });
             } catch (apprErr) {
                 console.warn('[production-approvals] ks_production_approvals query warning:', apprErr && apprErr.message);
@@ -5850,7 +5853,6 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                     if (cleanCode) { map[cleanCode] = item; map[cleanCode.toLowerCase()] = item; }
                     if (rawCode) { map[rawCode] = item; map[rawCode.toLowerCase()] = item; }
                     if (tkCode && !map[tkCode.toLowerCase()]) { map[tkCode] = item; map[tkCode.toLowerCase()] = item; }
-                    if (outletCode && !map[outletCode.toLowerCase()]) { map[outletCode] = item; map[outletCode.toLowerCase()] = item; }
                 });
             } catch (v12Err) {
                 console.warn('[production-approvals] v12 query warning:', v12Err && v12Err.message);
@@ -5938,7 +5940,6 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                     if (cleanQCode) { map[cleanQCode] = item; map[cleanQCode.toLowerCase()] = item; }
                     if (qCode) { map[qCode] = item; map[qCode.toLowerCase()] = item; }
                     if (tkCode) { map[tkCode] = item; map[tkCode.toLowerCase()] = item; }
-                    if (outletCode) { map[outletCode] = item; map[outletCode.toLowerCase()] = item; }
                 });
             } catch (noteErr) {
                 console.warn('[production-approvals] edit-request notes warning:', noteErr && noteErr.message);
