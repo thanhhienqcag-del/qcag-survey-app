@@ -6196,14 +6196,30 @@ async function qcagDesktopMarkProcessed() {
 
     const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
     if (isPendingEdit) {
-      comments.push({
-        authorRole: 'qcag',
-        authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
-        commentType: 'edit-resolved',
-        text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
-        readBy: [],
-        createdAt: new Date().toISOString()
-      });
+      // Chống duplicate: Chỉ push nếu tin nhắn cuối cùng chưa phải là edit-resolved vừa tạo
+      const lastC = comments.length > 0 ? comments[comments.length - 1] : null;
+      const isAlreadyResolvedLast = lastC && (lastC.commentType === 'edit-resolved' || String(lastC.text || '').includes('đã chỉnh sửa xong'));
+      if (!isAlreadyResolvedLast) {
+        comments.push({
+          authorRole: 'qcag',
+          authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
+          commentType: 'edit-resolved',
+          text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
+          readBy: [],
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
+    // Dọn dẹp triệt để tin nhắn edit-resolved trùng lặp liên tiếp (nếu từng bị click nhiều lần)
+    const dedupedComments = [];
+    for (let i = 0; i < comments.length; i++) {
+      const cur = comments[i];
+      const prev = dedupedComments[dedupedComments.length - 1];
+      if (prev && cur && cur.commentType === 'edit-resolved' && prev.commentType === 'edit-resolved' && cur.text === prev.text) {
+        continue; // Bỏ qua tin nhắn trùng lặp liên tiếp
+      }
+      dedupedComments.push(cur);
     }
     const now = new Date().toISOString();
     // If this is the first time a MQ is confirmed (complete), record the creator
@@ -6235,6 +6251,8 @@ async function qcagDesktopMarkProcessed() {
     const patchPayload = {
       __backendId: currentDetailRequest.__backendId,
       status: 'done',
+      subStatus: null,
+      sub_status: null,
       processedAt: now,
       updatedAt: now,
       editingRequestedAt: null,
@@ -6243,7 +6261,7 @@ async function qcagDesktopMarkProcessed() {
       isEditPending: false,
       productionApprovalStatus: 'approved',
       production_approval_status: 'approved',
-      comments: JSON.stringify(comments),
+      comments: JSON.stringify(dedupedComments),
       designImages: _finalDesignImgStr,
       designFilename: currentDetailRequest.designFilename || '',
       ...extraFields
@@ -6254,6 +6272,8 @@ async function qcagDesktopMarkProcessed() {
     const updated = {
       ...currentDetailRequest,
       ...patchPayload,
+      subStatus: null,
+      sub_status: null,
       hasEditRequest: false,
       isEditPending: false,
       editingRequestedAt: null,

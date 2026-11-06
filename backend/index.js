@@ -5043,15 +5043,46 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
                 if (existingById && existingById.length > 0) continue;
             }
 
-            // 2. Chống duplicate triệt để: Nếu cùng ref_id và cùng content đã tồn tại trong notes (bất kể thời điểm nào)
-            // thì TUYỆT ĐỐI KHÔNG insert lại để tránh replay comment lịch sử cũ làm hỏng trạng thái yêu cầu sửa!
-            const [existing] = await pool.query(
-                `SELECT id FROM notes 
-                 WHERE ref_type = 'request' AND ref_id = ? AND content = ? 
-                 LIMIT 1`,
-                [tkCode, cText]
-            );
-            if (existing && existing.length > 0) continue;
+            // 2. Chống duplicate thông minh:
+            if (isEditResolved) {
+                // Với edit-resolved: Kiểm tra xem sau yêu cầu sửa (edit-request) gần nhất, đã có note edit-resolved nào chưa?
+                const [lastEditReqRows] = await pool.query(
+                    `SELECT created_at FROM notes 
+                     WHERE ref_type = 'request' AND ref_id = ? AND note_type IN ('edit-request', 'edit_request')
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [tkCode]
+                );
+                const lastEditReqTime = (lastEditReqRows && lastEditReqRows.length > 0) ? lastEditReqRows[0].created_at : null;
+
+                if (lastEditReqTime) {
+                    // Nếu sau yêu cầu sửa gần nhất ĐÃ CÓ note edit-resolved -> Đã giải quyết rồi, không insert trùng
+                    const [existingAfterEdit] = await pool.query(
+                        `SELECT id FROM notes 
+                         WHERE ref_type = 'request' AND ref_id = ? AND note_type = 'edit-resolved' AND created_at >= ?
+                         LIMIT 1`,
+                        [tkCode, lastEditReqTime]
+                    );
+                    if (existingAfterEdit && existingAfterEdit.length > 0) continue;
+                } else {
+                    // Nếu không có edit-request nào, kiểm tra xem trong vòng 2 phút qua đã có edit-resolved chưa
+                    const [recentResolved] = await pool.query(
+                        `SELECT id FROM notes 
+                         WHERE ref_type = 'request' AND ref_id = ? AND note_type = 'edit-resolved' AND created_at >= NOW() - INTERVAL '2 minutes'
+                         LIMIT 1`,
+                        [tkCode]
+                    );
+                    if (recentResolved && recentResolved.length > 0) continue;
+                }
+            } else {
+                // Với các note trao đổi thông thường: Chống spam double click trong vòng 10 giây
+                const [existingRecent] = await pool.query(
+                    `SELECT id FROM notes 
+                     WHERE ref_type = 'request' AND ref_id = ? AND content = ? AND created_at >= NOW() - INTERVAL '10 seconds'
+                     LIMIT 1`,
+                    [tkCode, cText]
+                );
+                if (existingRecent && existingRecent.length > 0) continue;
+            }
 
             const noteId = (item.id && String(item.id).startsWith('nt_')) ? item.id : `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
             const noteCreatedAt = (item.createdAt || item.created_at) ? new Date(item.createdAt || item.created_at) : new Date();
@@ -5277,7 +5308,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         maybeStr('deleteStatus', 'delete_status');
         maybeStr('deleteRejectReason', 'delete_reject_reason');
         maybeStr('status', 'status');
-        maybeStr('subStatus', 'sub_status');
+        if (b.status === 'done' || b.subStatus === null || b.sub_status === null || b.hasEditRequest === false || b.isEditPending === false) {
+            fields.push('sub_status = NULL');
+        } else {
+            maybeStr('subStatus', 'sub_status');
+        }
         maybeStr('type', 'type');
         if ('isTba' in b) {
             fields.push('is_tba = ?');
@@ -5407,6 +5442,40 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             } else if (isValidArray && itemsToSave.length === 0 && b.allowEmptyItems === true) {
                 // Triệt để bảo vệ request_items: Chỉ xóa khi client chủ động truyền cờ allowEmptyItems === true
                 await pool.query(`DELETE FROM request_items WHERE request_tk_code = ?`, [tkCode]);
+            }
+        }
+
+        // Tự động bảo vệ Zero-Trust cho luồng chỉnh sửa MQ:
+        // Nếu đơn hoàn thành / xác nhận chỉnh sửa mà vẫn còn edit-request chưa có edit-resolved, tự động tạo note edit-resolved
+        const isConfirmingEdit = (b.status === 'done' || b.hasEditRequest === false || b.isEditPending === false || b.editingRequestedAt === null);
+        if (isConfirmingEdit) {
+            try {
+                const [lastEditReqRows] = await pool.query(
+                    `SELECT created_at FROM notes 
+                     WHERE ref_type = 'request' AND ref_id = ? AND note_type IN ('edit-request', 'edit_request')
+                     ORDER BY created_at DESC LIMIT 1`,
+                    [tkCode]
+                );
+                if (lastEditReqRows && lastEditReqRows.length > 0) {
+                    const lastEditTime = lastEditReqRows[0].created_at;
+                    const [resolvedRows] = await pool.query(
+                        `SELECT id FROM notes 
+                         WHERE ref_type = 'request' AND ref_id = ? AND note_type = 'edit-resolved' AND created_at >= ?
+                         LIMIT 1`,
+                        [tkCode, lastEditTime]
+                    );
+                    if (!resolvedRows || resolvedRows.length === 0) {
+                        const resNoteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                        const resAuthor = String(b.designLastEditedBy || b.designCreatedBy || 'Nguyễn Thanh Hiển').trim();
+                        await pool.query(`
+                            INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, created_at)
+                            VALUES (?, 'request', ?, 'edit-resolved', 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.', ?, NOW())
+                        `, [resNoteId, tkCode, resAuthor]);
+                        console.log(`[ks/update] Zero-Trust auto-inserted edit-resolved for ${tkCode}`);
+                    }
+                }
+            } catch (autoResErr) {
+                console.warn('[ks/update] auto edit-resolved check warning:', autoResErr && autoResErr.message);
             }
         }
 
