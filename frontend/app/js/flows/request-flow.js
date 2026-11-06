@@ -1962,7 +1962,8 @@ async function checkOutletDuplicate() {
         otherOutletState = {
           outletCode: code,
           matches: [rec],
-          ownerName: data.saleName || rec.sale_name || 'Sale khác'
+          ownerName: data.saleName || rec.sale_name || 'Sale khác',
+          backendLock: data
         };
         userConfirmedTakeover = false;
         renderOutletCodeStatusBox(data.state, data);
@@ -2103,7 +2104,6 @@ function closeDuplicateOutletModalSilent() {
 
 function showDuplicateOutletModal(existingOrArray) {
   try { blurActiveInput(); } catch (e) {}
-  try { enableModalBackdrop(); } catch (e) {}
   const modal = document.getElementById('duplicateOutletModal');
   const titleEl = document.getElementById('duplicateOutletTitle');
   const msgEl = document.getElementById('duplicateOutletMessage');
@@ -2111,7 +2111,10 @@ function showDuplicateOutletModal(existingOrArray) {
   const iconEl = document.getElementById('duplicateOutletIcon');
   const btnPrimary = document.getElementById('dupPrimaryBtn');
   const btnSecondary = document.getElementById('dupSecondaryBtn');
-  if (!modal || !existingOrArray) return;
+  if (!modal || !existingOrArray) {
+    try { disableModalBackdrop(); } catch (e) {}
+    return;
+  }
 
   try {
     const isPendingMode = duplicateOutletState && duplicateOutletState.mode === 'pending';
@@ -2119,7 +2122,10 @@ function showDuplicateOutletModal(existingOrArray) {
       ? (duplicateOutletState.activeRequest || duplicateOutletState.existingRequest)
       : (duplicateOutletState && duplicateOutletState.latestProduced ? duplicateOutletState.latestProduced : (duplicateOutletState && duplicateOutletState.existingRequest));
 
-    if (!isPendingMode) return;
+    if (!isPendingMode) {
+      try { disableModalBackdrop(); } catch (e) {}
+      return;
+    }
 
     // ══════════════════════════════════════════════════════════════════
     // LUỒNG: YÊU CẦU CHƯA SẢN XUẤT (Chặn tạo mới, chỉ cho sửa trên yêu cầu cũ)
@@ -2211,6 +2217,7 @@ function showDuplicateOutletModal(existingOrArray) {
     enableModalBackdrop();
   } catch (err) {
     console.error('[showDuplicateOutletModal] error:', err);
+    try { disableModalBackdrop(); } catch (e) {}
   }
 }
 
@@ -2315,10 +2322,12 @@ function closeDuplicateOutletModal() {
 
 function showOtherOutletModal(matches) {
   try { blurActiveInput(); } catch (e) {}
-  try { enableModalBackdrop(); } catch (e) {}
   const modal = document.getElementById('otherOutletModal');
   const msg = document.getElementById('otherOutletMessage');
-  if (!modal || !msg || !matches || !matches.length) return;
+  if (!modal || !msg || !matches || !matches.length) {
+    try { disableModalBackdrop(); } catch (e) {}
+    return;
+  }
 
   const nowYear = new Date().getFullYear();
   let otherName = '';
@@ -2343,6 +2352,7 @@ function showOtherOutletModal(matches) {
   }
 
   modal.classList.remove('hidden');
+  try { enableModalBackdrop(); } catch (e) {}
 }
 
 async function confirmTakeoverOutlet() {
@@ -2399,14 +2409,29 @@ async function confirmTakeoverOutlet() {
 
   // Mark as confirmed takeover (so we don't re-prompt other-outlet checks)
   userConfirmedTakeover = true;
+
+  // Prepare duplicate state as these requests now belong to current user
+  const firstReq = matches[0] || {};
+  const lockData = (otherOutletState && otherOutletState.backendLock) || {};
+  const currentOutletCode = (firstReq.outletCode || firstReq.outlet_code || (otherOutletState && otherOutletState.outletCode) || '').toString().trim();
+
+  duplicateOutletState = {
+    mode: 'pending',
+    outletCode: currentOutletCode,
+    backendLock: lockData,
+    activeRequest: firstReq,
+    existingRequest: firstReq,
+    allPending: matches
+  };
+
   // Clear otherOutletState now that takeover is applied
   otherOutletState = null;
 
-  // Prepare duplicate state as these requests now belong to current user
-  duplicateOutletState = { outletCode: (matches[0] && matches[0].outletCode) || '', existingRequest: matches[0], existingRequests: matches };
-
   // Auto-fill Tab 1 with the outlet's existing info (silent)
-  try { fillOutletFieldsFromExisting(matches[0]); } catch (e) {}
+  try { fillOutletFieldsFromExisting({ ...firstReq, ...lockData }); } catch (e) {}
+
+  // Render status box on outlet code input
+  try { renderOutletCodeStatusBox('locked_pending', lockData); } catch (e) {}
 
   // Show the duplicate modal for the (now) owned requests so user can choose to view old request(s) or create a new item
   try { showDuplicateOutletModal(matches); } catch (e) {}
