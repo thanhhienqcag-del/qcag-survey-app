@@ -552,9 +552,9 @@ function qcagDesktopDesignState(req) {
 function qcagItemNeedsSurvey(it, req) {
   if (!it || typeof it !== 'object' || it.type === 'Hạng mục khác') return false;
 
-  // 1. Nếu đơn hoặc hạng mục dùng nội dung / kích thước cũ -> KHÔNG khảo sát
-  const isReqOld = Boolean(req && (req.oldContent || req.old_content));
-  const isItemOldSize = Boolean(it.useOldSize || it.use_old_size || isReqOld);
+  // 1. Chỉ khi hạng mục được chọn "Kích thước cũ" (useOldSize) -> KHÔNG khảo sát
+  // (Lưu ý: req.oldContent là nội dung bảng hiệu cũ, KHÔNG đồng nghĩa với kích thước cũ)
+  const isItemOldSize = Boolean(it.useOldSize || it.use_old_size);
   if (isItemOldSize) return false;
 
   // 2. Kiểm tra cờ khảo sát rõ ràng do Sale yêu cầu
@@ -589,9 +589,6 @@ function qcagRequestNeedsSurvey(req) {
   const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) &&
     !(typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req));
   if (isDone) return false;
-
-  // Nếu là nội dung cũ hoàn toàn -> Không bao giờ chờ khảo sát
-  if (req.oldContent || req.old_content) return false;
 
   const items = qcagDesktopParseJson(req.items || req.surveyItems, []);
   if (Array.isArray(items) && items.length > 0) {
@@ -4206,7 +4203,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
 
       const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
 
-      const isItemOldSize = Boolean(item.useOldSize || item.use_old_size || (reqObj && (reqObj.oldContent || reqObj.old_content)));
+      const isItemOldSize = Boolean(item.useOldSize || item.use_old_size);
       const isSurveyFlag = !isItemOldSize && Boolean(
         item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
         item.survey_required || item.is_survey ||

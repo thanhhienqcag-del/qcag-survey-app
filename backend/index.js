@@ -3230,16 +3230,13 @@ const KS_REQUESTS_SELECT_SQL = `
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
       ), '[]') AS items,
-      (
-        COALESCE(r.old_content, false) = false
-        AND EXISTS(
-          SELECT 1 FROM request_items ri 
-          WHERE ri.request_tk_code = r.tk_code 
-            AND COALESCE(ri.survey, false) = true 
-            AND COALESCE(ri.use_old_size, false) = false
-            AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
-            AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
-        )
+      EXISTS(
+        SELECT 1 FROM request_items ri 
+        WHERE ri.request_tk_code = r.tk_code 
+          AND COALESCE(ri.survey, false) = true 
+          AND COALESCE(ri.use_old_size, false) = false
+          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+          AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -3435,16 +3432,13 @@ const KS_REQUESTS_LITE_SQL = `
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
       ), '[]') AS items,
-      (
-        COALESCE(r.old_content, false) = false
-        AND EXISTS(
-          SELECT 1 FROM request_items ri 
-          WHERE ri.request_tk_code = r.tk_code 
-            AND COALESCE(ri.survey, false) = true 
-            AND COALESCE(ri.use_old_size, false) = false
-            AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
-            AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
-        )
+      EXISTS(
+        SELECT 1 FROM request_items ri 
+        WHERE ri.request_tk_code = r.tk_code 
+          AND COALESCE(ri.survey, false) = true 
+          AND COALESCE(ri.use_old_size, false) = false
+          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+          AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -4320,8 +4314,7 @@ async function getRequestDetailDirect(idOrTkCode) {
     }
     row.editing_requested_at = editingRequestedAt;
     row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
-    const isOldContent = Boolean(row.old_content || row.oldContent);
-    row.has_pending_survey = !isOldContent && (finalItems || []).some(it => {
+    row.has_pending_survey = (finalItems || []).some(it => {
         if (!it || it.type === 'Hạng mục khác') return false;
         const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
         if (!isSurvey) return false;
