@@ -4954,6 +4954,7 @@ async function submitEditRequest() {
   }
 
   const comment = {
+    id: `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     authorRole,
     authorName,
     text: finalText,
@@ -5001,6 +5002,8 @@ async function submitEditRequest() {
       editingRequestedAt: initialEditDate,
       editing_requested_at: initialEditDate,
       hasEditRequest: true,
+      subStatus: 'pending_edit',
+      sub_status: 'pending_edit',
       status: 'processing'
     };
   }

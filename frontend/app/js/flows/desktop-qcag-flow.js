@@ -548,6 +548,62 @@ function qcagDesktopDesignState(req) {
   return designImgs.length > 0 ? 'Có MQ thiết kế' : 'Chờ MQ thiết kế';
 }
 
+// Kiểm tra 1 hạng mục có cần số đo khảo sát thực địa hay không (chuẩn hóa toàn hệ thống)
+function qcagItemNeedsSurvey(it, req) {
+  if (!it || typeof it !== 'object' || it.type === 'Hạng mục khác') return false;
+
+  // 1. Nếu đơn hoặc hạng mục dùng nội dung / kích thước cũ -> KHÔNG khảo sát
+  const isReqOld = Boolean(req && (req.oldContent || req.old_content));
+  const isItemOldSize = Boolean(it.useOldSize || it.use_old_size || isReqOld);
+  if (isItemOldSize) return false;
+
+  // 2. Kiểm tra cờ khảo sát rõ ràng do Sale yêu cầu
+  const isSurveyRequested = Boolean(
+    it.survey === true || it.survey === 1 || String(it.survey) === 'true' ||
+    it.survey_required || it.is_survey ||
+    (it.note && String(it.note).toLowerCase().includes('yêu cầu khảo sát'))
+  );
+  if (!isSurveyRequested) return false;
+
+  // 3. Nếu đã có số đo khảo sát -> Đã xong khảo sát
+  const hasSurveySize = Boolean(
+    (it.surveySize && Number(it.surveySize.width) > 0 && Number(it.surveySize.height) > 0) ||
+    (Number(it.survey_width) > 0 && Number(it.survey_height) > 0)
+  );
+  if (hasSurveySize) return false;
+
+  // 4. Nếu đã có kích thước chuẩn nhập sẵn -> Không cần khảo sát lại
+  const hasValidDims = Boolean(Number(it.width) > 0 && Number(it.height) > 0);
+  if (hasValidDims) return false;
+
+  return true;
+}
+
+// Kiểm tra 1 request có đang ở trạng thái 'Chờ khảo sát' hay không (chuẩn hóa đồng bộ List & Detail)
+function qcagRequestNeedsSurvey(req) {
+  if (!req || typeof req !== 'object') return false;
+
+  // Đơn đã xong hoặc đã có báo giá -> Không chờ khảo sát
+  const s = String(req.status || 'pending').toLowerCase();
+  const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
+  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) &&
+    !(typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req));
+  if (isDone) return false;
+
+  // Nếu là nội dung cũ hoàn toàn -> Không bao giờ chờ khảo sát
+  if (req.oldContent || req.old_content) return false;
+
+  const items = qcagDesktopParseJson(req.items || req.surveyItems, []);
+  if (Array.isArray(items) && items.length > 0) {
+    return items.some(it => qcagItemNeedsSurvey(it, req));
+  }
+
+  // Khi chưa nạp items, dựa vào cờ server (đã được backend lọc chuẩn)
+  const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey);
+  const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
+  return hasSurveyFlag && !hasSurveyDone;
+}
+
 // Assign standardized tags for UI-independent classification.
 function assignStandardTags(req) {
   if (!req || typeof req !== 'object') return [];
@@ -556,19 +612,14 @@ function assignStandardTags(req) {
   // Common helpers
   const designImgs = qcagDesktopParseJson(req.designImages, []);
   const statusImgs = qcagDesktopParseJson(req.statusImages, []);
-  const items = qcagDesktopParseJson(req.items, []);
   const status = String(req.status || 'pending').toLowerCase();
 
   // Processing / Yêu cầu (new)
   if (String(req.type || '').toLowerCase() === 'new') {
     const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed');
-    const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey);
-    const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
-    const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
+    const isWaitingSurvey = qcagRequestNeedsSurvey(req);
 
     // 1. Chờ khảo sát (ƯU TIÊN CAO NHẤT OVERLAY TRÊN HẾT)
-    const hasItems = Array.isArray(items) && items.length > 0;
-    const isWaitingSurvey = hasItems ? hasSurveyItemNeedSize : (hasSurveyFlag && !hasSurveyDone);
     if (!isDone && isWaitingSurvey) {
       tags.push('Chờ khảo sát');
     }
@@ -2124,15 +2175,7 @@ function qcagDesktopStatusBadge(req) {
   const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
   const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) && !qcagDesktopIsPendingEditRequest(req);
 
-  const stdTags = Array.isArray(req.standardTags) ? req.standardTags : ((typeof assignStandardTags === 'function' ? assignStandardTags(req) : []) || []);
-  const items = qcagDesktopParseJson(req && (req.items || req.surveyItems), []);
-  const hasSurveyItemNeedSize = Array.isArray(items) && items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
-  const hasSurveyFlag = Boolean(req.has_pending_survey || req.hasPendingSurvey || req.surveyRequired || req.survey_required || req.needSurvey || req.need_survey || (Array.isArray(stdTags) && stdTags.indexOf('Chờ khảo sát') !== -1));
-  const hasSurveyDone = Boolean(req.surveyMeasurements || req.survey_measurements || (Array.isArray(req.surveyImages) && req.surveyImages.length > 0) || (Array.isArray(req.survey_images) && req.survey_images.length > 0));
-
-  const hasItems = Array.isArray(items) && items.length > 0;
-  const isWaitingSurvey = hasItems ? hasSurveyItemNeedSize : (hasSurveyFlag && !hasSurveyDone);
-
+  const isWaitingSurvey = qcagRequestNeedsSurvey(req);
   if (!isDone && isWaitingSurvey) {
     return { label: 'Chờ khảo sát', cls: 'pending-survey' };
   }
@@ -4052,27 +4095,7 @@ function qcagDesktopCommentHtml(comment, allComments, commentIndex) {
 
 function qcagDesktopIsSurveySizeIncomplete(request) {
   if (!request) return false;
-  if (request.has_pending_survey === true || request.hasPendingSurvey === true) return true;
-  const items = qcagDesktopParseJson(request.items, []);
-  if (!Array.isArray(items)) return false;
-  return items.some(item => {
-    if (!item) return false;
-    if (item.type === 'Hạng mục khác') return false;
-    const isSurvey = Boolean(
-      item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
-      item.survey_required || item.is_survey ||
-      (!item.width && !item.height && !item.useOldSize && (item.action === 'Làm mới' || (item.note && String(item.note).toLowerCase().includes('khảo sát'))))
-    );
-    if (!isSurvey) return false;
-    const hasValidSurveySize = Boolean(
-      (item.surveySize && parseFloat(item.surveySize.width) > 0 && parseFloat(item.surveySize.height) > 0) ||
-      (item.survey_width && item.survey_height && parseFloat(item.survey_width) > 0 && parseFloat(item.survey_height) > 0)
-    );
-    const hasValidDirectSize = Boolean(
-      item.width && item.height && parseFloat(item.width) > 0 && parseFloat(item.height) > 0
-    );
-    return !hasValidSurveySize && !hasValidDirectSize;
-  });
+  return qcagRequestNeedsSurvey(request);
 }
 
 function qcagFormatDim(val) {
@@ -4183,10 +4206,11 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
 
       const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
 
-      const isSurveyFlag = Boolean(
+      const isItemOldSize = Boolean(item.useOldSize || item.use_old_size || (reqObj && (reqObj.oldContent || reqObj.old_content)));
+      const isSurveyFlag = !isItemOldSize && Boolean(
         item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
         item.survey_required || item.is_survey ||
-        (!item.width && !item.height && !item.useOldSize && (item.action === 'Làm mới' || (item.note && String(item.note).toLowerCase().includes('khảo sát'))))
+        (item.note && String(item.note).toLowerCase().includes('yêu cầu khảo sát'))
       );
       if (isSurveyFlag) {
         if (hasValidSurveySize) {
@@ -4209,7 +4233,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
               </button>` : '';
           size = `<span class="qcag-survey-badge">Khảo sát</span>${editBtn}`;
         }
-      } else if (item.useOldSize) {
+      } else if (isItemOldSize) {
         size = 'KT cũ';
       } else {
         const dimText = qcagFormatDimensionText(item.width, item.height);
@@ -4467,7 +4491,7 @@ async function qcagConfirmSurveySize() {
   const autoCommentText = `Outlet ${outletName}: Xác nhận kích thước khảo sát ${itemType} là ${qcagFormatDimensionText(w, h)} vào ${displayTime}.`;
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
 
-  const stillNeedsSurvey = items.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey || (!it.width && !it.height && !it.useOldSize && (it.action === 'Làm mới' || (it.note && String(it.note).toLowerCase().includes('khảo sát'))))) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+  const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   
   const reqBackendId = currentDetailRequest.__backendId || currentDetailRequest.id;
   const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === reqBackendId || r.id === reqBackendId || (currentDetailRequest.tkCode && (r.tkCode === currentDetailRequest.tkCode || r.tk_code === currentDetailRequest.tkCode))) : null;
@@ -5656,16 +5680,15 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
       }
 
       // Sync full item metadata back into allRequests and cache so list sorting/filtering remains consistent
-      if (full && full.items) {
-        const fullItems = qcagDesktopParseJson(full.items, []);
-        const stillNeedsSurvey = fullItems.some(it => it && it.type !== 'Hạng mục khác' && (it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+      if (full) {
+        const stillNeedsSurvey = qcagRequestNeedsSurvey(full);
         full.hasPendingSurvey = stillNeedsSurvey;
         full.has_pending_survey = stillNeedsSurvey;
-        const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === id || r.id === id || (full.tkCode && r.tkCode === full.tkCode)) : null;
+        const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === id || r.id === id || (full.tkCode && (r.tkCode === full.tkCode || r.tk_code === full.tkCode))) : null;
         if (inAll) {
           inAll.hasPendingSurvey = stillNeedsSurvey;
           inAll.has_pending_survey = stillNeedsSurvey;
-          inAll.items = full.items;
+          if (full.items) inAll.items = full.items;
           if (typeof assignStandardTags === 'function') inAll.standardTags = assignStandardTags(inAll);
         }
       }

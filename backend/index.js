@@ -3198,6 +3198,7 @@ const KS_REQUESTS_SELECT_SQL = `
           'width', ri.width,
           'height', ri.height,
           'useOldSize', ri.use_old_size,
+          'use_old_size', COALESCE(ri.use_old_size, false),
           'poles', ri.poles,
           'note', ri.note,
           'brandChangedByQcag', ri.brand_changed_by_qcag,
@@ -3229,11 +3230,16 @@ const KS_REQUESTS_SELECT_SQL = `
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
       ), '[]') AS items,
-      EXISTS(
-        SELECT 1 FROM request_items ri 
-        WHERE ri.request_tk_code = r.tk_code 
-          AND COALESCE(ri.survey, false) = true 
-          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+      (
+        COALESCE(r.old_content, false) = false
+        AND EXISTS(
+          SELECT 1 FROM request_items ri 
+          WHERE ri.request_tk_code = r.tk_code 
+            AND COALESCE(ri.survey, false) = true 
+            AND COALESCE(ri.use_old_size, false) = false
+            AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+            AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+        )
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -3406,6 +3412,8 @@ const KS_REQUESTS_LITE_SQL = `
           'brand', ri.brand,
           'width', ri.width,
           'height', ri.height,
+          'useOldSize', COALESCE(ri.use_old_size, false),
+          'use_old_size', COALESCE(ri.use_old_size, false),
           'survey', COALESCE(ri.survey, false),
           'survey_width', ri.survey_width,
           'survey_height', ri.survey_height,
@@ -3427,11 +3435,16 @@ const KS_REQUESTS_LITE_SQL = `
         FROM request_items ri
         WHERE ri.request_tk_code = r.tk_code
       ), '[]') AS items,
-      EXISTS(
-        SELECT 1 FROM request_items ri 
-        WHERE ri.request_tk_code = r.tk_code 
-          AND COALESCE(ri.survey, false) = true 
-          AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+      (
+        COALESCE(r.old_content, false) = false
+        AND EXISTS(
+          SELECT 1 FROM request_items ri 
+          WHERE ri.request_tk_code = r.tk_code 
+            AND COALESCE(ri.survey, false) = true 
+            AND COALESCE(ri.use_old_size, false) = false
+            AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
+            AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+        )
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -4307,7 +4320,17 @@ async function getRequestDetailDirect(idOrTkCode) {
     }
     row.editing_requested_at = editingRequestedAt;
     row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
-    row.has_pending_survey = (finalItems || []).some(it => Boolean(it.survey) && !(it.surveySize && it.surveySize.width && it.surveySize.height));
+    const isOldContent = Boolean(row.old_content || row.oldContent);
+    row.has_pending_survey = !isOldContent && (finalItems || []).some(it => {
+        if (!it || it.type === 'Hạng mục khác') return false;
+        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
+        if (!isSurvey) return false;
+        const isOldSize = Boolean(it.useOldSize || it.use_old_size);
+        if (isOldSize) return false;
+        const hasSurveySize = Boolean((it.surveySize && it.surveySize.width > 0 && it.surveySize.height > 0) || (it.survey_width > 0 && it.survey_height > 0));
+        const hasNormalSize = Boolean(it.width > 0 && it.height > 0);
+        return !hasSurveySize && !hasNormalSize;
+    });
 
     return row;
 }
@@ -5003,7 +5026,7 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
         }
         if (!Array.isArray(parsedArr) || parsedArr.length === 0) return;
 
-        // Xử lý tối đa 10 comment gần nhất trong mảng để không bỏ sót thao tác thêm/sửa hàng loạt
+        // Xử lý tối đa 10 comment gần nhất trong mảng
         const candidateComments = parsedArr.slice(-10);
 
         for (const item of candidateComments) {
@@ -5018,23 +5041,32 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
 
             const isEditResolved = cType === 'edit-resolved' || cText.includes('đã chỉnh sửa xong');
 
-            // Chống duplicate: Chỉ chặn nếu cùng một ref_id và cùng content vừa mới được ghi trong vòng 15 giây
-            if (!isEditResolved) {
-                const [existing] = await pool.query(
-                    `SELECT id FROM notes 
-                     WHERE ref_type = 'request' AND ref_id = ? AND content = ? 
-                       AND created_at > NOW() - INTERVAL '15 seconds' 
-                     LIMIT 1`,
-                    [tkCode, cText]
+            // 1. Nếu item đã mang id từ database (dạng nt_...), kiểm tra xem note đã tồn tại chưa
+            if (item.id && String(item.id).startsWith('nt_')) {
+                const [existingById] = await pool.query(
+                    `SELECT id FROM notes WHERE id = ? LIMIT 1`,
+                    [item.id]
                 );
-                if (existing && existing.length > 0) continue;
+                if (existingById && existingById.length > 0) continue;
             }
 
-            const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            // 2. Chống duplicate triệt để: Nếu cùng ref_id và cùng content đã tồn tại trong notes (bất kể thời điểm nào)
+            // thì TUYỆT ĐỐI KHÔNG insert lại để tránh replay comment lịch sử cũ làm hỏng trạng thái yêu cầu sửa!
+            const [existing] = await pool.query(
+                `SELECT id FROM notes 
+                 WHERE ref_type = 'request' AND ref_id = ? AND content = ? 
+                 LIMIT 1`,
+                [tkCode, cText]
+            );
+            if (existing && existing.length > 0) continue;
+
+            const noteId = (item.id && String(item.id).startsWith('nt_')) ? item.id : `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            const noteCreatedAt = (item.createdAt || item.created_at) ? new Date(item.createdAt || item.created_at) : new Date();
+
             await pool.query(`
                 INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
-                VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
-            `, [noteId, tkCode, isEditResolved ? 'edit-resolved' : cType, cText, cAuthor, cImg]);
+                VALUES (?, 'request', ?, ?, ?, ?, ?, ?)
+            `, [noteId, tkCode, isEditResolved ? 'edit-resolved' : cType, cText, cAuthor, cImg, noteCreatedAt]);
 
             // Nếu là giải quyết yêu cầu sửa, ghi thêm note edit-resolved cho quotation liên quan nếu có
             if (isEditResolved) {
@@ -5042,11 +5074,17 @@ async function saveCommentPayloadToNotes(tkCode, rawComments) {
                     const [qRows] = await pool.query(`SELECT quote_code FROM quotations WHERE request_tk_code = ? LIMIT 1`, [tkCode]);
                     if (qRows && qRows.length > 0 && qRows[0].quote_code) {
                         const qCode = qRows[0].quote_code;
-                        const qNoteId = `nt_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
-                        await pool.query(`
-                            INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
-                            VALUES (?, 'quotation', ?, 'edit-resolved', ?, ?, ?, NOW())
-                        `, [qNoteId, qCode, cText, cAuthor, cImg]);
+                        const [existingQNote] = await pool.query(
+                            `SELECT id FROM notes WHERE ref_type = 'quotation' AND ref_id = ? AND content = ? LIMIT 1`,
+                            [qCode, cText]
+                        );
+                        if (!existingQNote || existingQNote.length === 0) {
+                            const qNoteId = `nt_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
+                            await pool.query(`
+                                INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
+                                VALUES (?, 'quotation', ?, 'edit-resolved', ?, ?, ?, ?)
+                            `, [qNoteId, qCode, cText, cAuthor, cImg, noteCreatedAt]);
+                        }
                     }
                 } catch (qErr) {
                     console.warn('[saveCommentPayloadToNotes] quotation note sync warning:', qErr && qErr.message);
@@ -5165,7 +5203,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             url = EXCLUDED.url,
                             filename = COALESCE(NULLIF(EXCLUDED.filename, ''), designs.filename),
                             created_by = COALESCE(EXCLUDED.created_by, designs.created_by),
-                            updated_at = NOW()
+                            updated_at = CASE 
+                                WHEN designs.url = EXCLUDED.url THEN designs.updated_at 
+                                ELSE NOW() 
+                            END
                     `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId]);
                 }
             }
