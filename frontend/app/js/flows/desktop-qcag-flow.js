@@ -563,26 +563,26 @@ function qcagItemNeedsSurvey(it, req) {
   const isItemOldSize = Boolean(it.useOldSize || it.use_old_size);
   if (isItemOldSize) return false;
 
-  // 2. Kiểm tra cờ khảo sát rõ ràng do Sale yêu cầu
-  const isSurveyRequested = Boolean(
-    it.survey === true || it.survey === 1 || String(it.survey) === 'true' ||
-    it.survey_required || it.is_survey ||
-    (it.note && String(it.note).toLowerCase().includes('yêu cầu khảo sát'))
-  );
-  if (!isSurveyRequested) return false;
-
-  // 3. Nếu đã có số đo khảo sát -> Đã xong khảo sát
+  // 2. Nếu đã có số đo khảo sát thực tế hợp lệ -> Đã hoàn thành khảo sát
   const hasSurveySize = Boolean(
     (it.surveySize && Number(it.surveySize.width) > 0 && Number(it.surveySize.height) > 0) ||
     (Number(it.survey_width) > 0 && Number(it.survey_height) > 0)
   );
   if (hasSurveySize) return false;
 
-  // 4. Nếu đã có kích thước chuẩn nhập sẵn -> Không cần khảo sát lại
-  const hasValidDims = Boolean(Number(it.width) > 0 && Number(it.height) > 0);
-  if (hasValidDims) return false;
+  // 3. Kiểm tra cờ khảo sát rõ ràng do Sale yêu cầu
+  const isSurveyRequested = Boolean(
+    it.survey === true || it.survey === 1 || String(it.survey) === 'true' ||
+    it.survey_required || it.is_survey ||
+    (it.note && String(it.note).toLowerCase().includes('yêu cầu khảo sát'))
+  );
+  if (isSurveyRequested) return true;
 
-  return true;
+  // 4. Nếu không dùng KT cũ và chưa có kích thước chuẩn -> BẮT BUỘC cần số đo khảo sát
+  const hasValidDims = Boolean(Number(it.width) > 0 && Number(it.height) > 0);
+  if (!hasValidDims) return true;
+
+  return false;
 }
 
 // Kiểm tra 1 request có đang ở trạng thái 'Chờ khảo sát' hay không (chuẩn hóa đồng bộ List & Detail)
@@ -4238,48 +4238,32 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
       if (surveyH == null && item.height != null && parseFloat(item.height) > 0) surveyH = item.height;
 
       const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
-
       const isItemOldSize = Boolean(item.useOldSize || item.use_old_size);
-      const isSurveyFlag = !isItemOldSize && Boolean(
-        item.survey === true || item.survey === 1 || String(item.survey) === 'true' ||
-        item.survey_required || item.is_survey ||
-        (item.note && String(item.note).toLowerCase().includes('yêu cầu khảo sát'))
-      );
-      if (isSurveyFlag) {
-        if (hasValidSurveySize) {
-          rawW = parseFloat(surveyW);
-          rawH = parseFloat(surveyH);
-          size = qcagFormatDimensionText(surveyW, surveyH);
-          if (canManageItems) {
-            size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
-                  <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
-                  </svg>\
-                </button>`;
-          }
-          sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
-        } else {
-          const editBtn = canManageItems ? ` <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập số đo khảo sát">\
-                <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
-                </svg>\
-              </button>` : '';
-          size = `<span class="qcag-survey-badge">Khảo sát</span>${editBtn}`;
-        }
-      } else if (isItemOldSize) {
+      const isNeedsSurvey = qcagItemNeedsSurvey(item, req);
+
+      if (isItemOldSize) {
         size = 'KT cũ';
-      } else {
-        const dimText = qcagFormatDimensionText(item.width, item.height);
-        // Nếu chưa có kích thước nhưng có nút khảo sát tiện lợi
-        if (dimText === '-' && canManageItems) {
-          size = `- <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước">\
+      } else if (hasValidSurveySize) {
+        rawW = parseFloat(surveyW);
+        rawH = parseFloat(surveyH);
+        size = qcagFormatDimensionText(surveyW, surveyH);
+        if (canManageItems) {
+          size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
                 <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
                 </svg>\
               </button>`;
-        } else {
-          size = dimText;
         }
+        sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
+      } else if (isNeedsSurvey) {
+        const editBtn = canManageItems ? ` <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập số đo khảo sát">\
+              <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
+                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
+              </svg>\
+            </button>` : '';
+        size = `<span class="qcag-survey-badge">Khảo sát</span>${editBtn}`;
+      } else {
+        size = qcagFormatDimensionText(item.width, item.height);
       }
     }
     const poles = (item.type !== 'Hạng mục khác' && !isNoPoles) ? ((item.poles || 0) + ' trụ') : '-';

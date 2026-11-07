@@ -418,11 +418,11 @@ function getCardQuoteBadge(req) {
       hasSurveyNeedSize = reqItems.some(it => {
         if (!it || it.type === 'Hạng mục khác') return false;
         if (it.useOldSize || it.use_old_size) return false;
-        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
-        if (!isSurvey) return false;
         const hasSurveySize = Boolean((it.surveySize && it.surveySize.width > 0 && it.surveySize.height > 0) || (it.survey_width > 0 && it.survey_height > 0));
+        if (hasSurveySize) return false;
+        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
         const hasNormalSize = Boolean(it.width > 0 && it.height > 0);
-        return !hasSurveySize && !hasNormalSize;
+        return isSurvey || !hasNormalSize;
       });
     } else {
       hasSurveyNeedSize = Boolean(req.hasPendingSurvey || req.has_pending_survey);

@@ -3235,10 +3235,12 @@ const KS_REQUESTS_SELECT_SQL = `
       EXISTS(
         SELECT 1 FROM request_items ri 
         WHERE ri.request_tk_code = r.tk_code 
-          AND COALESCE(ri.survey, false) = true 
           AND COALESCE(ri.use_old_size, false) = false
           AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
-          AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+          AND (
+            COALESCE(ri.survey, false) = true 
+            OR (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+          )
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -3445,10 +3447,12 @@ const KS_REQUESTS_LITE_SQL = `
       EXISTS(
         SELECT 1 FROM request_items ri 
         WHERE ri.request_tk_code = r.tk_code 
-          AND COALESCE(ri.survey, false) = true 
           AND COALESCE(ri.use_old_size, false) = false
           AND (ri.survey_width IS NULL OR ri.survey_width <= 0 OR ri.survey_height IS NULL OR ri.survey_height <= 0)
-          AND (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+          AND (
+            COALESCE(ri.survey, false) = true 
+            OR (ri.width IS NULL OR ri.width <= 0 OR ri.height IS NULL OR ri.height <= 0)
+          )
       ) AS has_pending_survey,
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
@@ -4346,13 +4350,13 @@ async function getRequestDetailDirect(idOrTkCode) {
     row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
     row.has_pending_survey = (finalItems || []).some(it => {
         if (!it || it.type === 'Hạng mục khác') return false;
-        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
-        if (!isSurvey) return false;
         const isOldSize = Boolean(it.useOldSize || it.use_old_size);
         if (isOldSize) return false;
         const hasSurveySize = Boolean((it.surveySize && it.surveySize.width > 0 && it.surveySize.height > 0) || (it.survey_width > 0 && it.survey_height > 0));
+        if (hasSurveySize) return false;
+        const isSurvey = Boolean(it.survey === true || it.survey === 1 || String(it.survey) === 'true' || it.survey_required || it.is_survey);
         const hasNormalSize = Boolean(it.width > 0 && it.height > 0);
-        return !hasSurveySize && !hasNormalSize;
+        return isSurvey || !hasNormalSize;
     });
 
     return row;
@@ -5778,7 +5782,7 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                         a.approved_by,
                         a.approved_at,
                         a.reject_reason,
-                        COALESCE(q.request_tk_code, '') AS request_tk_code
+                        COALESCE(a.tk_code, q.request_tk_code, q.tk_code, '') AS request_tk_code
                     FROM ks_production_approvals a
                     LEFT JOIN quotations q ON (q.quote_code = a.quote_code OR q.quote_code = 'po_q_' || a.quote_code || '_')
                     ORDER BY a.approved_at ASC NULLS LAST, a.id ASC
@@ -5806,6 +5810,48 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                 });
             } catch (apprErr) {
                 console.warn('[production-approvals] ks_production_approvals query warning:', apprErr && apprErr.message);
+            }
+
+            // 1.5 Nguồn bổ trợ: notes phê duyệt từ Sale Heineken
+            try {
+                const [noteApprRows] = await pool.query(`
+                    SELECT DISTINCT ON (n.ref_id)
+                        n.ref_id AS quote_code,
+                        n.author_name AS approved_by,
+                        n.created_at AS approved_at,
+                        COALESCE(q.request_tk_code, q.tk_code, '') AS request_tk_code,
+                        COALESCE(o.code, q.outlet_id, '') AS outlet_code
+                    FROM notes n
+                    LEFT JOIN quotations q ON q.quote_code = n.ref_id
+                    LEFT JOIN outlets o ON q.outlet_id = o.id
+                    WHERE n.note_type = 'approval'
+                    ORDER BY n.ref_id, n.created_at DESC
+                `);
+
+                (noteApprRows || []).forEach(r => {
+                    const rawCode = String(r.quote_code || '').trim();
+                    const cleanCode = extractCleanCode(rawCode);
+                    const tkCode = String(r.request_tk_code || '').trim();
+                    const outletCode = String(r.outlet_code || '').trim();
+
+                    const existing = map[cleanCode.toLowerCase()] || map[rawCode.toLowerCase()] || (tkCode ? map[tkCode.toLowerCase()] : null);
+                    if (!existing || existing.status === 'pending') {
+                        const item = {
+                            quoteCode: cleanCode || rawCode,
+                            tkCode: tkCode,
+                            outletCode: outletCode,
+                            status: 'approved',
+                            approvedBy: r.approved_by || (existing && existing.approvedBy) || 'Sale Heineken',
+                            approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : (existing ? existing.approvedAt : null),
+                            reason: null
+                        };
+                        if (cleanCode) { map[cleanCode] = item; map[cleanCode.toLowerCase()] = item; }
+                        if (rawCode) { map[rawCode] = item; map[rawCode.toLowerCase()] = item; }
+                        if (tkCode) { map[tkCode] = item; map[tkCode.toLowerCase()] = item; }
+                    }
+                });
+            } catch (noteApprErr) {
+                console.warn('[production-approvals] note approvals query warning:', noteApprErr && noteApprErr.message);
             }
 
             // 2. Nguồn V12: order_quotes (chỉ nhận khi có approval_status từ lệnh sản xuất/duyệt thực tế)
@@ -6018,6 +6064,7 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
         try {
             let foundTkCode = targetCode;
             let foundOutletCode = outletCode || '';
+            let foundQuoteCode = targetCode;
             try {
                 const [qRows] = await pool.query(
                     `SELECT q.quote_code, COALESCE(q.request_tk_code, q.tk_code, '') AS tk_code, COALESCE(o.code, q.outlet_id, '') AS outlet_code 
@@ -6027,6 +6074,7 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
                     [targetCode, targetCode, targetCode]
                 );
                 if (qRows && qRows.length > 0) {
+                    if (qRows[0].quote_code) foundQuoteCode = qRows[0].quote_code;
                     if (qRows[0].tk_code) foundTkCode = qRows[0].tk_code;
                     if (qRows[0].outlet_code) foundOutletCode = qRows[0].outlet_code;
                 }
@@ -6039,15 +6087,15 @@ app.post('/api/ks/requests/:id/approve-production', async (req, res) => {
                     approved_at = NOW(), 
                     reject_reason = NULL,
                     updated_at = NOW() 
-                WHERE quote_code = ? OR (tk_code IS NOT NULL AND tk_code = ?)
-            `, [approvedBy, targetCode, targetCode]);
+                WHERE quote_code = ? OR quote_code = ? OR (tk_code IS NOT NULL AND tk_code = ?)
+            `, [approvedBy, foundQuoteCode, targetCode, foundTkCode]);
 
             const affected = (updResult && (updResult.rowCount || updResult.affectedRows)) || 0;
             if (affected === 0) {
                 await pool.query(`
                     INSERT INTO ks_production_approvals (quote_code, tk_code, outlet_code, status, approved_by, approved_at, created_at, updated_at)
                     VALUES (?, ?, ?, 'approved', ?, NOW(), NOW(), NOW())
-                `, [targetCode, foundTkCode, foundOutletCode, approvedBy]);
+                `, [foundQuoteCode, foundTkCode, foundOutletCode, approvedBy]);
             }
         } catch (paErr) {
             console.warn('[approve-production] sync ks_production_approvals warning:', paErr && paErr.message);
