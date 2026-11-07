@@ -94,23 +94,45 @@ function qcagFormatRegionDisplay(val) {
   return s;
 }
 
+function qcagIsNppRequest(r) {
+  if (!r || typeof r !== 'object') return false;
+  if (r._cachedIsNpp !== undefined) return r._cachedIsNpp;
+  const requester = qcagDesktopParseJson(r.requester, {});
+  const saleType = String(r.saleType || requester.saleType || '').toLowerCase();
+  if (saleType === 'npp' || Boolean(r.isNPP || r.is_npp) || Boolean(requester.isNPP || requester.is_npp)) {
+    r._cachedIsNpp = true;
+    return true;
+  }
+  const oName = String(r.outletName || r.outlet_name || '').trim();
+  if (/^((cp|kp)\d*|kho\s*npp)\b/i.test(oName) || /\b(npp|nhà phân phối)\b/i.test(oName)) {
+    r._cachedIsNpp = true;
+    return true;
+  }
+  try {
+    const items = Array.isArray(r.items) ? r.items : qcagDesktopParseJson(r.items, []);
+    if ((items || []).some(it => it && /(nhà phân phối|\bnpp\b)/i.test(String(it.type || '')))) {
+      r._cachedIsNpp = true;
+      return true;
+    }
+  } catch (_) {}
+  const content = String(r.content || '').trim();
+  if (/\b(npp|nhà phân phối)\b/i.test(content)) {
+    r._cachedIsNpp = true;
+    return true;
+  }
+  r._cachedIsNpp = false;
+  return false;
+}
+
 function qcagDesktopGetRequestRegionKey(r) {
   if (!r) return null;
   if (r._cachedRegKey) return r._cachedRegKey;
-  const requester = qcagDesktopParseJson(r.requester, {});
-  const saleType = String(r.saleType || requester.saleType || '').toLowerCase();
-  const hasNppItem = (() => {
-    try {
-      const items = Array.isArray(r.items) ? r.items : qcagDesktopParseJson(r.items, []);
-      return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
-    } catch (_) { return false; }
-  })();
-  const isNPP = saleType === 'npp' || Boolean(r.isNPP || r.is_npp) || Boolean(requester.isNPP || requester.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(r.outletName || r.outlet_name || ''));
-  if (isNPP) {
+  if (qcagIsNppRequest(r)) {
     r._cachedRegKey = 'npp';
     return 'npp';
   }
-  const regionRaw = String(r.outletArea || r.area || requester.region || r.region || '').trim();
+  const requester = qcagDesktopParseJson(r.requester, {});
+  const regionRaw = String(r.outletArea || r.area || requester.outletArea || r.region || requester.region || '').trim();
   let key = null;
   if (/south\s*4|\bs0?4\b/i.test(regionRaw)) key = 's4';
   else if (/south\s*5|\bs0?5\b/i.test(regionRaw)) key = 's5';
@@ -2325,11 +2347,13 @@ function getQCAGDesktopVisibleRequests() {
 
     wrapped = wrapped.filter(w => {
       const r = w.sortKey;
-      const regKey = qcagDesktopGetRequestRegionKey(r);
+      const isNpp = qcagIsNppRequest(r);
       if (token === 'npp') {
-        return regKey === 'npp';
+        return isNpp;
       }
-      if (regKey === 'npp') return false;
+      // Các tab khu vực South (S4, S5, S16, S17, S24, S19, MOT8): TUYỆT ĐỐI KHÔNG CHỨA ĐƠN NPP
+      if (isNpp) return false;
+      const regKey = qcagDesktopGetRequestRegionKey(r);
       return regKey === token;
     });
   }
@@ -2589,8 +2613,8 @@ function qcagDesktopUpdateFilterCounts() {
     const status = String(r.status || 'pending').toLowerCase();
     const isDone = status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed';
 
-    const regKey = qcagDesktopGetRequestRegionKey(r);
-    const isNPP = regKey === 'npp';
+    const isNPP = qcagIsNppRequest(r);
+    const regKey = isNPP ? 'npp' : qcagDesktopGetRequestRegionKey(r);
 
     // Check if this item belongs to the active region filter for the main 4 tabs:
     let matchesCurrentRegion = true;
@@ -2659,7 +2683,9 @@ function qcagDesktopUpdateFilterCounts() {
 
     if (matchesStatus) {
       regCounts.all++;
-      if (regKey && regCounts[regKey] !== undefined) {
+      if (isNPP) {
+        regCounts.npp++;
+      } else if (regKey && regCounts[regKey] !== undefined) {
         regCounts[regKey]++;
       }
     }
@@ -2854,7 +2880,8 @@ function renderQCAGDesktopList(forceRebuild = false) {
       const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
       const requester = qcagDesktopParseJson(req.requester, {});
       const saleName = (requester.saleName || requester.phone || '-').toUpperCase();
-      const region = qcagFormatRegionDisplay(req.region || requester.region) || '-';
+      const isNppCard = qcagIsNppRequest(req);
+      const region = isNppCard ? 'Kênh NPP' : (qcagFormatRegionDisplay(req.outletArea || req.region || requester.outletArea || requester.region) || '-');
       const requestCode = req.tkCode || '-'; // Sử dụng tkCode từ server trả về
 
       let isTaskDone = false;
@@ -2912,16 +2939,12 @@ function renderQCAGDesktopList(forceRebuild = false) {
           </div>
           <div class="qcag-request-code"><span class="qcag-sale-name-highlight">${escapeHtml(String(saleName || '-').toUpperCase())}</span> • ${escapeHtml(region)}</div>
           <div class="qcag-request-ss">${(() => {
+          if (isNppCard) {
+            const nppArea = qcagFormatRegionDisplay(req.outletArea || req.region || requester.outletArea || requester.region);
+            return '<span class="qcag-ss-npp" style="color:#10b981;font-size:11px;font-weight:600;font-style:normal;">Kênh NPP' + (nppArea && nppArea !== '-' ? ` • ${escapeHtml(nppArea)}` : '') + '</span>';
+          }
           const sType = String((requester && requester.saleType) || '').toLowerCase();
-          const hasNppItem = (() => {
-            try {
-              const items = Array.isArray(req.items) ? req.items : qcagDesktopParseJson(req.items, []);
-              return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
-            } catch (_) { return false; }
-          })();
-          const isNpp = sType === 'npp' || Boolean(requester && (requester.isNPP || requester.is_npp)) || Boolean(req.isNPP || req.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(req.outletName || req.outlet_name || ''));
-          const isTba = (sType === 'tba' || Boolean(requester && requester.isTBA) || Boolean(req.is_tba || req.isTba)) && !isNpp;
-          if (isNpp) return '<span class="qcag-ss-npp" style="color:#10b981;font-size:11px;font-weight:600;font-style:normal;">Kênh NPP</span>';
+          const isTba = (sType === 'tba' || Boolean(requester && requester.isTBA) || Boolean(req.is_tba || req.isTba));
           if (isTba) return '<span class="qcag-ss-tba" style="color:#f97316;font-size:11px;font-weight:600;font-style:normal;">Kênh TBA</span>';
           const ss = (requester && requester.ssName) || (req && req.ssName) || (req && req.ss_name) || '';
           return ss && ss !== '-' ? 'Tên SS/SE: ' + escapeHtml(String(ss).toUpperCase()) : '<span class="qcag-ss-none" style="color:#64748b;font-size:11px;font-style:italic;">Chưa có SS</span>';
@@ -4234,15 +4257,20 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
       if (surveyH == null && item.survey_height != null) surveyH = item.survey_height;
       if (surveyW == null && item.surveyWidth != null) surveyW = item.surveyWidth;
       if (surveyH == null && item.surveyHeight != null) surveyH = item.surveyHeight;
-      if (surveyW == null && item.width != null && parseFloat(item.width) > 0) surveyW = item.width;
-      if (surveyH == null && item.height != null && parseFloat(item.height) > 0) surveyH = item.height;
 
       const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
       const isItemOldSize = Boolean(item.useOldSize || item.use_old_size);
+      const hasNormalSize = parseFloat(item.width || 0) > 0 && parseFloat(item.height || 0) > 0;
       const isNeedsSurvey = qcagItemNeedsSurvey(item, reqObj);
 
       if (isItemOldSize) {
         size = 'KT cũ';
+      } else if (hasNormalSize) {
+        // Sale đã điền sẵn kích thước -> CHỈ HIỂN THỊ KÍCH THƯỚC, TUYỆT ĐỐI KHÔNG CÓ CÂY BÚT VÀ KHÔNG CÓ DÒNG CHỮ KHẢO SÁT
+        rawW = parseFloat(item.width);
+        rawH = parseFloat(item.height);
+        size = qcagFormatDimensionText(item.width, item.height);
+        sizeExtraNote = '';
       } else if (hasValidSurveySize) {
         rawW = parseFloat(surveyW);
         rawH = parseFloat(surveyH);
@@ -5225,16 +5253,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             <div><span>Tên Sale</span><strong>${escapeHtml(String(requester.saleName || requester.sale_name || requester.name || requester.phone || '-').toUpperCase())}</strong></div>
             <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || requester.sale_code || '-')}</strong></div>
             <div><span>SĐT Sale</span><strong>${escapeHtml(requester.phone || requester.salePhone || requester.sale_phone || '-')}</strong></div>
-            <div><span>Khu vực</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || requester.area || request.region || '-'))}</strong></div>
+            <div><span>Khu vực Sale</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || '-'))}</strong></div>
             <div><span>${(() => {
+          const isNpp = qcagIsNppRequest(request);
           const sType = String(requester.saleType || '').toLowerCase();
-          const hasNppItem = (() => {
-            try {
-              const items = Array.isArray(request.items) ? request.items : qcagDesktopParseJson(request.items, []);
-              return (items || []).some(it => it && String(it.type || '').includes('Nhà Phân Phối'));
-            } catch (_) { return false; }
-          })();
-          const isNpp = sType === 'npp' || Boolean(requester.isNPP || requester.is_npp) || Boolean(request.isNPP || request.is_npp) || hasNppItem || /^(cp|kp)/i.test(String(request.outletName || request.outlet_name || ''));
           const isTba = (sType === 'tba' || Boolean(requester.isTBA) || Boolean(request.is_tba || request.isTba)) && !isNpp;
           if (isNpp) return 'Phân loại</span><strong style="color:#10b981;">Kênh NPP</strong>';
           if (isTba) return 'Phân loại</span><strong style="color:#f97316;">Kênh TBA</strong>';
@@ -5268,6 +5290,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
                 ` : ''}
               </div>`;
       })()}
+            <div class="ot-first"><span>Khu vực Outlet:</span><strong>${escapeHtml(qcagFormatRegionDisplay(request.outletArea || request.region || '-'))}</strong></div>
             <div class="ot-first"><span>Định vị:</span><strong id="qcagOutletGpsCell">${request.outletLat && request.outletLng && Number(request.outletLat) !== 0 && Number(request.outletLng) !== 0 ? `<button type="button" class="qcag-map-btn" onclick="qcagDesktopOpenPickLocation()" title="Xem và sửa vị trí trên bản đồ">Xem map</button>` : `<button type="button" class="qcag-btn-missing-gps" onclick="qcagDesktopOpenPickLocation()" title="Bắt buộc chọn tọa độ GPS để hoàn thành"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Chưa có GPS • Chọn định vị</button>`}</strong></div>
             <div class="ot-second ot-address"><span>Địa chỉ:</span><strong>${escapeHtml(request.address || '-')}</strong></div>
             <div class="ot-second ot-phone"><span>Điện thoại:</span><strong>${escapeHtml(request.phone || '-')}</strong></div>
