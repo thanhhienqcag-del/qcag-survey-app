@@ -4239,7 +4239,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
 
       const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
       const isItemOldSize = Boolean(item.useOldSize || item.use_old_size);
-      const isNeedsSurvey = qcagItemNeedsSurvey(item, req);
+      const isNeedsSurvey = qcagItemNeedsSurvey(item, reqObj);
 
       if (isItemOldSize) {
         size = 'KT cũ';
