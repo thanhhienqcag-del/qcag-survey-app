@@ -5253,7 +5253,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             <div><span>Tên Sale</span><strong>${escapeHtml(String(requester.saleName || requester.sale_name || requester.name || requester.phone || '-').toUpperCase())}</strong></div>
             <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || requester.sale_code || '-')}</strong></div>
             <div><span>SĐT Sale</span><strong>${escapeHtml(requester.phone || requester.salePhone || requester.sale_phone || '-')}</strong></div>
-            <div><span>Khu vực Sale</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || '-'))}</strong></div>
+            <div><span>Khu vực</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || '-'))}</strong></div>
             <div><span>${(() => {
           const isNpp = qcagIsNppRequest(request);
           const sType = String(requester.saleType || '').toLowerCase();
@@ -5290,7 +5290,6 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
                 ` : ''}
               </div>`;
       })()}
-            <div class="ot-first"><span>Khu vực Outlet:</span><strong>${escapeHtml(qcagFormatRegionDisplay(request.outletArea || request.region || '-'))}</strong></div>
             <div class="ot-first"><span>Định vị:</span><strong id="qcagOutletGpsCell">${request.outletLat && request.outletLng && Number(request.outletLat) !== 0 && Number(request.outletLng) !== 0 ? `<button type="button" class="qcag-map-btn" onclick="qcagDesktopOpenPickLocation()" title="Xem và sửa vị trí trên bản đồ">Xem map</button>` : `<button type="button" class="qcag-btn-missing-gps" onclick="qcagDesktopOpenPickLocation()" title="Bắt buộc chọn tọa độ GPS để hoàn thành"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg> Chưa có GPS • Chọn định vị</button>`}</strong></div>
             <div class="ot-second ot-address"><span>Địa chỉ:</span><strong>${escapeHtml(request.address || '-')}</strong></div>
             <div class="ot-second ot-phone"><span>Điện thoại:</span><strong>${escapeHtml(request.phone || '-')}</strong></div>
