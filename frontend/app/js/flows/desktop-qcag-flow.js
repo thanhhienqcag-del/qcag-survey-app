@@ -605,7 +605,7 @@ function qcagExtractItemDimensions(it) {
   const hasNormal = nw > 0 && nh > 0;
 
   if (hasNormal) {
-    return { w: nw, h: nh, isSurveySize: hasSurvey, isOldSize: false, sw, sh };
+    return { w: nw, h: nh, isSurveySize: false, isOldSize: false, sw, sh };
   }
   if (hasSurvey) {
     return { w: sw, h: sh, isSurveySize: true, isOldSize: false, sw, sh };
@@ -1589,6 +1589,11 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     editedByQCAGBy: editor,
     editedByQCAGAt: now
   };
+  if (!newSurvey) {
+    delete items[idx].surveySize;
+    delete items[idx].survey_width;
+    delete items[idx].survey_height;
+  }
 
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   if (changes.length > 0) {

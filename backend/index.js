@@ -5430,15 +5430,15 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const rawSw = (sObj && sObj.width && !isNaN(Number(sObj.width))) ? Number(sObj.width) : ((it.survey_width && !isNaN(Number(it.survey_width))) ? Number(it.survey_width) : null);
                     const rawSh = (sObj && sObj.height && !isNaN(Number(sObj.height))) ? Number(sObj.height) : ((it.survey_height && !isNaN(Number(it.survey_height))) ? Number(it.survey_height) : null);
 
-                    const width = (rawW && rawW > 0) ? rawW : ((rawSw && rawSw > 0) ? rawSw : null);
-                    const height = (rawH && rawH > 0) ? rawH : ((rawSh && rawSh > 0) ? rawSh : null);
-                    const surveyW = (rawSw && rawSw > 0) ? rawSw : ((rawW && rawW > 0) ? rawW : null);
-                    const surveyH = (rawSh && rawSh > 0) ? rawSh : ((rawH && rawH > 0) ? rawH : null);
+                    const width = (rawW && rawW > 0) ? rawW : null;
+                    const height = (rawH && rawH > 0) ? rawH : null;
+                    const surveyW = (rawSw && rawSw > 0) ? rawSw : null;
+                    const surveyH = (rawSh && rawSh > 0) ? rawSh : null;
                     const useOldSize = Boolean(it.useOldSize);
                     const poles = Number(it.poles) || 0;
                     const note = toNullableString(it.note);
                     const otherContent = toNullableString(it.otherContent || it.subType);
-                    const isSurvey = Boolean(it.survey || (surveyW && surveyH));
+                    const isSurvey = Boolean(it.survey);
                     const brandChangedByQcag = Boolean(it.brandChangedByQCAG || it.brandChangedByQcag || it.brand_changed_by_qcag);
                     const brandChangedBy = toNullableString(it.brandChangedBy || it.brand_changed_by);
                     const addedByQcagBy = toNullableString(it.addedByQCAGBy || it.addedByQcagBy || it.added_by_qcag_by);
@@ -5463,14 +5463,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             other_content = EXCLUDED.other_content,
                             action = EXCLUDED.action,
                             brand = EXCLUDED.brand,
-                            width = COALESCE(EXCLUDED.width, EXCLUDED.survey_width, request_items.width, request_items.survey_width),
-                            height = COALESCE(EXCLUDED.height, EXCLUDED.survey_height, request_items.height, request_items.survey_height),
+                            width = COALESCE(EXCLUDED.width, request_items.width),
+                            height = COALESCE(EXCLUDED.height, request_items.height),
                             use_old_size = EXCLUDED.use_old_size,
                             poles = EXCLUDED.poles,
                             note = EXCLUDED.note,
-                            survey = (EXCLUDED.survey OR request_items.survey OR (EXCLUDED.survey_width IS NOT NULL AND EXCLUDED.survey_width > 0) OR (request_items.survey_width IS NOT NULL AND request_items.survey_width > 0)),
-                            survey_width = COALESCE(EXCLUDED.survey_width, EXCLUDED.width, request_items.survey_width, request_items.width),
-                            survey_height = COALESCE(EXCLUDED.survey_height, EXCLUDED.height, request_items.survey_height, request_items.height),
+                            survey = EXCLUDED.survey,
+                            survey_width = EXCLUDED.survey_width,
+                            survey_height = EXCLUDED.survey_height,
                             brand_changed_by_qcag = (EXCLUDED.brand_changed_by_qcag OR request_items.brand_changed_by_qcag),
                             brand_changed_by = COALESCE(NULLIF(EXCLUDED.brand_changed_by, ''), request_items.brand_changed_by),
                             added_by_qcag = (EXCLUDED.added_by_qcag OR request_items.added_by_qcag OR (request_items.added_by_qcag_by IS NOT NULL AND request_items.added_by_qcag_by != '') OR (EXCLUDED.added_by_qcag_by IS NOT NULL AND EXCLUDED.added_by_qcag_by != '')),
@@ -5919,6 +5919,45 @@ app.get(['/api/ks/requests/production-approvals', '/production-approvals'], asyn
                 });
             } catch (v12Err) {
                 console.warn('[production-approvals] v12 query warning:', v12Err && v12Err.message);
+            }
+
+            // 2.5 Nguồn từ quotations: status = 'approved' (Báo giá đã được duyệt chính thức)
+            try {
+                const [qApprRows] = await pool.query(`
+                    SELECT 
+                        q.quote_code,
+                        COALESCE(q.request_tk_code, q.tk_code, '') AS request_tk_code,
+                        COALESCE(o.code, q.outlet_id, '') AS outlet_code,
+                        q.updated_at AS approved_at
+                    FROM quotations q
+                    LEFT JOIN outlets o ON q.outlet_id = o.id
+                    WHERE q.status = 'approved' AND (q.is_deleted = false OR q.is_deleted IS NULL)
+                `);
+
+                (qApprRows || []).forEach(r => {
+                    const rawCode = String(r.quote_code || '').trim();
+                    const cleanCode = extractCleanCode(rawCode);
+                    const tkCode = String(r.request_tk_code || '').trim();
+                    const outletCode = String(r.outlet_code || '').trim();
+
+                    const existing = map[cleanCode.toLowerCase()] || map[rawCode.toLowerCase()] || (tkCode ? map[tkCode.toLowerCase()] : null);
+                    if (!existing || existing.status === 'pending') {
+                        const item = {
+                            quoteCode: cleanCode || rawCode,
+                            tkCode: tkCode,
+                            outletCode: outletCode,
+                            status: 'approved',
+                            approvedBy: (existing && existing.approvedBy) || 'Sale Heineken',
+                            approvedAt: r.approved_at ? new Date(r.approved_at).toISOString() : (existing ? existing.approvedAt : null),
+                            reason: null
+                        };
+                        if (cleanCode) { map[cleanCode] = item; map[cleanCode.toLowerCase()] = item; }
+                        if (rawCode) { map[rawCode] = item; map[rawCode.toLowerCase()] = item; }
+                        if (tkCode && !map[tkCode.toLowerCase()]) { map[tkCode] = item; map[tkCode.toLowerCase()] = item; }
+                    }
+                });
+            } catch (qApprErr) {
+                console.warn('[production-approvals] quotations status approvals query warning:', qApprErr && qApprErr.message);
             }
 
             // 3. Yêu cầu sửa chưa giải quyết từ notes (chỉ nhận khi CHƯA có edit-resolved và CHƯA được duyệt sau đó)
