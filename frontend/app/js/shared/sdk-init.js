@@ -563,8 +563,13 @@ async function initApp() {
                         if (statRank(currS) > statRank(String(full.status || '').toLowerCase()) && !full.editingRequestedAt) return;
                         currentDetailRequest = full;
                         if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(full);
-                        if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined') {
-                          _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(full));
+                        if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined' && _qcagDesktopOpenRequestSnapshot) {
+                          const frozenStatus = _qcagDesktopOpenRequestSnapshot.status;
+                          const frozenEditing = _qcagDesktopOpenRequestSnapshot.editingRequestedAt;
+                          _qcagDesktopOpenRequestSnapshot = Object.assign({}, full, {
+                            status: frozenStatus,
+                            editingRequestedAt: frozenEditing
+                          });
                         }
                         _qcagDesktopInPlaceRefresh(full);
                       }
@@ -572,8 +577,13 @@ async function initApp() {
                   } else if (typeof _qcagDesktopInPlaceRefresh === 'function') {
                     currentDetailRequest = updated;
                     if (typeof qcagDesktopCacheRequest === 'function') qcagDesktopCacheRequest(updated);
-                    if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined') {
-                      _qcagDesktopOpenRequestSnapshot = JSON.parse(JSON.stringify(updated));
+                    if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined' && _qcagDesktopOpenRequestSnapshot) {
+                      const frozenStatus = _qcagDesktopOpenRequestSnapshot.status;
+                      const frozenEditing = _qcagDesktopOpenRequestSnapshot.editingRequestedAt;
+                      _qcagDesktopOpenRequestSnapshot = Object.assign({}, updated, {
+                        status: frozenStatus,
+                        editingRequestedAt: frozenEditing
+                      });
                     }
                     _qcagDesktopInPlaceRefresh(updated);
                   }

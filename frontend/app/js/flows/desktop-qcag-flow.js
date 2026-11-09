@@ -6452,8 +6452,9 @@ async function qcagDesktopMarkProcessed() {
     if (idxAll !== -1) allRequests[idxAll] = updated;
     currentDetailRequest = updated;
     _qcagDesktopFullRequestCache[updated.__backendId] = updated;
-    // Cập nhật snapshot chuẩn xác theo trạng thái đã hoàn thành
-    _qcagDesktopOpenRequestSnapshot = Object.assign({}, updated);
+    // GIỮ NGUYÊN _qcagDesktopOpenRequestSnapshot lúc mở thẻ:
+    // Tuyệt đối không ghi đè snapshot ở đây để thẻ không bị tự ý biến mất khỏi tab "Đang xử lý".
+    // Thẻ sẽ giữ nguyên vị trí trong danh sách với badge "Hoàn thành" cho đến khi user bấm chọn thẻ khác!
     _qcagRequestsVersion += 1;
     _qcagRequestCodeCache.version = 0;
 
