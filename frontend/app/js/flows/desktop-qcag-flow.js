@@ -577,22 +577,55 @@ function qcagDesktopDesignState(req) {
 }
 
 // Kiểm tra 1 hạng mục có cần số đo khảo sát thực địa hay không (chuẩn hóa toàn hệ thống)
+function qcagExtractItemDimensions(it) {
+  if (!it || typeof it !== 'object') return { w: 0, h: 0, isSurveySize: false, isOldSize: false };
+  const isOldSize = Boolean(it.useOldSize || it.use_old_size);
+  if (isOldSize) return { w: 0, h: 0, isSurveySize: false, isOldSize: true };
+
+  let sw = 0, sh = 0;
+  if (it.surveySize) {
+    let sObj = it.surveySize;
+    if (typeof sObj === 'string') {
+      try { sObj = JSON.parse(sObj); } catch (_) {}
+    }
+    if (sObj && typeof sObj === 'object') {
+      sw = parseFloat(sObj.width || sObj.w || 0);
+      sh = parseFloat(sObj.height || sObj.h || 0);
+    }
+  }
+  if (!sw && it.survey_width) sw = parseFloat(it.survey_width || 0);
+  if (!sh && it.survey_height) sh = parseFloat(it.survey_height || 0);
+  if (!sw && it.surveyWidth) sw = parseFloat(it.surveyWidth || 0);
+  if (!sh && it.surveyHeight) sh = parseFloat(it.surveyHeight || 0);
+
+  const nw = parseFloat(it.width || 0);
+  const nh = parseFloat(it.height || 0);
+
+  const hasSurvey = sw > 0 && sh > 0;
+  const hasNormal = nw > 0 && nh > 0;
+
+  if (hasNormal) {
+    return { w: nw, h: nh, isSurveySize: hasSurvey, isOldSize: false, sw, sh };
+  }
+  if (hasSurvey) {
+    return { w: sw, h: sh, isSurveySize: true, isOldSize: false, sw, sh };
+  }
+  return { w: 0, h: 0, isSurveySize: false, isOldSize: false, sw, sh };
+}
+
 function qcagItemNeedsSurvey(it, req) {
   if (!it || typeof it !== 'object' || it.type === 'Hạng mục khác') return false;
 
   // 1. Chỉ khi hạng mục được chọn "Kích thước cũ" (useOldSize) -> KHÔNG khảo sát
-  // (Lưu ý: req.oldContent là nội dung bảng hiệu cũ, KHÔNG đồng nghĩa với kích thước cũ)
   const isItemOldSize = Boolean(it.useOldSize || it.use_old_size);
   if (isItemOldSize) return false;
 
-  // 2. Nếu đã có số đo khảo sát thực tế hợp lệ -> Đã hoàn thành khảo sát
-  const hasSurveySize = Boolean(
-    (it.surveySize && Number(it.surveySize.width) > 0 && Number(it.surveySize.height) > 0) ||
-    (Number(it.survey_width) > 0 && Number(it.survey_height) > 0)
-  );
-  if (hasSurveySize) return false;
+  // 2. Trích xuất số đo thực tế (cả kích thước nhập lẫn kích thước khảo sát)
+  const dims = qcagExtractItemDimensions(it);
+  // Nếu đã có bất kỳ số đo hợp lệ nào (>0) -> ĐÃ HOÀN THÀNH KHẢO SÁT, TUYỆT ĐỐI KHÔNG CẦN KHẢO SÁT LẠI
+  if (dims.w > 0 && dims.h > 0) return false;
 
-  // 3. Kiểm tra cờ khảo sát rõ ràng do Sale yêu cầu
+  // 3. Nếu chưa có số đo và có cờ yêu cầu khảo sát rõ ràng -> Cần khảo sát
   const isSurveyRequested = Boolean(
     it.survey === true || it.survey === 1 || String(it.survey) === 'true' ||
     it.survey_required || it.is_survey ||
@@ -600,22 +633,23 @@ function qcagItemNeedsSurvey(it, req) {
   );
   if (isSurveyRequested) return true;
 
-  // 4. Nếu không dùng KT cũ và chưa có kích thước chuẩn -> BẮT BUỘC cần số đo khảo sát
-  const hasValidDims = Boolean(Number(it.width) > 0 && Number(it.height) > 0);
-  if (!hasValidDims) return true;
-
-  return false;
+  // 4. Nếu chưa có kích thước nào -> Cần khảo sát
+  return true;
 }
 
 // Kiểm tra 1 request có đang ở trạng thái 'Chờ khảo sát' hay không (chuẩn hóa đồng bộ List & Detail)
 function qcagRequestNeedsSurvey(req) {
   if (!req || typeof req !== 'object') return false;
 
-  // Đơn đã xong hoặc đã có báo giá -> Không chờ khảo sát
+  // 1. Đang có yêu cầu chỉnh sửa từ Sale Heineken / QCAG -> BẮT BUỘC là Chờ chỉnh sửa, TUYỆT ĐỐI KHÔNG phải Chờ khảo sát
+  if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
+    return false;
+  }
+
+  // 2. Đơn đã xong hoặc đã có báo giá -> Không chờ khảo sát
   const s = String(req.status || 'pending').toLowerCase();
   const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
-  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) &&
-    !(typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req));
+  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote);
   if (isDone) return false;
 
   const items = qcagDesktopParseJson(req.items || req.surveyItems, []);
@@ -2218,25 +2252,24 @@ function qcagDesktopStatusBadge(req) {
     return { label: 'Chờ kiểm tra', cls: 'processing' };
   }
 
-  // 1. ƯU TIÊN SỐ 1 CAO NHẤT OVERLAY TRÊN HẾT: Chờ khảo sát
-  // (Nếu đơn chưa hoàn thành và có hạng mục cần số đo khảo sát mà chưa có số đo, BẮT BUỘC hiển thị Chờ khảo sát)
-  const s = String(req && req.status || 'pending').toLowerCase();
-  const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
-  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote) && !qcagDesktopIsPendingEditRequest(req);
-
-  const isWaitingSurvey = qcagRequestNeedsSurvey(req);
-  if (!isDone && isWaitingSurvey) {
-    return { label: 'Chờ khảo sát', cls: 'pending-survey' };
-  }
-
-  // 2. ƯU TIÊN SỐ 2: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG (sau khi đã có số đo khảo sát)
+  // 1. ƯU TIÊN SỐ 1 CAO NHẤT: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG
+  // (Khi đơn đang có yêu cầu chỉnh sửa, BẮT BUỘC hiển thị Chờ chỉnh sửa, TUYỆT ĐỐI không bị đè bởi Chờ khảo sát)
   if (qcagDesktopIsPendingEditRequest(req)) {
     return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
   }
 
-  // 3. Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  // 2. ƯU TIÊN SỐ 2: Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  const s = String(req && req.status || 'pending').toLowerCase();
+  const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
+  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote);
   if (isDone) {
     return { label: 'Hoàn thành', cls: 'done' };
+  }
+
+  // 3. ƯU TIÊN SỐ 3: Chờ khảo sát (Nếu đơn chưa hoàn thành và có hạng mục cần số đo khảo sát mà chưa có số đo)
+  const isWaitingSurvey = qcagRequestNeedsSurvey(req);
+  if (isWaitingSurvey) {
+    return { label: 'Chờ khảo sát', cls: 'pending-survey' };
   }
 
   // 4. Kiểm tra ảnh MQ thiết kế
@@ -4239,50 +4272,27 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
     let rawW = parseFloat(item.width || 0);
     let rawH = parseFloat(item.height || 0);
     if (item.type !== 'Hạng mục khác') {
-      let surveyW = null;
-      let surveyH = null;
-      if (item.surveySize) {
-        if (typeof item.surveySize === 'string') {
-          try {
-            const parsed = JSON.parse(item.surveySize);
-            surveyW = parsed.width || parsed.w;
-            surveyH = parsed.height || parsed.h;
-          } catch (_) {}
-        } else if (typeof item.surveySize === 'object') {
-          surveyW = item.surveySize.width || item.surveySize.w;
-          surveyH = item.surveySize.height || item.surveySize.h;
-        }
-      }
-      if (surveyW == null && item.survey_width != null) surveyW = item.survey_width;
-      if (surveyH == null && item.survey_height != null) surveyH = item.survey_height;
-      if (surveyW == null && item.surveyWidth != null) surveyW = item.surveyWidth;
-      if (surveyH == null && item.surveyHeight != null) surveyH = item.surveyHeight;
-
-      const hasValidSurveySize = parseFloat(surveyW || 0) > 0 && parseFloat(surveyH || 0) > 0;
-      const isItemOldSize = Boolean(item.useOldSize || item.use_old_size);
-      const hasNormalSize = parseFloat(item.width || 0) > 0 && parseFloat(item.height || 0) > 0;
+      const dims = qcagExtractItemDimensions(item);
       const isNeedsSurvey = qcagItemNeedsSurvey(item, reqObj);
 
-      if (isItemOldSize) {
+      if (dims.isOldSize) {
         size = 'KT cũ';
-      } else if (hasNormalSize) {
-        // Sale đã điền sẵn kích thước -> CHỈ HIỂN THỊ KÍCH THƯỚC, TUYỆT ĐỐI KHÔNG CÓ CÂY BÚT VÀ KHÔNG CÓ DÒNG CHỮ KHẢO SÁT
-        rawW = parseFloat(item.width);
-        rawH = parseFloat(item.height);
-        size = qcagFormatDimensionText(item.width, item.height);
-        sizeExtraNote = '';
-      } else if (hasValidSurveySize) {
-        rawW = parseFloat(surveyW);
-        rawH = parseFloat(surveyH);
-        size = qcagFormatDimensionText(surveyW, surveyH);
-        if (canManageItems) {
-          size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa">\
+      } else if (dims.w > 0 && dims.h > 0) {
+        rawW = dims.w;
+        rawH = dims.h;
+        size = qcagFormatDimensionText(dims.w, dims.h);
+        if (dims.isSurveySize) {
+          if (canManageItems) {
+            size = `${size} <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát">\
                 <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
                   <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" fill="currentColor"/>\
                 </svg>\
               </button>`;
+          }
+          sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
+        } else {
+          sizeExtraNote = '';
         }
-        sizeExtraNote = '<div class="qcag-survey-size-note">Kích thước khảo sát</div>';
       } else if (isNeedsSurvey) {
         const editBtn = canManageItems ? ` <button class="qcag-survey-btn" onclick="qcagOpenSurveySizeModal(${idx})" title="Nhập số đo khảo sát">\
               <svg class="qcag-survey-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
@@ -4524,8 +4534,8 @@ async function qcagConfirmSurveySize() {
   curItem.survey = true;
   curItem.survey_width = w;
   curItem.survey_height = h;
-  if (!curItem.width || parseFloat(curItem.width) <= 0) curItem.width = w;
-  if (!curItem.height || parseFloat(curItem.height) <= 0) curItem.height = h;
+  curItem.width = w;
+  curItem.height = h;
 
   // Append a system comment recording this confirmation
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
@@ -4551,6 +4561,15 @@ async function qcagConfirmSurveySize() {
   const ok = await qcagDesktopPersistRequest(updated, 'Đã lưu kích thước khảo sát');
   if (ok) {
     qcagCloseSurveySizeModal();
+    // Re-render ngay lập tức bảng hạng mục trên màn hình chi tiết
+    const itemsEl = document.getElementById('qcagItemsSection');
+    if (itemsEl) {
+      itemsEl.innerHTML = qcagDesktopBuildItemsHtml(items, qcagDesktopCanEditItems(updated), updated);
+    }
+    // Re-render ngay lập tức khung tin nhắn để hiển thị log xác nhận kích thước
+    if (typeof qcagDesktopRenderComments === 'function') {
+      qcagDesktopRenderComments(comments);
+    }
     renderQCAGDesktopList();
     const newBadge = qcagDesktopStatusBadge(updated);
     const detailBadgeEl = document.querySelector('#qcagDesktopDetail .qcag-detail-title-row .qcag-status-badge');
@@ -6377,9 +6396,8 @@ async function qcagDesktopMarkProcessed() {
     if (idxAll !== -1) allRequests[idxAll] = updated;
     currentDetailRequest = updated;
     _qcagDesktopFullRequestCache[updated.__backendId] = updated;
-    // GIỮ NGUYÊN _qcagDesktopOpenRequestSnapshot lúc mở thẻ:
-    // Tuyệt đối không ghi đè snapshot ở đây để thẻ không bị tự ý biến mất khỏi tab "Đang xử lý".
-    // Thẻ sẽ giữ nguyên vị trí trong danh sách với badge "Hoàn thành" cho đến khi user bấm chọn thẻ khác!
+    // Cập nhật snapshot chuẩn xác theo trạng thái đã hoàn thành
+    _qcagDesktopOpenRequestSnapshot = Object.assign({}, updated);
     _qcagRequestsVersion += 1;
     _qcagRequestCodeCache.version = 0;
 

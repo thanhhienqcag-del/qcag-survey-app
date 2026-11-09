@@ -5423,14 +5423,21 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const itemType = toNullableString(it.type) || 'Hạng mục khảo sát';
                     const action = toNullableString(it.action) || 'Làm mới';
                     const brand = toNullableString(it.brand) || null;
-                    const width = it.width && !isNaN(Number(it.width)) ? Number(it.width) : null;
-                    const height = it.height && !isNaN(Number(it.height)) ? Number(it.height) : null;
+                    const rawW = it.width && !isNaN(Number(it.width)) ? Number(it.width) : null;
+                    const rawH = it.height && !isNaN(Number(it.height)) ? Number(it.height) : null;
+                    let sObj = it.surveySize;
+                    if (typeof sObj === 'string') { try { sObj = JSON.parse(sObj); } catch (_) {} }
+                    const rawSw = (sObj && sObj.width && !isNaN(Number(sObj.width))) ? Number(sObj.width) : ((it.survey_width && !isNaN(Number(it.survey_width))) ? Number(it.survey_width) : null);
+                    const rawSh = (sObj && sObj.height && !isNaN(Number(sObj.height))) ? Number(sObj.height) : ((it.survey_height && !isNaN(Number(it.survey_height))) ? Number(it.survey_height) : null);
+
+                    const width = (rawW && rawW > 0) ? rawW : ((rawSw && rawSw > 0) ? rawSw : null);
+                    const height = (rawH && rawH > 0) ? rawH : ((rawSh && rawSh > 0) ? rawSh : null);
+                    const surveyW = (rawSw && rawSw > 0) ? rawSw : ((rawW && rawW > 0) ? rawW : null);
+                    const surveyH = (rawSh && rawSh > 0) ? rawSh : ((rawH && rawH > 0) ? rawH : null);
                     const useOldSize = Boolean(it.useOldSize);
                     const poles = Number(it.poles) || 0;
                     const note = toNullableString(it.note);
                     const otherContent = toNullableString(it.otherContent || it.subType);
-                    const surveyW = (it.surveySize && it.surveySize.width && !isNaN(Number(it.surveySize.width))) ? Number(it.surveySize.width) : ((it.survey_width && !isNaN(Number(it.survey_width))) ? Number(it.survey_width) : null);
-                    const surveyH = (it.surveySize && it.surveySize.height && !isNaN(Number(it.surveySize.height))) ? Number(it.surveySize.height) : ((it.survey_height && !isNaN(Number(it.survey_height))) ? Number(it.survey_height) : null);
                     const isSurvey = Boolean(it.survey || (surveyW && surveyH));
                     const brandChangedByQcag = Boolean(it.brandChangedByQCAG || it.brandChangedByQcag || it.brand_changed_by_qcag);
                     const brandChangedBy = toNullableString(it.brandChangedBy || it.brand_changed_by);
@@ -5456,14 +5463,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             other_content = EXCLUDED.other_content,
                             action = EXCLUDED.action,
                             brand = EXCLUDED.brand,
-                            width = EXCLUDED.width,
-                            height = EXCLUDED.height,
+                            width = COALESCE(EXCLUDED.width, EXCLUDED.survey_width, request_items.width, request_items.survey_width),
+                            height = COALESCE(EXCLUDED.height, EXCLUDED.survey_height, request_items.height, request_items.survey_height),
                             use_old_size = EXCLUDED.use_old_size,
                             poles = EXCLUDED.poles,
                             note = EXCLUDED.note,
                             survey = (EXCLUDED.survey OR request_items.survey OR (EXCLUDED.survey_width IS NOT NULL AND EXCLUDED.survey_width > 0) OR (request_items.survey_width IS NOT NULL AND request_items.survey_width > 0)),
-                            survey_width = COALESCE(EXCLUDED.survey_width, request_items.survey_width),
-                            survey_height = COALESCE(EXCLUDED.survey_height, request_items.survey_height),
+                            survey_width = COALESCE(EXCLUDED.survey_width, EXCLUDED.width, request_items.survey_width, request_items.width),
+                            survey_height = COALESCE(EXCLUDED.survey_height, EXCLUDED.height, request_items.survey_height, request_items.height),
                             brand_changed_by_qcag = (EXCLUDED.brand_changed_by_qcag OR request_items.brand_changed_by_qcag),
                             brand_changed_by = COALESCE(NULLIF(EXCLUDED.brand_changed_by, ''), request_items.brand_changed_by),
                             added_by_qcag = (EXCLUDED.added_by_qcag OR request_items.added_by_qcag OR (request_items.added_by_qcag_by IS NOT NULL AND request_items.added_by_qcag_by != '') OR (EXCLUDED.added_by_qcag_by IS NOT NULL AND EXCLUDED.added_by_qcag_by != '')),
@@ -6234,6 +6241,33 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
             `, [noteId, targetCode, `Từ chối sản xuất: ${reason}`, rejectedBy]);
         } catch (noteErr) {
             console.warn('[reject-production] record note warning:', noteErr && noteErr.message);
+        }
+
+        // 3.5 ĐỒNG BỘ TRẠNG THÁI SANG BẢNG REQUESTS: ĐƯA VỀ PROCESSING & PENDING_EDIT
+        try {
+            let tkToSync = targetCode;
+            try {
+                const [qRow] = await pool.query(`SELECT COALESCE(request_tk_code, tk_code, '') AS tk FROM quotations WHERE quote_code = ? LIMIT 1`, [targetCode]);
+                if (qRow && qRow.length > 0 && qRow[0].tk) tkToSync = qRow[0].tk;
+            } catch (_) {}
+
+            await pool.query(`
+                UPDATE requests 
+                SET status = 'processing',
+                    sub_status = 'pending_edit',
+                    editing_requested_at = NOW(),
+                    updated_at = NOW()
+                WHERE tk_code = ? OR id = ?
+            `, [tkToSync, targetCode]);
+
+            // Ghi note edit-request trực tiếp cho request để App 2 hiển thị trong hội thoại
+            const reqNoteId = `nt_edreq_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+            await pool.query(`
+                INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, created_at)
+                VALUES (?, 'request', ?, 'edit-request', ?, ?, NOW())
+            `, [reqNoteId, tkToSync, `Sale Heineken yêu cầu chỉnh sửa: ${reason}`, rejectedBy]);
+        } catch (reqSyncErr) {
+            console.warn('[reject-production] sync requests warning:', reqSyncErr && reqSyncErr.message);
         }
 
         // 4. MỞ LẠI TASK THIẾT KẾ CHO DESIGNER QCAG KHI TỪ CHỐI SẢN XUẤT
