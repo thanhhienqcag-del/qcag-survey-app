@@ -1600,6 +1600,7 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     });
   }
 
+  const rollbackRequest = { ...currentDetailRequest };
   const updated = {
     ...currentDetailRequest,
     items: JSON.stringify(items),
@@ -1607,7 +1608,27 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     updatedAt: now
   };
 
-  await qcagDesktopPersistRequest(updated, 'Đã cập nhật hạng mục');
+  // Optimistic UI: Cập nhật RAM state, cache và làm tươi DOM bảng hạng mục ngay lập tức
+  if (typeof window !== 'undefined') {
+    window._qcagLastOptimisticSaveTs = Date.now();
+    window._qcagLastOptimisticSaveId = updated.__backendId;
+  }
+  currentDetailRequest = updated;
+  qcagDesktopCacheRequest(updated);
+  const idxAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.findIndex(r => r.__backendId === updated.__backendId) : -1;
+  if (idxAll !== -1) allRequests[idxAll] = updated;
+  _qcagDesktopInPlaceRefresh(updated);
+
+  try {
+    const ok = await qcagDesktopPersistRequest(updated, 'Đã cập nhật hạng mục', true);
+    if (!ok) throw new Error('Persist failed');
+  } catch (err) {
+    showToast('Lỗi khi lưu hạng mục, đang hoàn tác');
+    currentDetailRequest = rollbackRequest;
+    qcagDesktopCacheRequest(rollbackRequest);
+    if (idxAll !== -1) allRequests[idxAll] = rollbackRequest;
+    _qcagDesktopInPlaceRefresh(rollbackRequest);
+  }
 }
 
 // ── Add Item Modal (existing) ─────────────────────────────────────────
@@ -2135,6 +2156,7 @@ async function qcagDesktopConfirmEditItemsModal() {
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${subType ? ' - ' + subType : ''}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now });
 
+  const rollbackRequest = { ...currentDetailRequest };
   const updated = {
     ...currentDetailRequest,
     items: JSON.stringify(items),
@@ -2142,14 +2164,30 @@ async function qcagDesktopConfirmEditItemsModal() {
     updatedAt: now
   };
 
-  // Close modal and persist
+  // Close modal and apply Optimistic UI immediately
   qcagCloseEditItemsModal();
   const confirmBtn = document.getElementById('qcagEditItemConfirmBtn');
   if (confirmBtn) confirmBtn.disabled = true;
+
+  if (typeof window !== 'undefined') {
+    window._qcagLastOptimisticSaveTs = Date.now();
+    window._qcagLastOptimisticSaveId = updated.__backendId;
+  }
+  currentDetailRequest = updated;
+  qcagDesktopCacheRequest(updated);
+  const idxAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.findIndex(r => r.__backendId === updated.__backendId) : -1;
+  if (idxAll !== -1) allRequests[idxAll] = updated;
+  _qcagDesktopInPlaceRefresh(updated);
+
   try {
-    await qcagDesktopPersistRequest(updated, 'Đã thêm hạng mục');
+    const ok = await qcagDesktopPersistRequest(updated, 'Đã thêm hạng mục', true);
+    if (!ok) throw new Error('Persist failed');
   } catch (err) {
-    showToast('Không thể thêm hạng mục');
+    showToast('Không thể thêm hạng mục, đang hoàn tác');
+    currentDetailRequest = rollbackRequest;
+    qcagDesktopCacheRequest(rollbackRequest);
+    if (idxAll !== -1) allRequests[idxAll] = rollbackRequest;
+    _qcagDesktopInPlaceRefresh(rollbackRequest);
   }
 }
 
@@ -2170,6 +2208,7 @@ async function qcagDesktopRemoveItem(index) {
   const now = new Date().toISOString();
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Đã xóa hạng mục số ${index + 1} (${itemLabel})`, createdAt: now });
 
+  const rollbackRequest = { ...currentDetailRequest };
   const updated = {
     ...currentDetailRequest,
     items: JSON.stringify(items),
@@ -2177,7 +2216,24 @@ async function qcagDesktopRemoveItem(index) {
     updatedAt: now
   };
 
-  qcagDesktopPersistRequest(updated, 'Đã xóa hạng mục').catch(() => { });
+  // Optimistic UI: Cập nhật RAM state, cache và làm tươi DOM bảng hạng mục ngay lập tức
+  if (typeof window !== 'undefined') {
+    window._qcagLastOptimisticSaveTs = Date.now();
+    window._qcagLastOptimisticSaveId = updated.__backendId;
+  }
+  currentDetailRequest = updated;
+  qcagDesktopCacheRequest(updated);
+  const idxAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.findIndex(r => r.__backendId === updated.__backendId) : -1;
+  if (idxAll !== -1) allRequests[idxAll] = updated;
+  _qcagDesktopInPlaceRefresh(updated);
+
+  qcagDesktopPersistRequest(updated, 'Đã xóa hạng mục', true).catch(() => {
+    showToast('Lỗi khi xóa hạng mục, đang hoàn tác');
+    currentDetailRequest = rollbackRequest;
+    qcagDesktopCacheRequest(rollbackRequest);
+    if (idxAll !== -1) allRequests[idxAll] = rollbackRequest;
+    _qcagDesktopInPlaceRefresh(rollbackRequest);
+  });
 }
 
 function qcagDesktopInlineChangeBrand(index, newBrand) {
