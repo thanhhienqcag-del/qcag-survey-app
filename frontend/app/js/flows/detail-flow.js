@@ -5002,6 +5002,9 @@ async function submitEditRequest() {
       editingRequestedAt: initialEditDate,
       editing_requested_at: initialEditDate,
       hasEditRequest: true,
+      isEditPending: true,
+      _mqReplacedDuringEdit: false,
+      _allowEditWithoutNewMq: false,
       subStatus: 'pending_edit',
       sub_status: 'pending_edit',
       status: 'processing'

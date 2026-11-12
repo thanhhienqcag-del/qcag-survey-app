@@ -3301,8 +3301,8 @@ const KS_REQUESTS_SELECT_SQL = `
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
             COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
-            AND d_lat.created_at IS NOT NULL 
-            AND d_lat.created_at >= n_edit.created_at
+            AND COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL 
+            AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at
           )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
@@ -3319,7 +3319,7 @@ const KS_REQUESTS_SELECT_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
-      d_lat.created_at AS design_updated_at,
+      COALESCE(d_lat.updated_at, d_lat.created_at) AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       r.sale_name,
       r.sale_phone,
@@ -3503,8 +3503,8 @@ const KS_REQUESTS_LITE_SQL = `
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
             COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
-            AND d_lat.created_at IS NOT NULL 
-            AND d_lat.created_at >= n_edit.created_at
+            AND COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL 
+            AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at
           )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
@@ -3521,7 +3521,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
-      d_lat.created_at AS design_updated_at,
+      COALESCE(d_lat.updated_at, d_lat.created_at) AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       COALESCE(u.fullname, '') AS sale_name,
       COALESCE(u.phone, '') AS sale_phone,

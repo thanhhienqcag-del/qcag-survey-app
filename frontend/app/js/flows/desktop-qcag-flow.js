@@ -777,20 +777,19 @@ function qcagDesktopHasLaterEditResolvedComment(comments, index) {
 
 function qcagDesktopIsPendingEditRequest(req) {
   if (!req) return false;
-  // Chặn cờ phủ quyết nếu client/server đã xác nhận không còn pending edit
-  if (req.hasEditRequest === false || req.isEditPending === false) {
-    return false;
-  }
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
   const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
 
-  // 1. Ưu tiên tuyệt đối: sub_status từ DB là pending_edit hoặc edit_requested
+  // 1. Ưu tiên tuyệt đối: sub_status từ DB hoặc status chính là yêu cầu chỉnh sửa
   if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
     return true;
   }
-  // 2. Status chính là yêu cầu chỉnh sửa
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
     return true;
+  }
+  // 2. Chặn cờ phủ quyết nếu client/server đã xác nhận không còn pending edit
+  if (req.hasEditRequest === false || req.isEditPending === false) {
+    return false;
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at || req.hasEditRequest || req.isEditPending) {
@@ -3790,7 +3789,13 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       // Vị trí MQ thiết kế QCAG: CHỈ XUẤT HIỆN DUY NHẤT 1 ẢNH!
       const singleMq = designImgs.length > 0 ? designImgs[designImgs.length - 1] : null;
       const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
-      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit;
+      const _editTime = updatedRequest.editingRequestedAt || updatedRequest.editing_requested_at;
+      const _designTime = updatedRequest.designUpdatedAt || updatedRequest.design_updated_at;
+      let _hasNewMqInDb = false;
+      if (_editTime && _designTime) {
+        try { _hasNewMqInDb = new Date(_designTime).getTime() > new Date(_editTime).getTime(); } catch (_) {}
+      }
+      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit && !_hasNewMqInDb;
       const reqStatus = String(updatedRequest.status || '').toLowerCase();
       const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
       const canRemove = !isOldReferencedMq && !isDone;
