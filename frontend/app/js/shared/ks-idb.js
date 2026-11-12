@@ -141,6 +141,27 @@
       }
     },
 
+    // Xóa các bản ghi đã bị hủy/xóa khỏi IndexedDB (tránh bản ghi ma)
+    deleteKeys: async function (keys) {
+      if (!Array.isArray(keys) || !keys.length) return false;
+      try {
+        var db = await _openDb();
+        return new Promise(function (resolve) {
+          var tx = db.transaction(STORE_REQUESTS, 'readwrite');
+          var store = tx.objectStore(STORE_REQUESTS);
+          for (var i = 0; i < keys.length; i++) {
+            var k = String(keys[i] || '').trim();
+            if (k) store.delete(k);
+          }
+          tx.oncomplete = function () { resolve(true); };
+          tx.onerror = function () { resolve(false); };
+        });
+      } catch (err) {
+        console.warn('[ksIdb] deleteKeys error:', err);
+        return false;
+      }
+    },
+
     // Lưu / lấy metadata đơn giản (ETag, lastSyncIso)
     getMeta: async function (key) {
       try {

@@ -104,10 +104,13 @@ function wsBroadcast(payload) {
 // ── In-memory cache for GET /api/ks/requests & production-approvals ──────────
 // Eliminates repetitive Neon queries: cache is populated on first GET and
 // patched in-place per single record on writes instead of full-table scans.
-let _ksRequestsCache = null; // { rows: Array, etag: string } | null
+let _ksRequestsCache = null; // { rows: Array, etag: string, maxWatermarkIso: string, activeCount: number, lastDbCheckAt: number } | null
 let _ksWarmingInProgress = false;
+let _ksWarmPromise = null;
+let _ksSyncPromise = null;
 let _ksProductionApprovalsCache = null; // { data: Object, ts: number } | null
 const KS_PROD_APPROVALS_TTL_MS = 10000;
+const KS_CACHE_CHECK_INTERVAL_MS = 3000;
 
 function ksInvalidateCache(extra) {
     if (_ksRequestsCache && Array.isArray(_ksRequestsCache.rows) && extra && typeof extra === 'object') {
@@ -119,10 +122,13 @@ function ksInvalidateCache(extra) {
                     r && r.tkCode !== targetId && r.tk_code !== targetId && r.id !== targetId && r.__backendId !== targetId
                 );
                 if (_ksRequestsCache.rows.length !== beforeLen) {
+                    _ksRequestsCache.activeCount = _ksRequestsCache.rows.length;
+                    _ksRequestsCache.lastDbCheckAt = 0;
                     _ksRequestsCache.etag = `"${Date.now()}_${_ksRequestsCache.rows.length}"`;
                     return;
                 }
             } else if (typeof ksPatchSingleRequestCache === 'function') {
+                _ksRequestsCache.lastDbCheckAt = 0;
                 ksPatchSingleRequestCache(targetId, extra.action).catch(() => {
                     _ksRequestsCache = null;
                     if (typeof ksWarmRequestsCache === 'function') {
@@ -133,11 +139,15 @@ function ksInvalidateCache(extra) {
             }
         }
     }
-    _ksRequestsCache = null;
-    if (typeof ksWarmRequestsCache === 'function') {
-        setTimeout(() => {
-            ksWarmRequestsCache().catch(() => {});
-        }, 200);
+    if (_ksRequestsCache) {
+        _ksRequestsCache.lastDbCheckAt = 0;
+    }
+    if (typeof ksEnsureFreshCache === 'function') {
+        ksEnsureFreshCache(true).catch(() => {
+            _ksRequestsCache = null;
+        });
+    } else {
+        _ksRequestsCache = null;
     }
 }
 // ────────────────────────────────────────────────────────────────────────────────
@@ -3596,20 +3606,195 @@ const KS_REQUESTS_LITE_SQL = `
     ORDER BY r.created_at DESC
 `;
 
-async function ksWarmRequestsCache() {
-    if (_ksWarmingInProgress || !pool) return;
-    _ksWarmingInProgress = true;
-    try {
-        const [rows] = await pool.query(KS_REQUESTS_LITE_SQL);
-        const mapped = rows.map(r => ksRowToApp(r, true));
-        const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
-        _ksRequestsCache = { rows: mapped, etag };
-        console.log(`[Cache] Pre-warmed _ksRequestsCache with ${mapped.length} records (ETag: ${etag})`);
-    } catch (err) {
-        console.warn('[Cache] ksWarmRequestsCache failed:', err && err.message ? err.message : err);
-    } finally {
-        _ksWarmingInProgress = false;
+async function ksFetchDbWatermark() {
+    if (!pool) return null;
+    const [[row]] = await pool.query(`
+        SELECT 
+            TO_CHAR(
+                GREATEST(
+                    COALESCE((SELECT MAX(updated_at) FROM requests), '1970-01-01'::timestamptz),
+                    COALESCE((SELECT MAX(created_at) FROM notes), '1970-01-01'::timestamptz),
+                    COALESCE((SELECT MAX(updated_at) FROM quotations), '1970-01-01'::timestamptz),
+                    COALESCE((SELECT MAX(updated_at) FROM designs), '1970-01-01'::timestamptz)
+                ) AT TIME ZONE 'UTC',
+                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+            ) AS max_ts,
+            (SELECT COUNT(*)::int FROM requests WHERE COALESCE(is_deleted, false) = false) AS active_cnt
+    `);
+    return row ? { maxTs: String(row.max_ts || ''), activeCnt: Number(row.active_cnt || 0) } : null;
+}
+
+function ksUpsertCacheRow(mappedRow) {
+    if (!_ksRequestsCache || !Array.isArray(_ksRequestsCache.rows) || !mappedRow) return;
+    const tkKey = String(mappedRow.tkCode || mappedRow.tk_code || '').trim();
+    const idKey = String(mappedRow.id || mappedRow.__backendId || '').trim();
+    const idx = _ksRequestsCache.rows.findIndex(r =>
+        r && (
+            (tkKey && (r.tkCode === tkKey || r.tk_code === tkKey)) ||
+            (idKey && (r.id === idKey || r.__backendId === idKey))
+        )
+    );
+    if (idx >= 0) {
+        _ksRequestsCache.rows[idx] = mappedRow;
+    } else {
+        _ksRequestsCache.rows.unshift(mappedRow);
+        _ksRequestsCache.rows.sort((a, b) => {
+            const ta = a && a.createdAt ? Date.parse(a.createdAt) : 0;
+            const tb = b && b.createdAt ? Date.parse(b.createdAt) : 0;
+            return tb - ta;
+        });
     }
+}
+
+async function ksWarmRequestsCache() {
+    if (_ksWarmPromise) return _ksWarmPromise;
+    if (!pool) return;
+    _ksWarmingInProgress = true;
+    _ksWarmPromise = (async () => {
+        try {
+            const wm = await ksFetchDbWatermark().catch(() => null);
+            const [rows] = await pool.query(KS_REQUESTS_LITE_SQL);
+            const mapped = rows.map(r => ksRowToApp(r, true));
+            const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
+            _ksRequestsCache = {
+                rows: mapped,
+                etag,
+                maxWatermarkIso: wm ? wm.maxTs : '',
+                activeCount: wm ? wm.activeCnt : mapped.length,
+                lastDbCheckAt: Date.now()
+            };
+            console.log(`[Cache] Pre-warmed _ksRequestsCache with ${mapped.length} records (ETag: ${etag})`);
+        } catch (err) {
+            console.warn('[Cache] ksWarmRequestsCache failed:', err && err.message ? err.message : err);
+        } finally {
+            _ksWarmingInProgress = false;
+            _ksWarmPromise = null;
+        }
+    })();
+    return _ksWarmPromise;
+}
+
+async function ksEnsureFreshCache(forceCheck = false) {
+    if (!pool) return;
+    if (!_ksRequestsCache || !Array.isArray(_ksRequestsCache.rows)) {
+        await ksWarmRequestsCache();
+        return;
+    }
+    const now = Date.now();
+    if (!forceCheck && _ksRequestsCache.lastDbCheckAt && (now - _ksRequestsCache.lastDbCheckAt) < KS_CACHE_CHECK_INTERVAL_MS) {
+        return;
+    }
+    if (_ksSyncPromise) return _ksSyncPromise;
+    _ksSyncPromise = (async () => {
+        try {
+            _ksRequestsCache.lastDbCheckAt = Date.now();
+            const wm = await ksFetchDbWatermark();
+            if (!wm) return;
+            const prevMax = _ksRequestsCache.maxWatermarkIso;
+            const prevCnt = _ksRequestsCache.activeCount;
+            if (wm.maxTs === prevMax && wm.activeCnt === prevCnt) {
+                return; // Zero changes across ALL Cloud Run instances & App 1
+            }
+
+            const prevParsed = prevMax ? Date.parse(prevMax) : NaN;
+            const overlapIso = Number.isFinite(prevParsed)
+                ? new Date(prevParsed - 15000).toISOString()
+                : new Date(Date.now() - 120000).toISOString();
+
+            const [tkRows] = await pool.query(`
+                SELECT DISTINCT tk_code FROM (
+                    SELECT tk_code FROM requests WHERE (updated_at >= ? OR created_at >= ?) AND COALESCE(is_deleted, false) = false
+                    UNION ALL
+                    SELECT CASE WHEN n.ref_type = 'request' THEN COALESCE(r_n.tk_code, n.ref_id) ELSE q_n.request_tk_code END AS tk_code
+                    FROM notes n
+                    LEFT JOIN requests r_n ON n.ref_type = 'request' AND (r_n.tk_code = n.ref_id OR r_n.id = n.ref_id)
+                    LEFT JOIN quotations q_n ON n.ref_type = 'quotation' AND q_n.quote_code = n.ref_id
+                    WHERE n.created_at >= ?
+                    UNION ALL
+                    SELECT COALESCE(NULLIF(request_tk_code, ''), tk_code) AS tk_code FROM quotations WHERE updated_at >= ?
+                    UNION ALL
+                    SELECT request_tk_code AS tk_code FROM designs WHERE updated_at >= ?
+                ) sub
+                WHERE tk_code IS NOT NULL AND tk_code != ''
+                LIMIT 500
+            `, [overlapIso, overlapIso, overlapIso, overlapIso, overlapIso]);
+
+            const changedTkList = (tkRows || []).map(x => String(x.tk_code || '').trim()).filter(Boolean);
+            if (changedTkList.length >= 500) {
+                await ksWarmRequestsCache();
+                return;
+            }
+            if (changedTkList.length > 0) {
+                const deltaSql = KS_REQUESTS_LITE_SQL.replace(
+                    /WHERE COALESCE\(r\.is_deleted,\s*false\)\s*=\s*false\s*ORDER BY r\.created_at DESC\s*$/i,
+                    `WHERE COALESCE(r.is_deleted, false) = false AND r.tk_code = ANY(?::text[]) ORDER BY r.created_at DESC`
+                );
+                const [changedRows] = await pool.query(deltaSql, [changedTkList]);
+                for (const row of (changedRows || [])) {
+                    ksUpsertCacheRow(ksRowToApp(row, true));
+                }
+            }
+
+            const [delRows] = await pool.query(
+                `SELECT id, tk_code FROM requests
+                 WHERE (is_deleted = true OR delete_status = 'approved')
+                   AND (updated_at >= ? OR deleted_at >= ?)`,
+                [overlapIso, overlapIso]
+            );
+            if (delRows && delRows.length > 0) {
+                const delKeys = new Set();
+                delRows.forEach(d => {
+                    if (d.id) delKeys.add(String(d.id));
+                    if (d.tk_code) delKeys.add(String(d.tk_code));
+                });
+                _ksRequestsCache.rows = _ksRequestsCache.rows.filter(r =>
+                    r && !delKeys.has(String(r.id || '')) && !delKeys.has(String(r.__backendId || '')) && !delKeys.has(String(r.tkCode || ''))
+                );
+            }
+
+            // Reconcile exact count if still mismatched (rare edge case like hard-delete/restore)
+            if (_ksRequestsCache.rows.length !== wm.activeCnt) {
+                const [activeKeys] = await pool.query(`SELECT id, tk_code FROM requests WHERE COALESCE(is_deleted, false) = false`);
+                const validIds = new Set();
+                const validTks = new Set();
+                (activeKeys || []).forEach(ak => {
+                    if (ak.id) validIds.add(String(ak.id));
+                    if (ak.tk_code) validTks.add(String(ak.tk_code));
+                });
+                _ksRequestsCache.rows = _ksRequestsCache.rows.filter(r =>
+                    r && (validIds.has(String(r.id || r.__backendId || '')) || validTks.has(String(r.tkCode || '')))
+                );
+                const cachedSet = new Set();
+                _ksRequestsCache.rows.forEach(r => {
+                    if (r.id) cachedSet.add(String(r.id));
+                    if (r.tkCode) cachedSet.add(String(r.tkCode));
+                });
+                const missingTks = (activeKeys || [])
+                    .filter(ak => !cachedSet.has(String(ak.tk_code || '')) && !cachedSet.has(String(ak.id || '')))
+                    .map(ak => String(ak.tk_code || ak.id));
+                if (missingTks.length > 0 && missingTks.length <= 200) {
+                    const missingSql = KS_REQUESTS_LITE_SQL.replace(
+                        /WHERE COALESCE\(r\.is_deleted,\s*false\)\s*=\s*false\s*ORDER BY r\.created_at DESC\s*$/i,
+                        `WHERE COALESCE(r.is_deleted, false) = false AND (r.tk_code = ANY(?::text[]) OR r.id = ANY(?::text[])) ORDER BY r.created_at DESC`
+                    );
+                    const [mRows] = await pool.query(missingSql, [missingTks, missingTks]);
+                    (mRows || []).forEach(mr => ksUpsertCacheRow(ksRowToApp(mr, true)));
+                } else if (missingTks.length > 200) {
+                    await ksWarmRequestsCache();
+                    return;
+                }
+            }
+
+            _ksRequestsCache.maxWatermarkIso = wm.maxTs;
+            _ksRequestsCache.activeCount = wm.activeCnt;
+            _ksRequestsCache.etag = `"${Date.now()}_${_ksRequestsCache.rows.length}"`;
+        } catch (err) {
+            console.warn('[Cache] ksEnsureFreshCache delta error:', err && err.message ? err.message : err);
+        } finally {
+            _ksSyncPromise = null;
+        }
+    })();
+    return _ksSyncPromise;
 }
 
 async function ksPatchSingleRequestCache(targetId, action) {
@@ -3623,25 +3808,12 @@ async function ksPatchSingleRequestCache(targetId, action) {
     const [rows] = await pool.query(singleSql, [cleanId, cleanId, cleanId]);
     if (!rows || rows.length === 0) {
         if (action === 'create') {
-            await ksWarmRequestsCache();
+            await ksEnsureFreshCache(true);
         }
         return;
     }
-    const mappedRow = ksRowToApp(rows[0], true);
-    const tkKey = String(mappedRow.tkCode || mappedRow.tk_code || '').trim();
-    const idKey = String(mappedRow.id || mappedRow.__backendId || '').trim();
-    const idx = _ksRequestsCache.rows.findIndex(r =>
-        r && (
-            (tkKey && (r.tkCode === tkKey || r.tk_code === tkKey)) ||
-            (idKey && (r.id === idKey || r.__backendId === idKey)) ||
-            r.tkCode === cleanId || r.tk_code === cleanId || r.id === cleanId || r.__backendId === cleanId
-        )
-    );
-    if (idx >= 0) {
-        _ksRequestsCache.rows[idx] = mappedRow;
-    } else {
-        _ksRequestsCache.rows.unshift(mappedRow);
-    }
+    ksUpsertCacheRow(ksRowToApp(rows[0], true));
+    _ksRequestsCache.activeCount = _ksRequestsCache.rows.length;
     _ksRequestsCache.etag = `"${Date.now()}_${_ksRequestsCache.rows.length}"`;
 }
 
@@ -3964,10 +4136,88 @@ app.get('/api/ks/requests', async (req, res) => {
             });
         }
 
+        // 3.5) Targeted Batch Lookup by IDs / tkCodes (Self-healing reconciliation)
+        const rawIdsParam = req.query && req.query.ids ? String(req.query.ids) : '';
+        if (rawIdsParam.trim()) {
+            const idList = Array.from(new Set(rawIdsParam.split(',').map(s => s.trim()).filter(Boolean))).slice(0, 200);
+            if (idList.length === 0) {
+                return res.json({ ok: true, data: [], deleted_ids: [], paging: { total: 0, limit: 0, offset: 0, hasMore: false } });
+            }
+            const isLiteIds = Boolean(req.query && (req.query.lite === '1' || req.query.lite === 'true' || req.query.summary === '1'));
+            await ksEnsureFreshCache();
+            const idSet = new Set(idList);
+            let foundRows = [];
+            if (isLiteIds && _ksRequestsCache && Array.isArray(_ksRequestsCache.rows)) {
+                foundRows = _ksRequestsCache.rows.filter(r =>
+                    r && (idSet.has(String(r.tkCode || '')) || idSet.has(String(r.id || '')) || idSet.has(String(r.__backendId || '')))
+                );
+            } else {
+                const baseSql = isLiteIds
+                    ? KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/i, '')
+                    : `${KS_REQUESTS_SELECT_SQL} WHERE COALESCE(r.is_deleted, false) = false`;
+                const [dbRows] = await pool.query(
+                    `${baseSql} AND (r.tk_code = ANY(?::text[]) OR r.id = ANY(?::text[])) ORDER BY r.created_at DESC`,
+                    [idList, idList]
+                );
+                foundRows = (dbRows || []).map(r => ksRowToApp(r, isLiteIds));
+            }
+            const foundKeys = new Set();
+            foundRows.forEach(r => {
+                if (r.tkCode) foundKeys.add(String(r.tkCode));
+                if (r.id) foundKeys.add(String(r.id));
+                if (r.__backendId) foundKeys.add(String(r.__backendId));
+            });
+            const missingIds = idList.filter(x => !foundKeys.has(x));
+            const deletedIds = new Set();
+            if (missingIds.length > 0) {
+                try {
+                    const [dbCheck] = await pool.query(
+                        `SELECT id, tk_code, COALESCE(is_deleted, false) AS is_deleted, delete_status, status
+                         FROM requests
+                         WHERE tk_code = ANY(?::text[]) OR id = ANY(?::text[])`,
+                        [missingIds, missingIds]
+                    );
+                    const seenInDb = new Set();
+                    const activeMissing = [];
+                    (dbCheck || []).forEach(dc => {
+                        if (dc.tk_code) seenInDb.add(String(dc.tk_code));
+                        if (dc.id) seenInDb.add(String(dc.id));
+                        if (dc.is_deleted || dc.delete_status === 'approved' || dc.status === 'cancelled') {
+                            if (dc.tk_code) deletedIds.add(String(dc.tk_code));
+                            if (dc.id) deletedIds.add(String(dc.id));
+                        } else {
+                            if (dc.tk_code) activeMissing.push(String(dc.tk_code));
+                            else if (dc.id) activeMissing.push(String(dc.id));
+                        }
+                    });
+                    // Fallback: if an active row wasn't in cache yet, fetch directly from DB & heal cache
+                    if (activeMissing.length > 0) {
+                        const healSql = `${KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/i, '')} AND r.tk_code = ANY(?::text[])`;
+                        const [healRows] = await pool.query(healSql, [activeMissing]);
+                        (healRows || []).forEach(hr => {
+                            const appRow = ksRowToApp(hr, true);
+                            ksUpsertCacheRow(appRow);
+                            foundRows.push(appRow);
+                        });
+                    }
+                    missingIds.forEach(mid => {
+                        if (!seenInDb.has(mid)) deletedIds.add(mid);
+                    });
+                } catch (_) {}
+            }
+            return res.json({
+                ok: true,
+                data: foundRows,
+                deleted_ids: Array.from(deletedIds),
+                paging: { total: foundRows.length, limit: foundRows.length, offset: 0, hasMore: false }
+            });
+        }
+
         // 4) Full catalog path with In-Memory RAM cache (for Desktop QCAG & Mobile QCAG)
         const isAllRequested = Boolean(req.query && (req.query.all === '1' || req.query.all === 'true' || req.query.all === true));
         if (isAllRequested) {
-            if (_ksRequestsCache) {
+            await ksEnsureFreshCache();
+            if (_ksRequestsCache && Array.isArray(_ksRequestsCache.rows)) {
                 const clientEtag = req.headers['if-none-match'];
                 res.setHeader('ETag', _ksRequestsCache.etag);
                 res.setHeader('Cache-Control', 'no-cache');
@@ -3977,6 +4227,7 @@ app.get('/api/ks/requests', async (req, res) => {
                 return res.json({
                     ok: true,
                     data: _ksRequestsCache.rows,
+                    server_ts: _ksRequestsCache.maxWatermarkIso || new Date().toISOString(),
                     paging: { total: _ksRequestsCache.rows.length, limit: _ksRequestsCache.rows.length, offset: 0, hasMore: false }
                 });
             }
@@ -3984,37 +4235,72 @@ app.get('/api/ks/requests', async (req, res) => {
             const isLite = Boolean(req.query && (req.query.lite === '1' || req.query.lite === 'true' || req.query.summary === '1'));
             const [rows] = await pool.query(isLite ? KS_REQUESTS_LITE_SQL : `${KS_REQUESTS_SELECT_SQL} ORDER BY r.created_at DESC`);
             const mapped = rows.map(r => ksRowToApp(r, true));
-            const etag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
-            _ksRequestsCache = { rows: mapped, etag };
+            const etag = `"${Date.now()}_${mapped.length}"`;
+            _ksRequestsCache = {
+                rows: mapped,
+                etag,
+                lastCheckedAt: Date.now(),
+                maxWatermarkIso: new Date().toISOString(),
+                activeCount: mapped.length
+            };
             res.setHeader('ETag', etag);
             res.setHeader('Cache-Control', 'no-cache');
             return res.json({
                 ok: true,
                 data: mapped,
+                server_ts: _ksRequestsCache.maxWatermarkIso,
                 paging: { total: mapped.length, limit: mapped.length, offset: 0, hasMore: false }
             });
         }
 
-        // 4) Incremental Sync path (SWR)
+        // 4) Incremental Sync path (SWR + Self-healing Meta Reconciliation)
         if (updatedSince) {
             const isLite = Boolean(req.query && (req.query.lite === '1' || req.query.lite === 'true' || req.query.summary === '1'));
-            const [rows] = await pool.query(
-                isLite
-                    ? `${KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/, '')} AND (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 100`
-                    : `${KS_REQUESTS_SELECT_SQL} WHERE (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 100`,
-                [updatedSince, updatedSince]
-            );
-            const mapped = rows.map(r => ksRowToApp(r, isLite));
+            const includeMeta = Boolean(req.query && (req.query.include_meta === '1' || req.query.include_meta === 'true'));
+            await ksEnsureFreshCache();
+            const toMs = (v) => {
+                if (!v) return 0;
+                const t = Date.parse(v);
+                return Number.isFinite(t) ? t : 0;
+            };
+            const sinceMs = toMs(updatedSince);
+            let mapped = [];
+            if (isLite && _ksRequestsCache && Array.isArray(_ksRequestsCache.rows)) {
+                mapped = _ksRequestsCache.rows
+                    .filter(r => {
+                        if (!r) return false;
+                        const maxRowMs = Math.max(
+                            toMs(r.updatedAt),
+                            toMs(r.createdAt),
+                            toMs(r.editingRequestedAt),
+                            toMs(r.designCreatedAt),
+                            toMs(r.designLastEditedAt)
+                        );
+                        return maxRowMs >= sinceMs;
+                    })
+                    .sort((a, b) => Math.max(toMs(b.updatedAt), toMs(b.createdAt)) - Math.max(toMs(a.updatedAt), toMs(a.createdAt)));
+            } else {
+                const [rows] = await pool.query(
+                    isLite
+                        ? `${KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/, '')} AND (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 500`
+                        : `${KS_REQUESTS_SELECT_SQL} WHERE (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 500`,
+                    [updatedSince, updatedSince]
+                );
+                mapped = rows.map(r => ksRowToApp(r, isLite));
+            }
+            const tombstoneIds = [];
             try {
                 const [delRows] = await pool.query(
                     `SELECT r.id, r.tk_code, r.updated_at
                      FROM requests r
                      WHERE (r.is_deleted = true OR r.delete_status = 'approved' OR r.status = 'cancelled')
                        AND (r.updated_at >= ? OR r.deleted_at >= ?)
-                     ORDER BY r.updated_at DESC LIMIT 50`,
+                     ORDER BY r.updated_at DESC LIMIT 500`,
                     [updatedSince, updatedSince]
                 );
                 (delRows || []).forEach(dr => {
+                    if (dr.tk_code) tombstoneIds.push(String(dr.tk_code));
+                    if (dr.id) tombstoneIds.push(String(dr.id));
                     mapped.push({
                         id: String(dr.id),
                         __backendId: String(dr.id),
@@ -4029,11 +4315,29 @@ app.get('/api/ks/requests', async (req, res) => {
                     });
                 });
             } catch (_) {}
-            return res.json({
+            const payload = {
                 ok: true,
                 data: mapped,
+                server_ts: (_ksRequestsCache && _ksRequestsCache.maxWatermarkIso) || new Date().toISOString(),
                 paging: { total: mapped.length, limit: mapped.length, hasMore: false, nextCursor: null }
-            });
+            };
+            if (includeMeta && _ksRequestsCache && Array.isArray(_ksRequestsCache.rows)) {
+                const activeProcessingIds = [];
+                for (let ai = 0; ai < _ksRequestsCache.rows.length; ai++) {
+                    const ar = _ksRequestsCache.rows[ai];
+                    if (!ar) continue;
+                    const st = String(ar.status || 'pending').trim().toLowerCase();
+                    const isDoneStatus = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled');
+                    if (!isDoneStatus || ar.editingRequestedAt) {
+                        const key = ar.tkCode || ar.id || ar.__backendId;
+                        if (key) activeProcessingIds.push(String(key));
+                    }
+                }
+                payload.tombstones = Array.from(new Set(tombstoneIds));
+                payload.active_processing_ids = activeProcessingIds;
+                payload.total_active = _ksRequestsCache.rows.length;
+            }
+            return res.json(payload);
         }
 
         // 5) Total count from base table
@@ -4473,6 +4777,7 @@ async function handleCreateRequestNote(req, res) {
             INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
             VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
         `, [noteId, tkCode, noteType, text, authorName, imageUrl]);
+        await pool.query('UPDATE requests SET updated_at = NOW() WHERE tk_code = ?', [tkCode]).catch(() => {});
 
         const isQcagAuthor = (
             String(b.authorRole || '').toLowerCase() === 'qcag' ||
@@ -5393,6 +5698,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             vals.push(now);
             vals.push(tkCode);
             await pool.query(`UPDATE requests SET ${fields.join(', ')} WHERE tk_code = ?`, vals);
+        } else {
+            await pool.query('UPDATE requests SET updated_at = ? WHERE tk_code = ?', [now, tkCode]).catch(() => {});
         }
 
         // Handle item edits & survey dimensions updates

@@ -663,6 +663,22 @@ function qcagRequestNeedsSurvey(req) {
   return hasSurveyFlag && !hasSurveyDone;
 }
 
+// Helper: Nhận diện request thuộc Dự án Menu Wall
+function qcagIsMenuWallRequest(req) {
+  if (!req || typeof req !== 'object') return false;
+  const content = String(req.content || '').toLowerCase();
+  if (content.includes('menu wall') || content.includes('menuwall') || content.includes('[menu wall]')) return true;
+  const items = qcagDesktopParseJson(req.items, []);
+  if (Array.isArray(items)) {
+    return items.some(it => {
+      const t = String(it.type || it.content || it.otherContent || '').toLowerCase();
+      const c = String(it.code || '').toUpperCase();
+      return t.includes('menu wall') || t.includes('menuwall') || c.startsWith('MW');
+    });
+  }
+  return false;
+}
+
 // Assign standardized tags for UI-independent classification.
 function assignStandardTags(req) {
   if (!req || typeof req !== 'object') return [];
@@ -672,6 +688,7 @@ function assignStandardTags(req) {
   const designImgs = qcagDesktopParseJson(req.designImages, []);
   const statusImgs = qcagDesktopParseJson(req.statusImages, []);
   const status = String(req.status || 'pending').toLowerCase();
+  if (qcagIsMenuWallRequest(req)) tags.push('Menu Wall');
 
   // Processing / Yêu cầu (new)
   if (String(req.type || '').toLowerCase() === 'new') {
@@ -3024,7 +3041,7 @@ function renderQCAGDesktopList(forceRebuild = false) {
       return `
         <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
           <div class="qcag-request-item-top">
-            <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}</div>
+            <div class="qcag-request-name">${escapeHtml(String(req.outletName || '-').toUpperCase())}${qcagIsMenuWallRequest(req) ? ' <span class="qcag-menu-wall-tag" style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:0.3px;vertical-align:middle;margin-left:4px;">MENU WALL</span>' : ''}</div>
             <div class="flex flex-col items-end gap-1">
               ${isTaskMode ? (chkBadgeHtml || '') : `<span class="qcag-status-badge ${displayBadge.cls}">${displayBadge.label}</span>`}
               ${isTaskMode ? (saleApprBadgeHtml || '') : ''}
@@ -5347,7 +5364,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
 
         <div class="qcag-card">
           <div class="qcag-card-title" style="display:flex;align-items:center;justify-content:space-between;">
-            <span>Thông tin Outlet</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span>Thông tin Outlet</span>
+              ${qcagIsMenuWallRequest(request) ? '<span class="qcag-menu-wall-tag" style="background:rgba(245,158,11,0.18);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);font-size:11px;padding:2px 8px;border-radius:4px;font-weight:700;">DỰ ÁN MENU WALL</span>' : ''}
+            </div>
             <div style="display:flex;align-items:center;gap:10px;">
               ${isTaskMode ? `<span class="qcag-request-time" style="font-size:12px;font-weight:normal;opacity:0.75;">${request.createdAt ? escapeHtml(new Date(request.createdAt).toLocaleString('vi-VN')) : '-'}</span>` : ''}
               <button type="button" class="qcag-edit-outlet-btn" onclick="qcagDesktopOpenEditOutletModal()" title="Chỉnh sửa thông tin Outlet"><svg class="qcag-icon-pencil" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Sửa thông tin</button>

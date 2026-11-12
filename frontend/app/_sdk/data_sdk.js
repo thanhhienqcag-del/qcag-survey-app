@@ -431,8 +431,11 @@
     } catch (_) {}
   }
 
-  function _triggerStoreUpdated() {
-    _setLastSyncIso(_latestStoreTimestampIso());
+  var _lastFullReconcileAt = 0;
+  var _lastServerTs = '';
+
+  function _triggerStoreUpdated(explicitSyncIso) {
+    _setLastSyncIso(explicitSyncIso || _lastServerTs || _latestStoreTimestampIso());
     _saveCache();
     if (_onDataChanged) {
       _onDataChanged(_cloneStoreRows());
@@ -604,6 +607,9 @@
           if (typeof window !== 'undefined' && window.ksIdb) {
             window.ksIdb.setMeta('etag', etag);
           }
+        }
+        if (body && typeof body.server_ts === 'string' && body.server_ts) {
+          _lastServerTs = body.server_ts;
         }
         var allRows = Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [];
         var paging = body.paging || null;
@@ -815,6 +821,53 @@
     return false;
   }
 
+  function _isActiveProcessingRow(r) {
+    if (!r) return false;
+    var st = String(r.status || 'pending').trim().toLowerCase();
+    var isDone = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled');
+    if (!isDone) return true;
+    if (r.editingRequestedAt) return true;
+    return false;
+  }
+
+  function _collectRowKeys(row, outSet) {
+    if (!row || !outSet) return;
+    if (row.__backendId) outSet[String(row.__backendId)] = true;
+    if (row.id) outSet[String(row.id)] = true;
+    if (row.tkCode) outSet[String(row.tkCode)] = true;
+    if (row.tk_code) outSet[String(row.tk_code)] = true;
+  }
+
+  function _purgeStoreByKeys(keys) {
+    var list = Array.isArray(keys) ? keys : [];
+    if (!list.length) return false;
+    var targetMap = {};
+    for (var i = 0; i < list.length; i++) {
+      var k = String(list[i] || '').trim();
+      if (k) targetMap[k] = true;
+    }
+    var removedKeysMap = {};
+    Object.keys(targetMap).forEach(function (k) { removedKeysMap[k] = true; });
+    var changed = false;
+    for (var s = _store.length - 1; s >= 0; s--) {
+      var item = _store[s];
+      if (!item || item._isOfflinePending) continue;
+      var sBid = String(item.__backendId || '');
+      var sId = String(item.id || '');
+      var sTk = String(item.tkCode || item.tk_code || '');
+      if ((sBid && targetMap[sBid]) || (sId && targetMap[sId]) || (sTk && targetMap[sTk])) {
+        _collectRowKeys(item, removedKeysMap);
+        _store.splice(s, 1);
+        changed = true;
+      }
+    }
+    var delKeyArr = Object.keys(removedKeysMap);
+    if (delKeyArr.length > 0 && typeof window !== 'undefined' && window.ksIdb && typeof window.ksIdb.deleteKeys === 'function') {
+      window.ksIdb.deleteKeys(delKeyArr);
+    }
+    return changed;
+  }
+
   function _mergeLatestRows(latestRows) {
     var incoming = Array.isArray(latestRows) ? latestRows : [];
     if (!incoming.length) return false;
@@ -824,34 +877,45 @@
       var row = _store[i] || {};
       var id = row.__backendId || row.id;
       if (id != null) indexById[String(id)] = i;
+      if (row.tkCode) indexById[String(row.tkCode)] = i;
     }
 
     var toAdd = [];
     var addedKeys = {};
+    var validIncoming = [];
+    var deletedKeysMap = {};
+
     for (var j = 0; j < incoming.length; j++) {
       var next = incoming[j] || {};
-      var nid = next.__backendId || next.id;
+      var nid = next.__backendId || next.id || next.tkCode || next.tk_code;
       if (nid == null) continue;
       var key = String(nid);
+      var tkKey = String(next.tkCode || next.tk_code || '');
 
-      // Tombstone handler: If server reports this request is deleted / approved-for-delete / cancelled, purge it from local store
+      // Tombstone handler: If server reports this request is deleted / approved-for-delete / cancelled, purge it from local store & IDB
       if (next.is_deleted === true || next.isDeleted === true || next.delete_status === 'approved' || next.deleteStatus === 'approved' || next.status === 'cancelled' || next.status === 'deleted') {
-        var targetBid = String(nid || '');
-        var targetTk = String(next.tkCode || next.tk_code || '');
+        _collectRowKeys(next, deletedKeysMap);
         for (var di = _store.length - 1; di >= 0; di--) {
           var sItem = _store[di];
+          if (!sItem) continue;
           var sBid = String(sItem.__backendId || sItem.id || '');
           var sTk = String(sItem.tkCode || sItem.tk_code || '');
-          if ((targetBid && sBid === targetBid) || (targetTk && sTk && targetTk === sTk)) {
+          if ((key && sBid === key) || (tkKey && sTk && tkKey === sTk) || (tkKey && sBid === tkKey)) {
+            _collectRowKeys(sItem, deletedKeysMap);
             _store.splice(di, 1);
             changed = true;
           }
         }
         continue;
       }
-      if (Object.prototype.hasOwnProperty.call(indexById, key)) {
-        var idx = indexById[key];
-        var prev = _store[idx] || {};
+
+      validIncoming.push(next);
+      var matchedIdx = Object.prototype.hasOwnProperty.call(indexById, key)
+        ? indexById[key]
+        : (tkKey && Object.prototype.hasOwnProperty.call(indexById, tkKey) ? indexById[tkKey] : -1);
+
+      if (matchedIdx !== -1) {
+        var prev = _store[matchedIdx] || {};
         var merged = Object.assign({}, prev);
         var rowChanged = false;
         for (var field in next) {
@@ -863,12 +927,13 @@
           }
         }
         if (rowChanged) {
-          _store[idx] = merged;
+          _store[matchedIdx] = merged;
           changed = true;
         }
       } else {
-        if (!addedKeys[key]) {
+        if (!addedKeys[key] && (!tkKey || !addedKeys[tkKey])) {
           addedKeys[key] = true;
+          if (tkKey) addedKeys[tkKey] = true;
           toAdd.push(next);
           changed = true;
         }
@@ -884,9 +949,173 @@
       _storeTruncated = true;
       changed = true;
     }
-    if (changed && typeof window !== 'undefined' && window.ksIdb) {
-      window.ksIdb.upsertMany(incoming);
+
+    var deletedKeyArr = Object.keys(deletedKeysMap);
+    if (typeof window !== 'undefined' && window.ksIdb) {
+      if (deletedKeyArr.length > 0 && typeof window.ksIdb.deleteKeys === 'function') {
+        window.ksIdb.deleteKeys(deletedKeyArr);
+      }
+      if (changed && validIncoming.length > 0 && typeof window.ksIdb.upsertMany === 'function') {
+        window.ksIdb.upsertMany(validIncoming);
+      }
     }
+    return changed;
+  }
+
+  function _pruneStoreWithAuthoritativeCatalog(incomingRows) {
+    var normalizedIncoming = _normalizeRequestRows(Array.isArray(incomingRows) ? incomingRows : []);
+    var activeKeys = {};
+    for (var ak = 0; ak < normalizedIncoming.length; ak++) {
+      _collectRowKeys(normalizedIncoming[ak], activeKeys);
+    }
+    var pruned = false;
+    var removedKeysMap = {};
+    for (var pi = _store.length - 1; pi >= 0; pi--) {
+      var pItem = _store[pi];
+      if (!pItem || pItem._isOfflinePending) continue;
+      var pBid = pItem.__backendId ? String(pItem.__backendId) : '';
+      var pId = pItem.id ? String(pItem.id) : '';
+      var pTk = pItem.tkCode ? String(pItem.tkCode) : (pItem.tk_code ? String(pItem.tk_code) : '');
+      var isPresent = (pBid && activeKeys[pBid]) || (pId && activeKeys[pId]) || (pTk && activeKeys[pTk]);
+      if (!isPresent) {
+        _collectRowKeys(pItem, removedKeysMap);
+        _store.splice(pi, 1);
+        pruned = true;
+      }
+    }
+    var removedArr = Object.keys(removedKeysMap);
+    if (removedArr.length > 0 && typeof window !== 'undefined' && window.ksIdb && typeof window.ksIdb.deleteKeys === 'function') {
+      window.ksIdb.deleteKeys(removedArr);
+    }
+    var mergedChanged = _mergeLatestRows(normalizedIncoming);
+    return Boolean(mergedChanged || pruned);
+  }
+
+  async function _fetchRequestsByIds(ids) {
+    if (_getSaleQueryParams()) return { rows: [], deletedIds: [] };
+    var uniqueIds = _unique((Array.isArray(ids) ? ids : []).map(function (x) { return String(x || '').trim(); }).filter(Boolean));
+    if (!uniqueIds.length) return { rows: [], deletedIds: [] };
+    if (!_activeBase) await _ensureActiveBase();
+    var candidates = _unique([_activeBase].concat(_getBaseCandidates()).filter(function (x) { return x != null; }));
+    var allRows = [];
+    var allDeletedIds = [];
+
+    for (var c = 0; c < uniqueIds.length; c += 200) {
+      var chunk = uniqueIds.slice(c, c + 200);
+      var chunkDone = false;
+      for (var i = 0; i < candidates.length && !chunkDone; i++) {
+        var base = candidates[i];
+        var endpoint = _buildUrl(base, '/api/ks/requests');
+        var url = endpoint + '?ids=' + encodeURIComponent(chunk.join(',')) + '&lite=1';
+        try {
+          var startTime = Date.now();
+          var res = await _fetchWithDedup(url, {});
+          if (!res.ok) continue;
+          var responseText = await res.clone().text();
+          var body = JSON.parse(responseText);
+          _logApiRequest(url, Array.isArray(body.data) ? body.data.length : 0, responseText.length, Date.now() - startTime);
+          if (!body || !body.ok) continue;
+          _activeBase = base;
+          if (Array.isArray(body.data) && body.data.length) {
+            allRows = allRows.concat(_normalizeRequestRows(body.data));
+          }
+          if (Array.isArray(body.deleted_ids) && body.deleted_ids.length) {
+            allDeletedIds = allDeletedIds.concat(body.deleted_ids);
+          }
+          chunkDone = true;
+        } catch (_) {}
+      }
+    }
+    return { rows: allRows, deletedIds: allDeletedIds };
+  }
+
+  async function _reconcileWithServerMeta(meta) {
+    if (!meta || _getSaleQueryParams()) return false;
+    var changed = false;
+
+    if (Array.isArray(meta.tombstones) && meta.tombstones.length > 0) {
+      if (_purgeStoreByKeys(meta.tombstones)) changed = true;
+    }
+
+    if (!Array.isArray(meta.activeProcessingIds)) {
+      return changed;
+    }
+
+    var serverActiveMap = {};
+    for (var sa = 0; sa < meta.activeProcessingIds.length; sa++) {
+      var sid = String(meta.activeProcessingIds[sa] || '').trim();
+      if (sid) serverActiveMap[sid] = true;
+    }
+
+    var localByKey = {};
+    var offlineCount = 0;
+    for (var li = 0; li < _store.length; li++) {
+      var lr = _store[li];
+      if (!lr) continue;
+      if (lr._isOfflinePending) offlineCount++;
+      if (lr.tkCode) localByKey[String(lr.tkCode)] = lr;
+      if (lr.id) localByKey[String(lr.id)] = lr;
+      if (lr.__backendId) localByKey[String(lr.__backendId)] = lr;
+    }
+
+    var diffMap = {};
+    // 1) Server active items missing locally OR locally stale as 'done'
+    for (var sIdx = 0; sIdx < meta.activeProcessingIds.length; sIdx++) {
+      var serverKey = String(meta.activeProcessingIds[sIdx] || '').trim();
+      if (!serverKey) continue;
+      var localMatch = localByKey[serverKey];
+      if (!localMatch || !_isActiveProcessingRow(localMatch)) {
+        diffMap[serverKey] = true;
+      }
+    }
+    // 2) Locally active items absent from server active list (finished or deleted on server)
+    for (var rIdx = 0; rIdx < _store.length; rIdx++) {
+      var sr = _store[rIdx];
+      if (!sr || sr._isOfflinePending) continue;
+      if (_isActiveProcessingRow(sr)) {
+        var rTk = String(sr.tkCode || '');
+        var rId = String(sr.id || '');
+        var rBid = String(sr.__backendId || '');
+        var inServerActive = (rTk && serverActiveMap[rTk]) || (rId && serverActiveMap[rId]) || (rBid && serverActiveMap[rBid]);
+        if (!inServerActive) {
+          var pickKey = rTk || rId || rBid;
+          if (pickKey) diffMap[pickKey] = true;
+        }
+      }
+    }
+
+    var diffIds = Object.keys(diffMap);
+    var comparableLen = Math.max(0, _store.length - offlineCount);
+    var countDrift = (typeof meta.totalActive === 'number') ? Math.abs(comparableLen - meta.totalActive) : 0;
+
+    if (diffIds.length > 0 && diffIds.length <= 150) {
+      var batchRes = await _fetchRequestsByIds(diffIds);
+      if (batchRes.deletedIds && batchRes.deletedIds.length > 0) {
+        if (_purgeStoreByKeys(batchRes.deletedIds)) changed = true;
+      }
+      if (batchRes.rows && batchRes.rows.length > 0) {
+        if (_mergeLatestRows(batchRes.rows)) changed = true;
+      }
+      // Recount drift after targeted batch repair before deciding if full historical catalog heal is still required
+      offlineCount = _store.filter(function (x) { return x && x._isOfflinePending; }).length;
+      comparableLen = Math.max(0, _store.length - offlineCount);
+      countDrift = (typeof meta.totalActive === 'number') ? Math.abs(comparableLen - meta.totalActive) : 0;
+    }
+
+    var needFullHeal = (diffIds.length > 150) || (countDrift > 0);
+    if (needFullHeal && (!_lastFullReconcileAt || (Date.now() - _lastFullReconcileAt) > 120000)) {
+      _lastFullReconcileAt = Date.now();
+      try {
+        console.log('[dataSdk] Full catalog self-heal triggered (diff=' + diffIds.length + ', countDrift=' + countDrift + ')');
+        var fullRows = await _fetchStore(true);
+        if (Array.isArray(fullRows) && fullRows.length) {
+          if (_pruneStoreWithAuthoritativeCatalog(fullRows)) changed = true;
+        }
+      } catch (healErr) {
+        console.warn('[dataSdk] Full self-heal skipped:', healErr);
+      }
+    }
+
     return changed;
   }
 
@@ -894,17 +1123,22 @@
     var errLast = null;
     var candidates = _unique([_activeBase].concat(_getBaseCandidates()).filter(function (x) { return x != null; }));
     var sinceIso = _lastSyncIso || _latestStoreTimestampIso();
-    if (!sinceIso) return [];
+    if (!sinceIso) {
+      return { rows: [], tombstones: [], activeProcessingIds: null, totalActive: null, serverTs: null };
+    }
     try {
       var dt = new Date(sinceIso);
       dt.setTime(dt.getTime() - 5 * 60 * 1000); // 5 minutes overlap for safety
       sinceIso = dt.toISOString();
     } catch (_) {}
+    var _saleExtra = _getSaleQueryParams();
+    var isInternalUser = !_saleExtra;
     for (var i = 0; i < candidates.length; i++) {
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
-      var _saleExtra = _getSaleQueryParams();
-      var url = endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=' + encodeURIComponent(String(_requestsPageSize)) + '&lite=1' + _saleExtra;
+      var url = isInternalUser
+        ? (endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&lite=1&include_meta=1')
+        : (endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=' + encodeURIComponent(String(_requestsPageSize)) + '&lite=1' + _saleExtra);
       try {
         var startTime = Date.now();
         var res = await _fetchWithDedup(url, {});
@@ -917,13 +1151,22 @@
         _logApiRequest(url, Array.isArray(body.data) ? body.data.length : 0, responseText.length, Date.now() - startTime);
         if (!body || !body.ok) throw new Error((body && body.error) || 'fetch_failed');
         _activeBase = base;
-        return Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [];
+        if (typeof body.server_ts === 'string' && body.server_ts) {
+          _lastServerTs = body.server_ts;
+        }
+        return {
+          rows: Array.isArray(body.data) ? _normalizeRequestRows(body.data) : [],
+          tombstones: Array.isArray(body.tombstones) ? body.tombstones : [],
+          activeProcessingIds: Array.isArray(body.active_processing_ids) ? body.active_processing_ids : null,
+          totalActive: typeof body.total_active === 'number' ? body.total_active : null,
+          serverTs: typeof body.server_ts === 'string' ? body.server_ts : null
+        };
       } catch (e) {
         errLast = e;
       }
     }
     if (errLast) throw errLast;
-    return [];
+    return { rows: [], tombstones: [], activeProcessingIds: null, totalActive: null, serverTs: null };
   }
 
   window.dataSdk = {
@@ -969,43 +1212,20 @@
         if (_store.length) {
           var hasSyncCursor = Boolean(_lastSyncIso || _latestStoreTimestampIso());
           if (hasSyncCursor) {
-            await this.refresh();
+            await this.refresh(true);
           } else {
             try {
               var fetchResult = await _fetchStore(false);
               if (fetchResult && fetchResult.notModified) {
                 console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
               } else if (Array.isArray(fetchResult) && fetchResult.length) {
-                var normalizedIncoming = _normalizeRequestRows(fetchResult);
-                // Prune ghost records: Any existing record in local cache that is missing from authoritative server catalog is deleted
-                var activeKeys = {};
-                for (var ak = 0; ak < normalizedIncoming.length; ak++) {
-                  var akRow = normalizedIncoming[ak];
-                  if (akRow.__backendId) activeKeys[String(akRow.__backendId)] = true;
-                  if (akRow.id) activeKeys[String(akRow.id)] = true;
-                  if (akRow.tkCode) activeKeys[String(akRow.tkCode)] = true;
-                  if (akRow.tk_code) activeKeys[String(akRow.tk_code)] = true;
-                }
-                var pruned = false;
-                for (var pi = _store.length - 1; pi >= 0; pi--) {
-                  var pItem = _store[pi];
-                  var pBid = pItem.__backendId ? String(pItem.__backendId) : '';
-                  var pId = pItem.id ? String(pItem.id) : '';
-                  var pTk = pItem.tkCode ? String(pItem.tkCode) : (pItem.tk_code ? String(pItem.tk_code) : '');
-                  var isPresent = (pBid && activeKeys[pBid]) || (pId && activeKeys[pId]) || (pTk && activeKeys[pTk]);
-                  if (!isPresent && !pItem._isOfflinePending) {
-                    _store.splice(pi, 1);
-                    pruned = true;
-                  }
-                }
-                var hasChanges = _mergeLatestRows(normalizedIncoming) || pruned;
-                if (hasChanges) {
-                  _triggerStoreUpdated();
+                if (_pruneStoreWithAuthoritativeCatalog(fetchResult)) {
+                  _triggerStoreUpdated(_lastServerTs);
                 }
               }
             } catch (fetchErr) {
               console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
-              await this.refresh();
+              await this.refresh(true);
             }
           }
         } else {
@@ -1013,7 +1233,7 @@
           var initialRows = await _fetchStore(true);
           if (Array.isArray(initialRows) && initialRows.length) {
             _store = _normalizeRequestRows(initialRows);
-            _triggerStoreUpdated();
+            _triggerStoreUpdated(_lastServerTs);
           }
         }
 
@@ -1045,18 +1265,27 @@
 
       _refreshInFlight = (async function () {
       try {
-        var latest = [];
+        var incResult = null;
         try {
-          latest = await _fetchIncrementalStore();
-        } catch (_) {
-          latest = [];
+          incResult = await _fetchIncrementalStore();
+        } catch (incErr) {
+          console.warn('[dataSdk] refresh incremental fetch failed:', incErr && incErr.message ? incErr.message : incErr);
+          return { isOk: false };
         }
-        if (!latest.length) {
-          return { isOk: true };
+        var changed = false;
+        if (incResult && Array.isArray(incResult.rows) && incResult.rows.length > 0) {
+          if (_mergeLatestRows(incResult.rows)) changed = true;
         }
-        var changed = _mergeLatestRows(latest);
-        if (changed) {
-          _triggerStoreUpdated();
+        var reconciled = false;
+        try {
+          reconciled = await _reconcileWithServerMeta(incResult);
+        } catch (recErr) {
+          console.warn('[dataSdk] reconcile warning:', recErr);
+        }
+        if (changed || reconciled) {
+          _triggerStoreUpdated((incResult && incResult.serverTs) || _lastServerTs);
+        } else if (incResult && incResult.serverTs) {
+          _setLastSyncIso(incResult.serverTs);
         }
         return { isOk: true };
       } catch (e) {
