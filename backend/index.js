@@ -3170,6 +3170,8 @@ function ksRowToApp(row, lightweight = false) {
         designCreatedAt: safeIsoDate(row.design_created_at),
         designLastEditedBy: row.design_last_edited_by || null,
         designLastEditedAt: safeIsoDate(row.design_last_edited_at),
+        designUpdatedAt: safeIsoDate(row.design_updated_at),
+        design_updated_at: safeIsoDate(row.design_updated_at),
         designFilename: row.design_filename || '',
         createdAt: safeIsoDate(row.created_at),
         updatedAt: safeIsoDate(row.updated_at),
@@ -3298,7 +3300,7 @@ const KS_REQUESTS_SELECT_SQL = `
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
-            COALESCE(r.status, '') IN ('done', 'completed')
+            COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
             AND d_lat.created_at IS NOT NULL 
             AND d_lat.created_at >= n_edit.created_at
           )
@@ -3317,6 +3319,7 @@ const KS_REQUESTS_SELECT_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+      d_lat.created_at AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       r.sale_name,
       r.sale_phone,
@@ -3362,17 +3365,17 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, d.created_at, d.filename 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
-      ORDER BY d.created_at DESC, d.id DESC LIMIT 1
+      ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
       SELECT n.created_at
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
         AND n.note_type IN ('edit-request', 'edit_request')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
@@ -3382,9 +3385,9 @@ const KS_REQUESTS_SELECT_SQL = `
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
-        AND n.note_type = 'edit-resolved'
+        AND n.note_type IN ('edit-resolved', 'edit-done')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_res ON true
     LEFT JOIN LATERAL (
@@ -3392,7 +3395,7 @@ const KS_REQUESTS_SELECT_SQL = `
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
@@ -3499,7 +3502,7 @@ const KS_REQUESTS_LITE_SQL = `
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
-            COALESCE(r.status, '') IN ('done', 'completed')
+            COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
             AND d_lat.created_at IS NOT NULL 
             AND d_lat.created_at >= n_edit.created_at
           )
@@ -3518,6 +3521,7 @@ const KS_REQUESTS_LITE_SQL = `
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
       COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+      d_lat.created_at AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       COALESCE(u.fullname, '') AS sale_name,
       COALESCE(u.phone, '') AS sale_phone,
@@ -3558,7 +3562,7 @@ const KS_REQUESTS_LITE_SQL = `
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
         AND n.note_type IN ('edit-request', 'edit_request')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
@@ -3568,9 +3572,9 @@ const KS_REQUESTS_LITE_SQL = `
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
-        AND n.note_type = 'edit-resolved'
+        AND n.note_type IN ('edit-resolved', 'edit-done')
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_res ON true
     LEFT JOIN LATERAL (
@@ -3578,7 +3582,7 @@ const KS_REQUESTS_LITE_SQL = `
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code))
+          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
         )
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
@@ -4473,6 +4477,7 @@ async function getRequestDetailDirect(idOrTkCode) {
             COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
             COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
             COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+            d_lat.updated_at AS design_updated_at,
             COALESCE(d_lat.filename, '')::varchar(255) AS design_filename
         FROM requests r
         LEFT JOIN outlets o ON r.outlet_id = o.id
@@ -4480,10 +4485,10 @@ async function getRequestDetailDirect(idOrTkCode) {
         LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
         LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
         LEFT JOIN LATERAL (
-          SELECT d.url, d.created_by, d.created_at, d.filename 
+          SELECT d.url, d.created_by, d.created_at, COALESCE(d.updated_at, d.created_at) AS updated_at, d.filename 
           FROM designs d 
           WHERE d.request_tk_code = r.tk_code 
-          ORDER BY d.id DESC LIMIT 1
+          ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
         ) d_lat ON true
         LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
         WHERE (r.tk_code = ? OR r.id = ? OR r.id = ?)
@@ -4534,7 +4539,7 @@ async function getRequestDetailDirect(idOrTkCode) {
             ORDER BY sort_order
         `, [tkCode]),
         pool.query(`
-            SELECT url FROM designs WHERE request_tk_code = ? ORDER BY id DESC
+            SELECT url, created_at, updated_at FROM designs WHERE request_tk_code = ? ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
         `, [tkCode]),
         pool.query(`
             SELECT n.id, 
@@ -4548,7 +4553,7 @@ async function getRequestDetailDirect(idOrTkCode) {
                      WHEN LOWER(COALESCE(n.author_name, '')) LIKE '%qcag%' 
                        OR LOWER(COALESCE(n.author_name, '')) LIKE '%thiết kế%' 
                        OR LOWER(COALESCE(n.author_name, '')) LIKE '%designer%' THEN 'qcag'
-                     WHEN n.note_type = 'edit-resolved' THEN 'qcag'
+                     WHEN n.note_type IN ('edit-resolved', 'edit-done') THEN 'qcag'
                      ELSE 'heineken'
                    END AS "authorRole",
                    COALESCE(n.author_name, 'Hệ thống') AS "authorName",
@@ -4557,9 +4562,20 @@ async function getRequestDetailDirect(idOrTkCode) {
                    CASE WHEN n.image_url IS NOT NULL AND n.image_url != '' THEN json_build_array(n.image_url) ELSE '[]'::json END AS images,
                    n.created_at AS "createdAt"
             FROM notes n
-            WHERE n.ref_type = 'request' AND n.ref_id = ?
-            ORDER BY n.created_at ASC
-        `, [tkCode])
+            WHERE (n.ref_type = 'request' AND (n.ref_id = ? OR n.ref_id = ?))
+               OR (
+                 n.ref_type = 'quotation'
+                 AND n.note_type IN ('edit-request', 'edit_request', 'edit-resolved', 'edit-done')
+                 AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = ? OR q_sub.tk_code = ?)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM notes n2
+                   WHERE n2.ref_type = 'request' AND (n2.ref_id = ? OR n2.ref_id = ?)
+                     AND n2.note_type = n.note_type
+                     AND ABS(EXTRACT(EPOCH FROM (n2.created_at - n.created_at))) < 5
+                 )
+               )
+            ORDER BY n.created_at ASC, n.id ASC
+        `, [tkCode, row.id || tkCode, tkCode, tkCode, tkCode, row.id || tkCode])
     ]);
 
     let finalItems = itemRows || [];
@@ -4636,7 +4652,7 @@ async function getRequestDetailDirect(idOrTkCode) {
         for (let i = 0; i < noteRows.length; i++) {
             const nt = String(noteRows[i].commentType || '').toLowerCase();
             if (nt === 'edit-request' || nt === 'edit_request') lastEditIdx = i;
-            if (nt === 'edit-resolved') lastResIdx = i;
+            if (nt === 'edit-resolved' || nt === 'edit-done') lastResIdx = i;
         }
         if (lastEditIdx !== -1 && (lastResIdx === -1 || lastEditIdx > lastResIdx)) {
             let firstEditAfterRes = noteRows[lastEditIdx];
@@ -4650,12 +4666,14 @@ async function getRequestDetailDirect(idOrTkCode) {
             editingRequestedAt = firstEditAfterRes ? (firstEditAfterRes.createdAt || firstEditAfterRes.created_at) : null;
         }
     }
+    const latestDesignTs = (designRows && designRows.length > 0 && (designRows[0].updated_at || designRows[0].created_at))
+        ? (designRows[0].updated_at || designRows[0].created_at)
+        : row.design_updated_at;
+    if (latestDesignTs) row.design_updated_at = latestDesignTs;
     // Chặn trường hợp đơn đã xong và đã cập nhật thiết kế sau mốc yêu cầu sửa
-    if (editingRequestedAt && ['done', 'completed'].includes(String(row.status || '').toLowerCase())) {
+    if (editingRequestedAt && ['done', 'completed', 'quoted', 'processed'].includes(String(row.status || '').toLowerCase())) {
         const editTime = new Date(editingRequestedAt).getTime();
-        const designUpdatedTime = (designRows && designRows.length > 0 && (designRows[0].updated_at || designRows[0].created_at)) 
-            ? new Date(designRows[0].updated_at || designRows[0].created_at).getTime() 
-            : 0;
+        const designUpdatedTime = latestDesignTs ? new Date(latestDesignTs).getTime() : 0;
         if (designUpdatedTime >= editTime) {
             editingRequestedAt = null;
         }
@@ -4705,10 +4723,11 @@ app.get('/api/ks/requests/:id/notes', async (req, res) => {
         if (!id) return res.status(400).json({ ok: false, error: 'missing_id' });
 
         let [rRows] = await pool.query(
-            'SELECT tk_code FROM requests WHERE tk_code = ? OR id = ? LIMIT 1',
+            'SELECT id, tk_code FROM requests WHERE tk_code = ? OR id = ? LIMIT 1',
             [id, id]
         );
         const tkCode = (rRows && rRows[0] && rRows[0].tk_code) || id;
+        const reqRowId = (rRows && rRows[0] && rRows[0].id) || tkCode;
 
         const [notes] = await pool.query(`
             SELECT 
@@ -4729,16 +4748,27 @@ app.get('/api/ks/requests/:id/notes', async (req, res) => {
                   WHEN LOWER(COALESCE(n.author_name, '')) LIKE '%qcag%' 
                     OR LOWER(COALESCE(n.author_name, '')) LIKE '%thiết kế%' 
                     OR LOWER(COALESCE(n.author_name, '')) LIKE '%designer%' THEN 'qcag'
-                  WHEN n.note_type = 'edit-resolved' THEN 'qcag'
+                  WHEN n.note_type IN ('edit-resolved', 'edit-done') THEN 'qcag'
                   ELSE 'heineken'
                 END AS "authorRole",
                 n.image_url AS "imageUrl", 
                 CASE WHEN n.image_url IS NOT NULL AND n.image_url != '' THEN json_build_array(n.image_url) ELSE '[]'::json END AS "images",
                 n.created_at AS "createdAt"
             FROM notes n
-            WHERE n.ref_type = 'request' AND n.ref_id = ?
-            ORDER BY n.created_at ASC
-        `, [tkCode]);
+            WHERE (n.ref_type = 'request' AND (n.ref_id = ? OR n.ref_id = ?))
+               OR (
+                 n.ref_type = 'quotation'
+                 AND n.note_type IN ('edit-request', 'edit_request', 'edit-resolved', 'edit-done')
+                 AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = ? OR q_sub.tk_code = ?)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM notes n2
+                   WHERE n2.ref_type = 'request' AND (n2.ref_id = ? OR n2.ref_id = ?)
+                     AND n2.note_type = n.note_type
+                     AND ABS(EXTRACT(EPOCH FROM (n2.created_at - n.created_at))) < 5
+                 )
+               )
+            ORDER BY n.created_at ASC, n.id ASC
+        `, [tkCode, reqRowId, tkCode, tkCode, tkCode, reqRowId]);
 
         return res.json({ ok: true, data: notes || [] });
     } catch (err) {
@@ -5812,11 +5842,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     `SELECT created_at FROM notes 
                      WHERE (
                          (ref_type = 'request' AND (ref_id = ? OR ref_id = ?))
-                         OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ?))
+                         OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ? OR tk_code = ?))
                      )
                      AND note_type IN ('edit-request', 'edit_request')
                      ORDER BY created_at DESC LIMIT 1`,
-                    [tkCode, currentReq.id, tkCode]
+                    [tkCode, currentReq.id, tkCode, tkCode]
                 );
                 if (lastEditReqRows && lastEditReqRows.length > 0) {
                     const lastEditTime = lastEditReqRows[0].created_at;
@@ -5824,11 +5854,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         `SELECT id FROM notes 
                          WHERE (
                              (ref_type = 'request' AND (ref_id = ? OR ref_id = ?))
-                             OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ?))
+                             OR (ref_type = 'quotation' AND ref_id IN (SELECT quote_code FROM quotations WHERE request_tk_code = ? OR tk_code = ?))
                          )
-                         AND note_type = 'edit-resolved' AND created_at >= ?
+                         AND note_type IN ('edit-resolved', 'edit-done') AND created_at >= ?
                          LIMIT 1`,
-                        [tkCode, currentReq.id, tkCode, lastEditTime]
+                        [tkCode, currentReq.id, tkCode, tkCode, lastEditTime]
                     );
                     if (!resolvedRows || resolvedRows.length === 0) {
                         const resNoteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
