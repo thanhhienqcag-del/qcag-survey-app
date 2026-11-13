@@ -3723,6 +3723,19 @@ function qcagCheckCompletionConditions(req) {
     const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(req.designImages, []));
     if (designImgs.length === 0) {
       missing.push('MQ thiết kế');
+    } else if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
+      // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải có bản vẽ MQ mới upload sau thời điểm yêu cầu sửa
+      const editTime = req.editingRequestedAt || req.editing_requested_at;
+      const designTime = req.designUpdatedAt || req.design_updated_at;
+      let hasNewMq = Boolean(req._mqReplacedDuringEdit);
+      if (!hasNewMq && editTime && designTime) {
+        try {
+          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
+        } catch (_) {}
+      }
+      if (!hasNewMq) {
+        missing.push('bản vẽ MQ mới thay thế (vui lòng upload bản vẽ đã sửa)');
+      }
     }
   }
 
@@ -6265,21 +6278,16 @@ async function qcagDesktopMarkProcessed() {
     if (isPendingEdit) {
       const editTime = currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at;
       const designTime = currentDetailRequest.designUpdatedAt || currentDetailRequest.design_updated_at;
-      const updatedTime = currentDetailRequest.updatedAt || currentDetailRequest.updated_at;
-      let hasAnyChange = Boolean(currentDetailRequest._mqReplacedDuringEdit);
-      if (!hasAnyChange && editTime) {
+      let hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit);
+      if (!hasNewMq && editTime && designTime) {
         try {
-          const editMs = new Date(editTime).getTime();
-          if (designTime && new Date(designTime).getTime() > editMs) hasAnyChange = true;
-          if (updatedTime && new Date(updatedTime).getTime() > editMs) hasAnyChange = true;
+          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
         } catch (_) {}
       }
-      if (!hasAnyChange && typeof confirm === 'function') {
-        const ok = confirm('Bạn chưa thay đổi ảnh MQ hay nội dung. Xác nhận hoàn tất chỉnh sửa và giữ nguyên MQ hiện tại?');
-        if (!ok) {
-          qcagDesktopRefreshMQInPlace(currentDetailRequest);
-          return;
-        }
+      if (!hasNewMq) {
+        showToast('Vui lòng upload bản vẽ MQ mới thay thế trước khi xác nhận đã chỉnh sửa');
+        qcagDesktopRefreshMQInPlace(currentDetailRequest);
+        return;
       }
     }
     const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
