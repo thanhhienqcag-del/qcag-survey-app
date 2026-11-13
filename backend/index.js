@@ -4274,10 +4274,15 @@ app.get('/api/ks/requests', async (req, res) => {
             await ksEnsureFreshCache();
             const toMs = (v) => {
                 if (!v) return 0;
+                if (v instanceof Date) return v.getTime();
                 const t = Date.parse(v);
                 return Number.isFinite(t) ? t : 0;
             };
-            const sinceMs = toMs(updatedSince);
+            const rawSinceMs = toMs(updatedSince);
+            // Zero Oversized Transfers Guard: Chặn tải toàn bộ lịch sử 3.2MB khi sync mốc thời gian cũ
+            const minAllowedMs = Date.now() - 7 * 24 * 3600 * 1000;
+            const sinceMs = rawSinceMs > 0 ? Math.max(rawSinceMs, minAllowedMs) : (Date.now() - 24 * 3600 * 1000);
+            const sinceDateForDb = new Date(sinceMs);
             let mapped = [];
             if (isLite && _ksRequestsCache && Array.isArray(_ksRequestsCache.rows)) {
                 mapped = _ksRequestsCache.rows
@@ -4296,11 +4301,15 @@ app.get('/api/ks/requests', async (req, res) => {
             } else {
                 const [rows] = await pool.query(
                     isLite
-                        ? `${KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/, '')} AND (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 500`
-                        : `${KS_REQUESTS_SELECT_SQL} WHERE (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 500`,
-                    [updatedSince, updatedSince]
+                        ? `${KS_REQUESTS_LITE_SQL.replace(/ORDER BY r\.created_at DESC\s*$/, '')} AND (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 300`
+                        : `${KS_REQUESTS_SELECT_SQL} WHERE (r.updated_at >= ? OR r.created_at >= ?) ORDER BY r.updated_at DESC, r.id DESC LIMIT 300`,
+                    [sinceDateForDb, sinceDateForDb]
                 );
                 mapped = rows.map(r => ksRowToApp(r, isLite));
+            }
+            const maxIncLimit = Math.max(1, Math.min(Number(req.query.limit) || 300, 500));
+            if (mapped.length > maxIncLimit) {
+                mapped = mapped.slice(0, maxIncLimit);
             }
             const tombstoneIds = [];
             try {

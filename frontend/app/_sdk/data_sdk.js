@@ -1101,7 +1101,7 @@
       countDrift = (typeof meta.totalActive === 'number') ? Math.abs(comparableLen - meta.totalActive) : 0;
     }
 
-    var needFullHeal = (diffIds.length > 150) || (countDrift > 0);
+    var needFullHeal = (diffIds.length > 150) || (_store.length === 0);
     if (needFullHeal && (!_lastFullReconcileAt || (Date.now() - _lastFullReconcileAt) > 120000)) {
       _lastFullReconcileAt = Date.now();
       try {
@@ -1136,7 +1136,7 @@
       var base = candidates[i];
       var endpoint = _buildUrl(base, '/api/ks/requests');
       var url = isInternalUser
-        ? (endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&lite=1&include_meta=1')
+        ? (endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=300&lite=1&include_meta=1')
         : (endpoint + '?updated_since=' + encodeURIComponent(sinceIso) + '&limit=' + encodeURIComponent(String(_requestsPageSize)) + '&lite=1' + _saleExtra);
       try {
         var startTime = Date.now();

@@ -60,17 +60,32 @@ module.exports = async function handler(req, res) {
 
     let savedId;
     if (existing.rows.length > 0) {
-      await db.query(
-        'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, sale_code = $4, updated_at = NOW() WHERE id = $5',
-        [subStr, phone || null, role || null, saleCode || null, existing.rows[0].id]
-      );
+      try {
+        await db.query(
+          'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, sale_code = $4, updated_at = NOW() WHERE id = $5',
+          [subStr, phone || null, role || null, saleCode || null, existing.rows[0].id]
+        );
+      } catch (colErr) {
+        await db.query(
+          'UPDATE push_subscriptions SET subscription = $1, phone = $2, role = $3, updated_at = NOW() WHERE id = $4',
+          [subStr, phone || null, role || null, existing.rows[0].id]
+        );
+      }
       savedId = existing.rows[0].id;
     } else {
-      const ins = await db.query(
-        'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id',
-        [subStr, phone || null, role || null, saleCode || null]
-      );
-      savedId = ins.rows[0].id;
+      try {
+        const ins = await db.query(
+          'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES ($1, $2, $3, $4, NOW(), NOW()) RETURNING id',
+          [subStr, phone || null, role || null, saleCode || null]
+        );
+        savedId = ins.rows[0].id;
+      } catch (colErr) {
+        const ins = await db.query(
+          'INSERT INTO push_subscriptions (subscription, phone, role, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',
+          [subStr, phone || null, role || null]
+        );
+        savedId = ins.rows[0].id;
+      }
     }
 
     // NOTE: Do NOT delete other subscriptions for the same sale_code.
