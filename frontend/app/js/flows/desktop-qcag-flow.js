@@ -483,6 +483,11 @@ async function qcagDesktopGetFullRequest(idOrReq, forceRefresh) {
         const r = await window.dataSdk.getOne(id);
         if (r && r.isOk && r.data) {
           merged = Object.assign({}, merged, r.data);
+          if (!r.data.editingRequestedAt && !r.data.editing_requested_at && String(r.data.subStatus || r.data.sub_status || '').toLowerCase() !== 'pending_edit') {
+            merged.hasEditRequest = false;
+            merged.isEditPending = false;
+            delete merged._cachedPendingEdit;
+          }
           const idx = allRequests.findIndex(x => x && (
             x.__backendId === id ||
             String(x.__backendId || '').trim() === String(id).trim() ||
@@ -792,7 +797,14 @@ function qcagDesktopIsPendingEditRequest(req) {
     return false;
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
-  if (req.editingRequestedAt || req.editing_requested_at || req.hasEditRequest || req.isEditPending) {
+  if (req.editingRequestedAt || req.editing_requested_at) {
+    return true;
+  }
+  if (req.hasEditRequest || req.isEditPending) {
+    const parsedComments = qcagDesktopParseJson(req.comments, []);
+    if (Array.isArray(parsedComments) && parsedComments.length > 0 && !qcagDesktopHasHeinekenEditRequest(req)) {
+      return false;
+    }
     return true;
   }
   // 4. Nếu status đã hoàn thành/done/quoted mà không có cờ chỉnh sửa thì không xem là pending edit
@@ -3711,19 +3723,6 @@ function qcagCheckCompletionConditions(req) {
     const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(req.designImages, []));
     if (designImgs.length === 0) {
       missing.push('MQ thiết kế');
-    } else if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
-      // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải có bản vẽ MQ mới upload sau thời điểm yêu cầu sửa, hoặc xác nhận chỉ sửa nội dung
-      const editTime = req.editingRequestedAt || req.editing_requested_at;
-      const designTime = req.designUpdatedAt || req.design_updated_at;
-      let hasNewMq = Boolean(req._mqReplacedDuringEdit || req._allowEditWithoutNewMq);
-      if (!hasNewMq && editTime && designTime) {
-        try {
-          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
-        } catch (_) {}
-      }
-      if (!hasNewMq) {
-        missing.push('bản vẽ MQ mới thay thế (vui lòng upload bản vẽ đã sửa)');
-      }
     }
   }
 
@@ -3813,7 +3812,6 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
   // Check completion conditions & update Button state
   const cond = qcagCheckCompletionConditions(updatedRequest);
   const completeBtn = document.querySelector('.qcag-complete-btn');
-  const editOnlyWrap = document.getElementById('qcagEditOnlyWrap');
 
   if (completeBtn) {
     const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
@@ -3827,14 +3825,12 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       completeBtn.classList.add('qcag-complete-btn--disabled');
       completeBtn.classList.remove('qcag-btn-waiting-survey');
       completeBtn.title = 'Yêu cầu này đã được hoàn thành';
-      if (editOnlyWrap) editOnlyWrap.style.display = 'none';
     } else if (cond.isSurveySizeIncomplete) {
       // Gộp trực tiếp cảnh báo vào button block: Chờ Khảo Sát
       completeBtn.textContent = 'Chờ Khảo Sát';
       completeBtn.disabled = true;
       completeBtn.classList.add('qcag-complete-btn--disabled', 'qcag-btn-waiting-survey');
       completeBtn.title = 'Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành';
-      if (editOnlyWrap) editOnlyWrap.style.display = 'none';
     } else {
       completeBtn.classList.remove('qcag-btn-waiting-survey');
       const label = isPendingEdit
@@ -3845,16 +3841,12 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
         completeBtn.disabled = false;
         completeBtn.classList.remove('qcag-complete-btn--disabled');
         completeBtn.removeAttribute('title');
-        if (editOnlyWrap) editOnlyWrap.style.display = 'none';
       } else {
         completeBtn.disabled = true;
         completeBtn.classList.add('qcag-complete-btn--disabled');
         completeBtn.title = isPendingEdit
           ? 'Vui lòng upload MQ thiết kế trước khi xác nhận đã chỉnh sửa'
           : 'Vui lòng upload MQ thiết kế trước khi hoàn thành';
-        if (editOnlyWrap) {
-          editOnlyWrap.style.display = (isPendingEdit && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'))) ? 'block' : 'none';
-        }
       }
     }
   }
@@ -5673,11 +5665,8 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
           }
         }
 
-        const showEditOnlyLink = isPendingEdit && !isDone && !cond.canComplete && cond.missing.some(m => m.includes('bản vẽ MQ mới thay thế'));
-        const editOnlyLink = `<div id="qcagEditOnlyWrap" style="text-align:right;margin-top:4px;${showEditOnlyLink ? '' : 'display:none;'}"><button type="button" onclick="qcagDesktopAllowEditWithoutNewMq()" style="font-size:11px;color:#64748b;text-decoration:underline;background:none;border:none;cursor:pointer;padding:0;">Chỉ sửa nội dung (không đổi MQ)</button></div>`;
-
         const btn = showCompleteBtn
-          ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}${extraBtnClass}" ${completeDisabled ? `disabled title="${escapeHtml(completeTitle)}"` : ''}>${escapeHtml(finalBtnLabel)}</button>${editOnlyLink}`
+          ? `<button onclick="qcagDesktopMarkProcessed()" class="qcag-complete-btn${completeDisabled ? ' qcag-complete-btn--disabled' : ''}${extraBtnClass}" ${completeDisabled ? `disabled title="${escapeHtml(completeTitle)}"` : ''}>${escapeHtml(finalBtnLabel)}</button>`
           : '';
 
         return `<div class="qcag-mq-footer-left"><div class="${creatorClass}">${creatorLine}</div><div class="${editedClass}">${editedLine}</div></div><div class="qcag-mq-footer-right">${btn}</div>`;
@@ -6242,14 +6231,6 @@ async function qcagDesktopUploadMQ(input) {
   if (input && input.value !== undefined) input.value = '';
 }
 
-function qcagDesktopAllowEditWithoutNewMq() {
-  if (!currentDetailRequest) return;
-  currentDetailRequest._allowEditWithoutNewMq = true;
-  qcagDesktopRefreshMQInPlace(currentDetailRequest);
-  showToast('Đã xác nhận chỉ sửa nội dung/hạng mục (giữ nguyên MQ)');
-}
-if (typeof window !== 'undefined') window.qcagDesktopAllowEditWithoutNewMq = qcagDesktopAllowEditWithoutNewMq;
-
 async function qcagDesktopUpdateStatus(status) {
   if (!currentDetailRequest) return;
   const normalized = String(status || 'pending');
@@ -6284,16 +6265,21 @@ async function qcagDesktopMarkProcessed() {
     if (isPendingEdit) {
       const editTime = currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at;
       const designTime = currentDetailRequest.designUpdatedAt || currentDetailRequest.design_updated_at;
-      let hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit || currentDetailRequest._allowEditWithoutNewMq);
-      if (!hasNewMq && editTime && designTime) {
+      const updatedTime = currentDetailRequest.updatedAt || currentDetailRequest.updated_at;
+      let hasAnyChange = Boolean(currentDetailRequest._mqReplacedDuringEdit);
+      if (!hasAnyChange && editTime) {
         try {
-          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
+          const editMs = new Date(editTime).getTime();
+          if (designTime && new Date(designTime).getTime() > editMs) hasAnyChange = true;
+          if (updatedTime && new Date(updatedTime).getTime() > editMs) hasAnyChange = true;
         } catch (_) {}
       }
-      if (!hasNewMq) {
-        showToast('Vui lòng upload bản vẽ MQ mới hoặc chọn chỉ sửa nội dung trước khi xác nhận đã chỉnh sửa');
-        qcagDesktopRefreshMQInPlace(currentDetailRequest);
-        return;
+      if (!hasAnyChange && typeof confirm === 'function') {
+        const ok = confirm('Bạn chưa thay đổi ảnh MQ hay nội dung. Xác nhận hoàn tất chỉnh sửa và giữ nguyên MQ hiện tại?');
+        if (!ok) {
+          qcagDesktopRefreshMQInPlace(currentDetailRequest);
+          return;
+        }
       }
     }
     const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);

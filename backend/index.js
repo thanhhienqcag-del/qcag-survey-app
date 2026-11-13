@@ -3365,7 +3365,7 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.filename 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
@@ -3552,7 +3552,7 @@ const KS_REQUESTS_LITE_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.filename 
+      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
@@ -5686,7 +5686,10 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         maybeStr('deleteRequestedSaleCode', 'delete_requested_sale_code');
         maybeStr('deleteStatus', 'delete_status');
         maybeStr('deleteRejectReason', 'delete_reject_reason');
-        maybeStr('status', 'status');
+        const isAlreadyQuoted = String(currentReq.status || '').toLowerCase() === 'quoted';
+        if ('status' in b && !(isAlreadyQuoted && b.status === 'done')) {
+            maybeStr('status', 'status');
+        }
         if (b.status === 'done' || b.subStatus === null || b.sub_status === null || b.hasEditRequest === false || b.isEditPending === false) {
             fields.push('sub_status = NULL');
         } else {
@@ -5875,7 +5878,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             }
         }
 
-        if (b.status === 'done') {
+        if (b.status === 'done' && !isAlreadyQuoted) {
             try {
                 await pool.query(`UPDATE design_tasks SET status = 'done', updated_at = NOW() WHERE tk_code = ?`, [tkCode]);
                 wsInvalidate('design_tasks', { action: 'update', tk_code: tkCode });
@@ -5899,7 +5902,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         // Post-update workflows (Design tasks, push notifications)
         try {
-            const becomingDone = b.status === 'done' && currentReq.status !== 'done';
+            const becomingDone = b.status === 'done' && currentReq.status !== 'done' && !isAlreadyQuoted;
             const isEditConfirm = becomingDone && ('designLastEditedBy' in b);
             const isFirstMQ = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
 
