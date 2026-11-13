@@ -304,20 +304,25 @@ server.on('upgrade', (req, socket, head) => {
 
 startWsHeartbeat();
 
+const SERVER_BOOT_ID = (process.env.K_REVISION || ('boot_' + Date.now().toString(36)));
+
 app.use(compression());
 app.use(cors({
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'If-None-Match'],
+    exposedHeaders: ['X-Server-Boot', 'ETag']
 }));
 app.use(express.json({ limit: '25mb' }));
 
-// Ensure minimal CORS headers are always present (even on errors)
+// Ensure minimal CORS headers & server boot stamp are always present
 app.use((req, res, next) => {
     try {
+        res.setHeader('X-Server-Boot', SERVER_BOOT_ID);
         if (!res.getHeader('Access-Control-Allow-Origin')) res.setHeader('Access-Control-Allow-Origin', '*');
         if (!res.getHeader('Access-Control-Allow-Methods')) res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
-        if (!res.getHeader('Access-Control-Allow-Headers')) res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (!res.getHeader('Access-Control-Allow-Headers')) res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, If-None-Match');
+        if (!res.getHeader('Access-Control-Expose-Headers')) res.setHeader('Access-Control-Expose-Headers', 'X-Server-Boot, ETag');
         
         // Cache static assets (CSV ward mappings, images, fonts) for 1 year
         const url = String(req.url || '').toLowerCase();

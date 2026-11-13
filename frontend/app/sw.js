@@ -1,14 +1,6 @@
-var CACHE_NAME = 'qcag-v2026.10.27_V12_04';
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (event) {
-  event.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(
-        keys.filter(function (k) { return k !== CACHE_NAME; })
-            .map(function (k) { return caches.delete(k); })
-      );
-    }).then(function () { return self.clients.claim(); })
-  );
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('push', function(event) {
