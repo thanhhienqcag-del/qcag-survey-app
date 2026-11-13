@@ -5634,25 +5634,29 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const filenameVal = b.designFilename ? String(b.designFilename).trim() : null;
                     const desId = resolveDesignerIdHelper(b.designCreatedBy || b.designerId || b.designLastEditedBy, currentReq.outlet_area, currentReq.sale_region);
                     const editorVal = b.designLastEditedBy ? String(b.designLastEditedBy).trim() : (b.designCreatedBy ? String(b.designCreatedBy).trim() : desId);
+                    const isExplicitDesignSave = Boolean(b._isExplicitStatusConfirm === true);
                     await pool.query(`
                         INSERT INTO designs (id, request_tk_code, url, filename, created_by, updated_by, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
                         ON CONFLICT (request_tk_code) DO UPDATE SET 
                             url = EXCLUDED.url,
                             filename = COALESCE(NULLIF(EXCLUDED.filename, ''), designs.filename),
-                            created_by = COALESCE(EXCLUDED.created_by, designs.created_by),
-                            updated_by = EXCLUDED.updated_by,
+                            created_by = COALESCE(designs.created_by, EXCLUDED.created_by),
+                            updated_by = CASE 
+                                WHEN designs.url IS DISTINCT FROM EXCLUDED.url OR ?::boolean = true THEN EXCLUDED.updated_by
+                                ELSE designs.updated_by
+                            END,
                             updated_at = CASE 
-                                WHEN designs.url = EXCLUDED.url THEN designs.updated_at 
-                                ELSE NOW() 
+                                WHEN designs.url IS DISTINCT FROM EXCLUDED.url OR ?::boolean = true THEN NOW() 
+                                ELSE designs.updated_at 
                             END
-                    `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId, editorVal]);
+                    `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId, editorVal, isExplicitDesignSave, isExplicitDesignSave]);
                 }
             }
         } else if ('designFilename' in b && b.designFilename) {
             const filenameVal = String(b.designFilename).trim();
             if (filenameVal) {
-                await pool.query('UPDATE designs SET filename = ?, updated_at = NOW() WHERE request_tk_code = ?', [filenameVal, tkCode]);
+                await pool.query('UPDATE designs SET filename = ? WHERE request_tk_code = ? AND filename IS DISTINCT FROM ?', [filenameVal, tkCode, filenameVal]);
             }
         }
 
@@ -5933,8 +5937,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             }
         }
 
-        // Synchronize designer assignment to design_tasks table
-        if ('designCreatedBy' in b || 'designerId' in b || 'designLastEditedBy' in b) {
+        // Synchronize designer assignment to design_tasks table ONLY when design is actually uploaded/confirmed
+        if (('designImages' in b || b._isExplicitStatusConfirm === true) && ('designCreatedBy' in b || 'designerId' in b || 'designLastEditedBy' in b)) {
             try {
                 const des = resolveDesignerIdHelper(b.designCreatedBy || b.designerId || b.designLastEditedBy, currentReq.outlet_area, currentReq.sale_region);
                 if (des) {

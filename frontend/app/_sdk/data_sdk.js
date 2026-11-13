@@ -1438,7 +1438,22 @@
           return { isOk: false };
         }
         var idx = _store.findIndex(function (r) { return r.__backendId === updated.__backendId; });
+        var prevInStore = idx !== -1 ? _store[idx] : null;
         var savedRecord = _normalizeRequestRow(result.data || updated);
+        if (prevInStore && updated._isExplicitStatusConfirm !== true) {
+          if (prevInStore._originalDesignImagesBeforeEdit) {
+            savedRecord._originalDesignImagesBeforeEdit = prevInStore._originalDesignImagesBeforeEdit;
+          }
+          if (prevInStore._originalFilenameBeforeEdit) {
+            savedRecord._originalFilenameBeforeEdit = prevInStore._originalFilenameBeforeEdit;
+          }
+          if (prevInStore._mqReplacedDuringEdit === true) {
+            savedRecord._mqReplacedDuringEdit = true;
+            savedRecord._pendingNewMqUrl = prevInStore._pendingNewMqUrl || null;
+            if (prevInStore.designImages) savedRecord.designImages = prevInStore.designImages;
+            if (prevInStore.designFilename) savedRecord.designFilename = prevInStore.designFilename;
+          }
+        }
         if (idx !== -1) _store[idx] = savedRecord;
         else _store.push(savedRecord);
         if (_store.length > _storeMaxRows) {

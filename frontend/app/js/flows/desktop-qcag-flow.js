@@ -295,6 +295,28 @@ function qcagDesktopMergePreserveImageFields(nextReq, prevReq) {
     merged.designFilename = prevReq.designFilename;
   }
 
+  // Bảo toàn trạng thái ảnh gốc và ảnh preview mới trong luồng Chờ chỉnh sửa
+  if (prevReq._originalDesignImagesBeforeEdit && !qcagDesktopIsImagePlaceholder(prevReq._originalDesignImagesBeforeEdit)) {
+    merged._originalDesignImagesBeforeEdit = prevReq._originalDesignImagesBeforeEdit;
+  }
+  if (prevReq._originalFilenameBeforeEdit) {
+    merged._originalFilenameBeforeEdit = prevReq._originalFilenameBeforeEdit;
+  }
+  const isMergedPendingEdit = typeof qcagDesktopIsPendingEditRequest === 'function'
+    ? qcagDesktopIsPendingEditRequest(merged)
+    : Boolean(merged.editingRequestedAt || merged.editing_requested_at || String(merged.subStatus || merged.sub_status || '').toLowerCase() === 'pending_edit');
+  if (isMergedPendingEdit) {
+    if (prevReq._mqReplacedDuringEdit === true && _hasNonEmptyList(prevReq.designImages)) {
+      merged._mqReplacedDuringEdit = true;
+      merged._pendingNewMqUrl = prevReq._pendingNewMqUrl || null;
+      merged.designImages = prevReq.designImages;
+      if (prevReq.designFilename) merged.designFilename = prevReq.designFilename;
+    } else if (!nextReq._mqReplacedDuringEdit) {
+      merged._mqReplacedDuringEdit = false;
+      merged._pendingNewMqUrl = null;
+    }
+  }
+
   return merged;
 }
 
@@ -3586,6 +3608,22 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
           delete patchToSend[sf];
         }
       }
+      // Nếu thao tác không thay đổi ảnh MQ thiết kế (designImages đã bị strip),
+      // bắt buộc loại bỏ toàn bộ metadata thiết kế để Backend không cập nhật nhầm designs.updated_at = NOW() hoặc design_tasks.updated_at = NOW()
+      if (!('designImages' in patchToSend)) {
+        const DESIGN_META_FIELDS = [
+          'designFilename', 'design_filename',
+          'designCreatedBy', 'design_created_by',
+          'designCreatedAt', 'design_created_at',
+          'designLastEditedBy', 'design_last_edited_by',
+          'designLastEditedAt', 'design_last_edited_at',
+          'designUpdatedAt', 'design_updated_at',
+          'designerId', 'designer_id'
+        ];
+        for (const df of DESIGN_META_FIELDS) {
+          delete patchToSend[df];
+        }
+      }
     }
 
     // TRIỆT ĐỂ: Tuyệt đối không gửi items: "[]" nếu đơn chỉ đang giữ bản ghi lite hoặc items không được chủ động sửa
@@ -3822,15 +3860,8 @@ function qcagCheckCompletionConditions(req) {
     if (designImgs.length === 0) {
       missing.push('MQ thiết kế');
     } else if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
-      // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải có bản vẽ MQ mới upload sau thời điểm yêu cầu sửa
-      const editTime = req.editingRequestedAt || req.editing_requested_at;
-      const designTime = req.designUpdatedAt || req.design_updated_at;
-      let hasNewMq = Boolean(req._mqReplacedDuringEdit);
-      if (!hasNewMq && editTime && designTime) {
-        try {
-          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
-        } catch (_) {}
-      }
+      // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải upload bản vẽ MQ mới thay thế trong phiên chỉnh sửa (_mqReplacedDuringEdit === true)
+      const hasNewMq = Boolean(req._mqReplacedDuringEdit);
       if (!hasNewMq) {
         missing.push('bản vẽ MQ mới thay thế (vui lòng upload bản vẽ đã sửa)');
       }
@@ -3899,13 +3930,7 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       // Vị trí MQ thiết kế QCAG: CHỈ XUẤT HIỆN DUY NHẤT 1 ẢNH!
       const singleMq = designImgs.length > 0 ? designImgs[designImgs.length - 1] : null;
       const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
-      const _editTime = updatedRequest.editingRequestedAt || updatedRequest.editing_requested_at;
-      const _designTime = updatedRequest.designUpdatedAt || updatedRequest.design_updated_at;
-      let _hasNewMqInDb = false;
-      if (_editTime && _designTime) {
-        try { _hasNewMqInDb = new Date(_designTime).getTime() > new Date(_editTime).getTime(); } catch (_) {}
-      }
-      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit && !_hasNewMqInDb;
+      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit;
       const reqStatus = String(updatedRequest.status || '').toLowerCase();
       const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
       const canRemove = !isOldReferencedMq && !isDone;
@@ -5388,9 +5413,14 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
   currentDetailRequest = request;
   _qcagDesktopOpenRequestSnapshot = Object.assign({}, request);
   if (qcagDesktopIsPendingEditRequest(request)) {
-    if (!request._originalDesignImagesBeforeEdit) {
-      request._originalDesignImagesBeforeEdit = request.designImages || '[]';
-      request._originalFilenameBeforeEdit = request.designFilename || '';
+    const curOrig = request._originalDesignImagesBeforeEdit;
+    if (!curOrig || curOrig === '[]' || qcagDesktopIsImagePlaceholder(curOrig)) {
+      if (request.designImages && !qcagDesktopIsImagePlaceholder(request.designImages) && request.designImages !== '[]') {
+        request._originalDesignImagesBeforeEdit = request.designImages;
+      }
+      if (request.designFilename) {
+        request._originalFilenameBeforeEdit = request.designFilename;
+      }
     }
   }
   if (!keepPendingComment) _qcagDesktopPendingCommentImages = [];
@@ -5936,9 +5966,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
           editingRequestedAt: frozenEditing
         });
       }
-      if (qcagDesktopIsPendingEditRequest(full) && !full._originalDesignImagesBeforeEdit) {
-        full._originalDesignImagesBeforeEdit = full.designImages || '[]';
-        full._originalFilenameBeforeEdit = full.designFilename || '';
+      if (qcagDesktopIsPendingEditRequest(full)) {
+        const curOrig = full._originalDesignImagesBeforeEdit;
+        if (!curOrig || curOrig === '[]' || qcagDesktopIsImagePlaceholder(curOrig)) {
+          full._originalDesignImagesBeforeEdit = full.designImages || '[]';
+          full._originalFilenameBeforeEdit = full.designFilename || '';
+        }
       }
       // Refresh hiện trạng (status) images section
       const statusThumbEl = document.getElementById('qcagStatusThumbGrid');
@@ -6408,14 +6441,7 @@ async function qcagDesktopMarkProcessed() {
       return;
     }
     if (isPendingEdit) {
-      const editTime = currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at;
-      const designTime = currentDetailRequest.designUpdatedAt || currentDetailRequest.design_updated_at;
-      let hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit);
-      if (!hasNewMq && editTime && designTime) {
-        try {
-          hasNewMq = new Date(designTime).getTime() > new Date(editTime).getTime();
-        } catch (_) {}
-      }
+      const hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit);
       if (!hasNewMq) {
         showToast('Vui lòng upload bản vẽ MQ mới thay thế trước khi xác nhận đã chỉnh sửa');
         qcagDesktopRefreshMQInPlace(currentDetailRequest);
