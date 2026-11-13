@@ -39,14 +39,15 @@ function buildPool() {
         connectionString = url.toString();
     } catch (_) { }
 
-    // Neon free tier: max 5 concurrent connections.
-    // Use DB_CONN_LIMIT env to override if on a paid plan.
+    // Neon PgBouncer pooler supports high concurrency; default max 20 connections per instance.
     return new Pool({
         connectionString,
         ssl: { rejectUnauthorized: false },
-        max: Number(process.env.DB_CONN_LIMIT) || 5,
+        max: Number(process.env.DB_CONN_LIMIT) || 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000,
+        connectionTimeoutMillis: 15000,
+        query_timeout: 20000,
+        keepAlive: true,
         // Keep at least 1 connection warm so the first query after idle is fast.
         allowExitOnIdle: false,
     });
@@ -57,7 +58,6 @@ function getPool() {
         _pool = buildPool();
         _pool.on('error', (err) => {
             console.error('pg pool error:', err && err.message ? err.message : err);
-            _pool = null; // reset so next call rebuilds
         });
     }
     return _pool;
@@ -89,12 +89,27 @@ function wrapResult(pgResult) {
 }
 
 /**
- * Execute a query via a pg client or pool, with placeholder conversion.
+ * Execute a query via a pg client or pool, with placeholder conversion and transient connection retry.
  */
 async function execQuery(pgClientOrPool, sql, params) {
     const converted = convertPlaceholders(String(sql || ''));
-    const result = await pgClientOrPool.query(converted, params || []);
-    return wrapResult(result);
+    try {
+        const result = await pgClientOrPool.query(converted, params || []);
+        return wrapResult(result);
+    } catch (err) {
+        const msg = String((err && err.message) || '');
+        const isTransientConnErr = pgClientOrPool === _pool && (
+            msg.includes('Connection terminated') ||
+            msg.includes('timeout exceeded when trying to connect') ||
+            msg.includes('ECONNRESET') ||
+            msg.includes('ETIMEDOUT')
+        );
+        if (isTransientConnErr) {
+            const retryResult = await getPool().query(converted, params || []);
+            return wrapResult(retryResult);
+        }
+        throw err;
+    }
 }
 
 /**

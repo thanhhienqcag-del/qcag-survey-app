@@ -1,11 +1,8 @@
+Write-Error "CẢNH BÁO AN TOÀN: Script này đã bị vô hiệu hóa hoàn toàn để bảo vệ Production. Chỉ sử dụng script Staging chuẩn tại thư mục gốc: deploy-app2-staging.ps1."
+exit 1
+
 # ==========================================
-# BƯỚC 8: CẬP NHẬT CLOUD RUN VỚI KS CONFIG
-# Thêm biến môi trường KS_GCS_BUCKET vào service
-# và deploy Docker image mới (nếu cần).
-#
-# Chạy sau khi:
-#   - 07-create-ks-bucket.ps1  (bucket đã tồn tại)
-#   - Đã build + push Docker image (hoặc dùng --source)
+# SCRIPT CŨ ĐÃ BỊ KHÓA
 # ==========================================
 
 $PROJECT  = "project-e466a86f-15b8-41c1-81a"

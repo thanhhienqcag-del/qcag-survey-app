@@ -1,6 +1,6 @@
 {
     "name": "qcag-backend",
-    "version": "2.8.1",
+    "version": "3.0.0",
     "description": "Vercel Serverless API – QCAG Survey & Quote App (PostgreSQL + Cloudinary)",
     "main": "index.js",
     "scripts": {
@@ -19,6 +19,7 @@
     "dependencies": {
         "@google-cloud/storage": "^7.15.0",
         "cloudinary": "^2.9.0",
+        "compression": "^1.8.2",
         "cors": "^2.8.5",
         "dotenv": "^17.3.1",
         "express": "^4.21.2",

@@ -1,5 +1,5 @@
-const { Pool } = require('pg');
-const pool = new Pool({ connectionString: 'postgresql://neondb_owner:npg_tC3ymrsEYQk2@ep-floral-pine-a18w14pz-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require' });
+﻿const { Pool } = require('pg');
+const pool = new Pool({ connectionString: 'postgresql://neondb_owner:npg_2nyfpCLYVi3d@ep-tiny-night-azvff9xe-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require' });
 
 async function main() {
   const tables = ['users','quote_sequences','quotations','production_orders','pending_orders','inspections'];
@@ -35,3 +35,4 @@ async function main() {
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });
+

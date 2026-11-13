@@ -1,7 +1,7 @@
-/**
+﻿/**
  * import-sql-to-neon.js
  * Parse MySQL SQL dump files and import into Neon PostgreSQL
- * Handles column reordering from MySQL dump → Neon schema
+ * Handles column reordering from MySQL dump â†’ Neon schema
  * 
  * Usage: node scripts/import-sql-to-neon.js
  */
@@ -10,16 +10,16 @@ const fs = require('fs');
 const path = require('path');
 const { Pool } = require('pg');
 
-// ── Config ──────────────────────────────────────────────────────────────────
+// â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const NEON_URL = process.env.DATABASE_URL ||
-  'postgresql://neondb_owner:npg_tC3ymrsEYQk2@ep-floral-pine-a18w14pz-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+  'postgresql://neondb_owner:npg_2nyfpCLYVi3d@ep-tiny-night-azvff9xe-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
 const DATA_DIR = path.join(__dirname, 'data');
 
-// ── DB pool ──────────────────────────────────────────────────────────────────
+// â”€â”€ DB pool â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const pool = new Pool({ connectionString: NEON_URL });
 
-// ── MySQL → Neon column mappings ─────────────────────────────────────────────
+// â”€â”€ MySQL â†’ Neon column mappings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const TABLE_MAPS = {
   users: {
     mysql: ['id','username','name','password_hash','role','approved','created_at','updated_at'],
@@ -52,7 +52,7 @@ function buildReorderMap(mysql_cols, neon_cols) {
   return neon_cols.map(nc => mysql_cols.indexOf(nc));
 }
 
-// ── MySQL value parser ───────────────────────────────────────────────────────
+// â”€â”€ MySQL value parser â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function parseMySQLRow(rowStr) {
   const inner = rowStr.slice(1, -1);
   const values = [];
@@ -103,7 +103,7 @@ function parseMySQLRow(rowStr) {
   return values;
 }
 
-// ── Extract row strings from VALUES clause ───────────────────────────────────
+// â”€â”€ Extract row strings from VALUES clause â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function extractRows(valuesStr) {
   const rows = [];
   let i = 0;
@@ -133,7 +133,7 @@ function extractRows(valuesStr) {
   return rows;
 }
 
-// ── Import one table ──────────────────────────────────────────────────────────
+// â”€â”€ Import one table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function importTable(tableName) {
   const sqlFile = path.join(DATA_DIR, `${tableName}.sql`);
   if (!fs.existsSync(sqlFile)) {
@@ -219,7 +219,7 @@ async function importTable(tableName) {
             if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(v)) {
               return v.replace(' ', 'T') + '+00:00';
             }
-            // is_confirmed, is_exported are NOT NULL tinyint — default to 0
+            // is_confirmed, is_exported are NOT NULL tinyint â€” default to 0
             const colName = neonCols[idx];
             if ((colName === 'is_confirmed' || colName === 'is_exported' || colName === 'approved') && v === null) {
               return 0;
@@ -248,7 +248,7 @@ async function importTable(tableName) {
     }
 
     if (insertedTotal > 0) process.stdout.write('\n');
-    console.log(`  ✓ ${tableName}: ${insertedTotal} inserted, ${errorTotal} errors`);
+    console.log(`  âœ“ ${tableName}: ${insertedTotal} inserted, ${errorTotal} errors`);
 
   } finally {
     client.release();
@@ -257,9 +257,9 @@ async function importTable(tableName) {
   return { inserted: insertedTotal, errors: errorTotal };
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function main() {
-  console.log('=== MySQL SQL Dump → Neon PostgreSQL Import ===\n');
+  console.log('=== MySQL SQL Dump â†’ Neon PostgreSQL Import ===\n');
 
   const TABLES = ['users', 'quote_sequences', 'production_orders', 'pending_orders', 'inspections', 'quotations'];
   const results = {};
@@ -271,7 +271,7 @@ async function main() {
 
   console.log('\n=== SUMMARY ===');
   for (const [t, r] of Object.entries(results)) {
-    const status = r.errors === 0 ? '✓' : '⚠';
+    const status = r.errors === 0 ? 'âœ“' : 'âš ';
     console.log(`  ${status} ${t}: ${r.inserted} rows, ${r.errors} errors`);
   }
 
@@ -283,3 +283,4 @@ main().catch(err => {
   console.error('Fatal:', err.message);
   process.exit(1);
 });
+

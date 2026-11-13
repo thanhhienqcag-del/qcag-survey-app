@@ -176,9 +176,8 @@ function qcagMarkTaskOrderCompleted(orderId, orderCode) {
 
         // Call backend APIs to approve production on App 2 & complete pending order on App 1
         const backends = [
-            '', // Relative URL
-            'https://qcag-backend-staging-493469512136.asia-southeast1.run.app',
-            'https://ks-backend-staging-493469512136.asia-southeast1.run.app'
+            'https://qcag-backend-493469512136.asia-southeast1.run.app',
+            'https://ks-backend-493469512136.asia-southeast1.run.app'
         ];
 
         // Mark pending order complete (File in sẵn sàng) on both backends
@@ -218,17 +217,10 @@ function getQcagPendingOrders() {
 }
 
 function resolveApp1BackendUrl() {
-    if (typeof window !== 'undefined' && window.__QCAG_APP1_BACKEND_URL) {
+    if (typeof window !== 'undefined' && window.__QCAG_APP1_BACKEND_URL && !String(window.__QCAG_APP1_BACKEND_URL).includes('-staging')) {
         return String(window.__QCAG_APP1_BACKEND_URL).replace(/\/+$/, '');
     }
-    const isStaging = (typeof window !== 'undefined') && (
-        (window.API_BASE_URL && window.API_BASE_URL.includes('staging')) ||
-        (window.__env && window.__env.BACKEND_URL && window.__env.BACKEND_URL.includes('staging')) ||
-        (window.location && (window.location.hostname.includes('staging') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-    );
-    return isStaging
-        ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
-        : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+    return 'https://qcag-backend-493469512136.asia-southeast1.run.app';
 }
 
 function resolvePendingOrdersApiBase() {
@@ -237,14 +229,10 @@ function resolvePendingOrdersApiBase() {
 
 function resolveApp2BackendUrlForTask() {
     if (typeof window !== 'undefined' && (window.API_BASE_URL || (window.__env && window.__env.BACKEND_URL))) {
-        return String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '');
+        const candidate = String(window.API_BASE_URL || window.__env.BACKEND_URL).replace(/\/+$/, '');
+        if (candidate && !candidate.includes('-staging')) return candidate;
     }
-    const isStaging = (typeof window !== 'undefined') && (
-        (window.location && (window.location.hostname.includes('staging') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-    );
-    return isStaging
-        ? 'https://ks-backend-staging-493469512136.asia-southeast1.run.app'
-        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    return 'https://ks-backend-493469512136.asia-southeast1.run.app';
 }
 
 async function qcagFetchProductionApprovalsFromDb() {
@@ -560,7 +548,7 @@ function ensureDesktopTaskSSE() {
     if (!_qcagTaskApp1Sse) {
         try {
             const app1Base = resolvePendingOrdersApiBase();
-            const sseApp1Url = (app1Base ? app1Base.replace(/\/+$/, '') : 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app') + '/events';
+            const sseApp1Url = (app1Base ? app1Base.replace(/\/+$/, '') : 'https://qcag-backend-493469512136.asia-southeast1.run.app') + '/events';
             _qcagTaskApp1Sse = new EventSource(sseApp1Url);
             _qcagTaskApp1Sse.addEventListener('invalidate', handleSseMessage);
             _qcagTaskApp1Sse.onmessage = handleSseMessage;

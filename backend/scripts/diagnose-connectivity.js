@@ -134,8 +134,8 @@ async function main() {
     'http://127.0.0.1:3102',
   ];
   const cloudBases = [
-    'https://qcag-backend-k7disoxmcq-as.a.run.app',
-    'https://qcag-backend-bgrkahehra-as.a.run.app',
+    'https://qcag-backend-staging-493469512136.asia-southeast1.run.app',
+    'https://qcag-backend-staging-493469512136.asia-southeast1.run.app',
   ];
 
   printSection('Local HTTP Health');

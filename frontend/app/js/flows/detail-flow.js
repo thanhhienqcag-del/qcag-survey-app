@@ -1761,10 +1761,7 @@ window._appendCommentToActiveChat = _appendCommentToActiveChat;
 
 // ── Base URL Resolver cho App 1 Backend ──────────────────────────────────────
 function _resolveApp1Base() {
-  const isStaging = (typeof window !== 'undefined' && (window.location.hostname.includes('staging') || window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')));
-  return isStaging
-    ? 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app'
-    : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
+  return 'https://qcag-backend-493469512136.asia-southeast1.run.app';
 }
 if (typeof window !== 'undefined') {
   window._resolveApp1Base = _resolveApp1Base;
@@ -4146,7 +4143,9 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
   async function _handleZoomShare(targetSrc, requestObj) {
     showToast('Đang chuẩn bị ảnh chia sẻ...');
     try {
-      const backendBase = (window.__env && window.__env.BACKEND_URL) || 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
+      const backendBase = (window.__env && window.__env.BACKEND_URL && !String(window.__env.BACKEND_URL).includes('-staging'))
+        ? window.__env.BACKEND_URL
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
       const useProxy = targetSrc.startsWith('http') && !targetSrc.startsWith(window.location.origin) && !targetSrc.includes('localhost') && !targetSrc.includes('127.0.0.1');
       const targetUrl = useProxy
         ? `${backendBase}/api/ks/proxy-image?url=${encodeURIComponent(targetSrc)}`
@@ -4607,17 +4606,20 @@ async function confirmDeleteRequest() {
   const saleCode = sess.saleCode || '';
   const salePhone = sess.phone || '';
 
-  const updatedPayload = Object.assign({}, reqSnapshot, {
+  const patchPayload = {
+    __backendId: reqSnapshot.__backendId,
     deleteRequested: true,
     deleteReason: reason,
     deleteRequestedAt: new Date().toISOString(),
     deleteRequestedBy: saleName,
     deleteRequestedPhone: salePhone,
     deleteRequestedSaleCode: saleCode,
-    deleteStatus: 'pending'
-  });
+    deleteStatus: 'pending',
+    updatedAt: new Date().toISOString()
+  };
+  const updatedPayload = Object.assign({}, reqSnapshot, patchPayload);
 
-  const result = await window.dataSdk.update(updatedPayload);
+  const result = await window.dataSdk.update(patchPayload);
   if (result && result.isOk) {
     closeDeleteModal();
     currentDetailRequest = updatedPayload;
@@ -4648,14 +4650,17 @@ async function cancelDeleteRequest() {
   if (!confirm('Bạn có chắc chắn muốn hủy yêu cầu xóa khảo sát này?')) return;
 
   const reqSnapshot = currentDetailRequest;
-  const updatedPayload = Object.assign({}, reqSnapshot, {
+  const patchPayload = {
+    __backendId: reqSnapshot.__backendId,
     deleteRequested: false,
     deleteReason: '',
     deleteRequestedAt: null,
-    deleteStatus: null
-  });
+    deleteStatus: null,
+    updatedAt: new Date().toISOString()
+  };
+  const updatedPayload = Object.assign({}, reqSnapshot, patchPayload);
 
-  const result = await window.dataSdk.update(updatedPayload);
+  const result = await window.dataSdk.update(patchPayload);
   if (result && result.isOk) {
     currentDetailRequest = updatedPayload;
     showToast('Đã hủy yêu cầu xóa');

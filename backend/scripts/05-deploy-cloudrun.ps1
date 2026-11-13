@@ -1,14 +1,8 @@
+Write-Error "CẢNH BÁO AN TOÀN: Script này đã bị vô hiệu hóa hoàn toàn để bảo vệ Production. Chỉ sử dụng script Staging chuẩn tại thư mục gốc: deploy-app2-staging.ps1."
+exit 1
+
 # ==========================================
-# BƯỚC 5: DEPLOY BACKEND LÊN CLOUD RUN
-# 
-# Cấu hình Cloud Run rẻ nhất:
-#   - Memory      : 256MB
-#   - CPU         : 1 (chỉ allocate khi xử lý request)
-#   - Min instances: 0 (scale to zero = FREE khi không dùng)
-#   - Max instances: 2
-#   - Region      : asia-southeast1
-#
-# Chi phí ước tính: ~$0-5/tháng (tùy traffic)
+# SCRIPT CŨ ĐÃ BỊ KHÓA
 # ==========================================
 
 $NEW_PROJECT  = "project-e466a86f-15b8-41c1-81a"

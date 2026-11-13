@@ -300,44 +300,43 @@
   }
 
   // Priority candidates for backend base URL:
-  // 1) runtime env BACKEND_URL (set by /api/env at runtime when available)
-  // Priority candidates for backend base URL:
-  // 1) runtime env BACKEND_URL (if valid external backend)
-  // 2) Staging Cloud Run backend (always reliable and active)
+  // 1) runtime env BACKEND_URL (if valid external Production backend)
+  // 2) Production Cloud Run backend (ks-backend)
   function _getBaseCandidates() {
     var prodBase = 'https://ks-backend-493469512136.asia-southeast1.run.app';
-    var stagingBase = 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
     var candidates = [];
     try {
       var override = '';
-      try { override = (localStorage.getItem('ks_backend_url') || '').trim(); } catch (_) {}
+      try {
+        override = (localStorage.getItem('ks_backend_url') || '').trim();
+        if (override && override.includes('-staging')) {
+          localStorage.removeItem('ks_backend_url');
+          override = '';
+        }
+      } catch (_) {}
       if (override) candidates.push(_normalizeBase(override));
 
       if (window.__env && typeof window.__env.BACKEND_URL !== 'undefined') {
         var be = String(window.__env.BACKEND_URL || '').trim();
-        if (be && !be.includes(':3000') && !be.includes(':3101')) {
+        if (be && !be.includes(':3000') && !be.includes(':3101') && !be.includes('-staging')) {
           candidates.push(_normalizeBase(be));
         }
       }
       if (typeof window.API_BASE_URL !== 'undefined') {
         var apiB = String(window.API_BASE_URL || '').trim();
-        if (apiB && !apiB.includes(':3000') && !apiB.includes(':3101')) {
+        if (apiB && !apiB.includes(':3000') && !apiB.includes(':3101') && !apiB.includes('-staging')) {
           candidates.push(_normalizeBase(apiB));
         }
-      }
-      var host = (typeof location !== 'undefined' && location.hostname) ? location.hostname.toLowerCase() : '';
-      var isProdHost = host.includes('vercel.app') || host.includes('qcag');
-      if (isProdHost) {
-        candidates.push(prodBase);
       }
       if (window.__env && Array.isArray(window.__env.BACKEND_URL_CANDIDATES)) {
         window.__env.BACKEND_URL_CANDIDATES.forEach(function (c) {
           var s = String(c || '').trim();
-          if (s && !s.includes(':3000') && !s.includes(':3101')) candidates.push(_normalizeBase(s));
+          if (s && !s.includes(':3000') && !s.includes(':3101') && !s.includes('-staging')) {
+            candidates.push(_normalizeBase(s));
+          }
         });
       }
       candidates.push(prodBase);
-      candidates.push(stagingBase);
     } catch (e) {}
     return _unique(candidates.filter(Boolean));
   }

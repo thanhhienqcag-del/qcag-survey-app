@@ -3317,8 +3317,12 @@ const KS_REQUESTS_SELECT_SQL = `
       r.updated_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
-      COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
-      COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+      COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+      CASE 
+        WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+        THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
+        ELSE NULL::timestamptz
+      END AS design_last_edited_at,
       COALESCE(d_lat.updated_at, d_lat.created_at) AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       r.sale_name,
@@ -3365,7 +3369,7 @@ const KS_REQUESTS_SELECT_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
+      SELECT d.url, d.created_by, d.updated_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
@@ -3381,7 +3385,7 @@ const KS_REQUESTS_SELECT_SQL = `
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_edit ON true
     LEFT JOIN LATERAL (
-      SELECT n.created_at
+      SELECT n.created_at, n.author_name
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
@@ -3403,6 +3407,7 @@ const KS_REQUESTS_SELECT_SQL = `
       LIMIT 1
     ) n_edit_first ON true
     LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
     LEFT JOIN LATERAL (
       SELECT 
           q_sub.quote_code, 
@@ -3519,8 +3524,12 @@ const KS_REQUESTS_LITE_SQL = `
       r.updated_at,
       COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
       COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
-      COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
-      COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+      COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+      CASE 
+        WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+        THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
+        ELSE NULL::timestamptz
+      END AS design_last_edited_at,
       COALESCE(d_lat.updated_at, d_lat.created_at) AS design_updated_at,
       COALESCE(d_lat.filename, '')::varchar(255) AS design_filename,
       COALESCE(u.fullname, '') AS sale_name,
@@ -3552,7 +3561,7 @@ const KS_REQUESTS_LITE_SQL = `
     LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
     LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
     LEFT JOIN LATERAL (
-      SELECT d.url, d.created_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
+      SELECT d.url, d.created_by, d.updated_by, COALESCE(d.updated_at, d.created_at) AS created_at, d.updated_at, d.filename 
       FROM designs d 
       WHERE d.request_tk_code = r.tk_code 
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
@@ -3568,7 +3577,7 @@ const KS_REQUESTS_LITE_SQL = `
       ORDER BY n.created_at DESC, n.id DESC LIMIT 1
     ) n_edit ON true
     LEFT JOIN LATERAL (
-      SELECT n.created_at
+      SELECT n.created_at, n.author_name
       FROM notes n
       WHERE (
           (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
@@ -3590,6 +3599,7 @@ const KS_REQUESTS_LITE_SQL = `
       LIMIT 1
     ) n_edit_first ON true
     LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
     LEFT JOIN LATERAL (
       SELECT 
           q_sub.quote_code, 
@@ -4475,8 +4485,12 @@ async function getRequestDetailDirect(idOrTkCode) {
             r.mq_folder,
             COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
             COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
-            COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_last_edited_by,
-            COALESCE(dt.updated_at, dt.created_at, d_lat.created_at) AS design_last_edited_at,
+            COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+            CASE 
+              WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+              THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
+              ELSE NULL::timestamptz
+            END AS design_last_edited_at,
             d_lat.updated_at AS design_updated_at,
             COALESCE(d_lat.filename, '')::varchar(255) AS design_filename
         FROM requests r
@@ -4485,12 +4499,23 @@ async function getRequestDetailDirect(idOrTkCode) {
         LEFT JOIN design_tasks dt ON dt.tk_code = r.tk_code
         LEFT JOIN users u_des ON u_des.id = dt.designer_id OR u_des.username = dt.designer_id OR u_des.phone = dt.designer_id
         LEFT JOIN LATERAL (
-          SELECT d.url, d.created_by, d.created_at, COALESCE(d.updated_at, d.created_at) AS updated_at, d.filename 
+          SELECT d.url, d.created_by, d.updated_by, d.created_at, COALESCE(d.updated_at, d.created_at) AS updated_at, d.filename 
           FROM designs d 
           WHERE d.request_tk_code = r.tk_code 
           ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
         ) d_lat ON true
         LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+        LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
+        LEFT JOIN LATERAL (
+          SELECT n.created_at, n.author_name
+          FROM notes n
+          WHERE (
+              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
+            )
+            AND n.note_type IN ('edit-resolved', 'edit-done')
+          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+        ) n_res ON true
         WHERE (r.tk_code = ? OR r.id = ? OR r.id = ?)
         LIMIT 1
     `, [cleanId, cleanId, rawId]);
@@ -4786,7 +4811,10 @@ async function handleCreateRequestNote(req, res) {
 
         const b = req.body || {};
         const text = String(b.text || b.content || '').trim();
-        if (!text) return res.status(400).json({ ok: false, error: 'empty_content' });
+        let rawImgs = [];
+        if (b.imageUrl) rawImgs.push(b.imageUrl);
+        else if (Array.isArray(b.images) && b.images.length > 0) rawImgs = b.images.slice();
+        if (!text && rawImgs.length === 0) return res.status(400).json({ ok: false, error: 'empty_content' });
 
         let [rRows] = await pool.query(
             'SELECT tk_code FROM requests WHERE tk_code = ? OR id = ? LIMIT 1',
@@ -4796,17 +4824,22 @@ async function handleCreateRequestNote(req, res) {
 
         const authorName = String(b.authorName || b.author || (b.role === 'qcag' ? 'QCAG' : 'Sale Heineken')).trim();
         const noteType = String(b.noteType || b.commentType || 'comment').trim();
-        let imageUrl = b.imageUrl || (Array.isArray(b.images) && b.images.length > 0 ? b.images[0] : null);
-        if (typeof imageUrl !== 'string' || !imageUrl.trim() || imageUrl.startsWith('data:image')) {
-            imageUrl = null; // Bảo vệ DB khỏi Base64 bloat
+        let imageUrl = null;
+        if (rawImgs.length > 0) {
+            const uploadedImgs = await ksAutoUploadImages(rawImgs, tkCode, 'comments');
+            if (Array.isArray(uploadedImgs) && uploadedImgs.length > 0 && typeof uploadedImgs[0] === 'string' && !uploadedImgs[0].startsWith('data:image')) {
+                imageUrl = uploadedImgs[0].trim();
+            }
         }
+        const safeContent = text || (imageUrl ? '[Hình ảnh]' : '');
+        if (!safeContent) return res.status(400).json({ ok: false, error: 'empty_content' });
 
         const noteId = `nt_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
         await pool.query(`
             INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
             VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
-        `, [noteId, tkCode, noteType, text, authorName, imageUrl]);
+        `, [noteId, tkCode, noteType, safeContent, authorName, imageUrl]);
         await pool.query('UPDATE requests SET updated_at = NOW() WHERE tk_code = ?', [tkCode]).catch(() => {});
 
         const isQcagAuthor = (
@@ -5533,16 +5566,15 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const s = String(rawInput || '').trim();
             if (s) {
                 const lower = s.toLowerCase();
-                if (lower.includes('thái') || lower === 'usr_doanminhthai' || lower.includes('minh_th_i')) return 'USR_doanminhthai';
                 if (lower.includes('thảo') || lower === 'usr_thao_designer' || lower.includes('th_o')) return 'USR_thao_designer';
                 if (lower.includes('hiển') || lower === 'usr_0966767731' || lower.includes('88000255') || lower.includes('0966767731')) return 'USR_0966767731';
                 if (lower.includes('admin') || lower === 'usr_adminqcag') return 'USR_adminqcag';
+                if (lower.includes('thái') || lower === 'usr_doanminhthai' || lower.includes('minh_th_i')) return 'USR_doanminhthai';
                 if (s === 'USR_doanminhthai' || s === 'USR_thao_designer' || s === 'USR_0966767731' || s === 'USR_adminqcag') return s;
             }
             const a = String(area || region || '').toUpperCase().trim();
             if (a === 'S16' || a === 'S4') return 'USR_0966767731';
-            if (['S17', 'S24', 'MOT8'].includes(a)) return 'USR_thao_designer';
-            return 'USR_doanminhthai';
+            return 'USR_thao_designer';
         };
 
         // Auto-upload any base64 images to GCS before persisting
@@ -5571,16 +5603,18 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         if ('statusImages' in b) {
             const statusImgsList = parseImagesArr(b.statusImages);
-            await pool.query(`DELETE FROM assets WHERE owner_type = 'request' AND owner_code = ? AND category = 'status'`, [tkCode]);
-            for (let i = 0; i < statusImgsList.length; i++) {
-                const u = statusImgsList[i];
-                if (typeof u === 'string' && u.trim() && !u.startsWith('data:')) {
-                    const astId = `ast_${tkCode}_st_${i + 1}`;
-                    await pool.query(`
-                        INSERT INTO assets (id, owner_type, owner_code, category, url, sort_order, created_at)
-                        VALUES (?, 'request', ?, 'status', ?, ?, NOW())
-                        ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url
-                    `, [astId, tkCode, u.trim(), i + 1]);
+            if (statusImgsList.length > 0 || b.allowClearStatusImages === true) {
+                await pool.query(`DELETE FROM assets WHERE owner_type = 'request' AND owner_code = ? AND category = 'status'`, [tkCode]);
+                for (let i = 0; i < statusImgsList.length; i++) {
+                    const u = statusImgsList[i];
+                    if (typeof u === 'string' && u.trim() && !u.startsWith('data:')) {
+                        const astId = `ast_${tkCode}_st_${i + 1}`;
+                        await pool.query(`
+                            INSERT INTO assets (id, owner_type, owner_code, category, url, sort_order, created_at)
+                            VALUES (?, 'request', ?, 'status', ?, ?, NOW())
+                            ON CONFLICT (id) DO UPDATE SET url = EXCLUDED.url
+                        `, [astId, tkCode, u.trim(), i + 1]);
+                    }
                 }
             }
         }
@@ -5599,18 +5633,20 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     const dsgId = `dsg_${tkCode}`;
                     const filenameVal = b.designFilename ? String(b.designFilename).trim() : null;
                     const desId = resolveDesignerIdHelper(b.designCreatedBy || b.designerId || b.designLastEditedBy, currentReq.outlet_area, currentReq.sale_region);
+                    const editorVal = b.designLastEditedBy ? String(b.designLastEditedBy).trim() : (b.designCreatedBy ? String(b.designCreatedBy).trim() : desId);
                     await pool.query(`
-                        INSERT INTO designs (id, request_tk_code, url, filename, created_by, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                        INSERT INTO designs (id, request_tk_code, url, filename, created_by, updated_by, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
                         ON CONFLICT (request_tk_code) DO UPDATE SET 
                             url = EXCLUDED.url,
                             filename = COALESCE(NULLIF(EXCLUDED.filename, ''), designs.filename),
                             created_by = COALESCE(EXCLUDED.created_by, designs.created_by),
+                            updated_by = EXCLUDED.updated_by,
                             updated_at = CASE 
                                 WHEN designs.url = EXCLUDED.url THEN designs.updated_at 
                                 ELSE NOW() 
                             END
-                    `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId]);
+                    `, [dsgId, tkCode, latestImg.trim(), filenameVal, desId, editorVal]);
                 }
             }
         } else if ('designFilename' in b && b.designFilename) {
@@ -5641,7 +5677,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const [pendingSurvey] = await pool.query(
                 `SELECT 1 FROM request_items 
                  WHERE request_tk_code = ? 
-                   AND COALESCE(survey, false) = true 
+                   AND COALESCE(type, '') != 'Hạng mục khác'
+                   AND COALESCE(use_old_size, false) = false
                    AND (survey_width IS NULL OR survey_width <= 0 OR survey_height IS NULL OR survey_height <= 0)
                    AND (width IS NULL OR width <= 0 OR height IS NULL OR height <= 0)
                  LIMIT 1`,
@@ -5690,7 +5727,13 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         if ('status' in b && !(isAlreadyQuoted && b.status === 'done')) {
             maybeStr('status', 'status');
         }
-        if (b.status === 'done' || b.subStatus === null || b.sub_status === null || b.hasEditRequest === false || b.isEditPending === false) {
+        const isExplicitEditClear = Boolean(
+            b._isExplicitStatusConfirm === true ||
+            b.subStatus === null ||
+            b.sub_status === null ||
+            (b.status === 'done' && ('processedAt' in b || 'processed_at' in b))
+        );
+        if (isExplicitEditClear) {
             fields.push('sub_status = NULL');
         } else {
             maybeStr('subStatus', 'sub_status');
@@ -5803,8 +5846,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                             other_content = EXCLUDED.other_content,
                             action = EXCLUDED.action,
                             brand = EXCLUDED.brand,
-                            width = COALESCE(EXCLUDED.width, request_items.width),
-                            height = COALESCE(EXCLUDED.height, request_items.height),
+                            width = EXCLUDED.width,
+                            height = EXCLUDED.height,
                             use_old_size = EXCLUDED.use_old_size,
                             poles = EXCLUDED.poles,
                             note = EXCLUDED.note,
@@ -5837,8 +5880,11 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         }
 
         // Tự động bảo vệ Zero-Trust cho luồng chỉnh sửa MQ:
-        // Nếu đơn hoàn thành / xác nhận chỉnh sửa mà vẫn còn edit-request chưa có edit-resolved, tự động tạo note edit-resolved
-        const isConfirmingEdit = (b.status === 'done' || b.hasEditRequest === false || b.isEditPending === false || b.editingRequestedAt === null);
+        // Chỉ tạo note edit-resolved khi user chủ động bấm nút Hoàn thành / Đã chỉnh sửa (_isExplicitStatusConfirm === true hoặc truyền processedAt + xóa cờ edit)
+        const isConfirmingEdit = Boolean(
+            b._isExplicitStatusConfirm === true ||
+            (b.status === 'done' && ('processedAt' in b || 'processed_at' in b) && (b.hasEditRequest === false || b.isEditPending === false || b.editingRequestedAt === null))
+        );
         if (isConfirmingEdit) {
             try {
                 const [lastEditReqRows] = await pool.query(

@@ -30,25 +30,25 @@ let _qcagCurrentOrderMapStartPointId = null;
 
 function qcagGetOrdersApiBase() {
     if (typeof window !== 'undefined') {
-        if (window.__env && window.__env.APP1_BACKEND_URL) {
+        if (window.__env && window.__env.APP1_BACKEND_URL && !String(window.__env.APP1_BACKEND_URL).includes('-staging')) {
             return String(window.__env.APP1_BACKEND_URL).replace(/\/+$/, '');
         }
-        if (window.APP1_BACKEND_URL) {
+        if (window.APP1_BACKEND_URL && !String(window.APP1_BACKEND_URL).includes('-staging')) {
             return String(window.APP1_BACKEND_URL).replace(/\/+$/, '');
         }
         try {
             const override = localStorage.getItem('app1_backend_url');
-            if (override && override.trim()) return override.trim().replace(/\/+$/, '');
+            if (override && override.trim() && !override.includes('-staging')) return override.trim().replace(/\/+$/, '');
         } catch (_) {}
     }
-    return 'https://qcag-backend-staging-493469512136.asia-southeast1.run.app';
+    return 'https://qcag-backend-493469512136.asia-southeast1.run.app';
 }
 
 function qcagGetKsApiBase() {
-    if (typeof window !== 'undefined' && window.API_BASE_URL) {
+    if (typeof window !== 'undefined' && window.API_BASE_URL && !String(window.API_BASE_URL).includes('-staging')) {
         return String(window.API_BASE_URL).replace(/\/+$/, '');
     }
-    return 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
+    return 'https://ks-backend-493469512136.asia-southeast1.run.app';
 }
 
 function qcagOrdersEscapeHtml(str) {

@@ -1785,14 +1785,10 @@ function hasSignageItems() {
 // ── Duplicate outlet detection & Realtime SSoT Lock Check ─────────
 function resolveApp2BackendUrl() {
   if (typeof window !== 'undefined') {
-    if (window.API_BASE_URL) return String(window.API_BASE_URL).replace(/\/+$/, '');
-    if (window.__env && window.__env.BACKEND_URL) return String(window.__env.BACKEND_URL).replace(/\/+$/, '');
+    if (window.API_BASE_URL && !String(window.API_BASE_URL).includes('-staging')) return String(window.API_BASE_URL).replace(/\/+$/, '');
+    if (window.__env && window.__env.BACKEND_URL && !String(window.__env.BACKEND_URL).includes('-staging')) return String(window.__env.BACKEND_URL).replace(/\/+$/, '');
   }
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-  const isProdHost = host.includes('vercel.app') || host.includes('qcag');
-  return isProdHost 
-    ? 'https://ks-backend-493469512136.asia-southeast1.run.app'
-    : 'https://ks-backend-staging-493469512136.asia-southeast1.run.app';
+  return 'https://ks-backend-493469512136.asia-southeast1.run.app';
 }
 
 function renderOutletCodeStatusBox(type, data) {

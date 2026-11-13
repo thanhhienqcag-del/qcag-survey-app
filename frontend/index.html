@@ -120,23 +120,28 @@
     // Production : ưu tiên lấy từ /api/env (BACKEND_URL, BACKEND_URL_CANDIDATES)
     window.__env = window.__env || {};
     (function () {
-      var host = (location && location.hostname) ? location.hostname : '';
-      var isLocalHost = (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0');
       var localOverride = '';
       try {
         localOverride = (localStorage.getItem('ks_backend_url') || '').trim();
+        if (localOverride && localOverride.includes('-staging')) {
+          localStorage.removeItem('ks_backend_url');
+          localOverride = '';
+        }
+        var app1Override = (localStorage.getItem('app1_backend_url') || '').trim();
+        if (app1Override && app1Override.includes('-staging')) {
+          localStorage.removeItem('app1_backend_url');
+        }
       } catch (_) { }
-      var isProdHost = host.includes('vercel.app') || host.includes('qcag');
       var defaultProdBackend = "https://ks-backend-493469512136.asia-southeast1.run.app";
       var defaultBackend = localOverride || defaultProdBackend;
-      if (typeof window.__env.BACKEND_URL === 'undefined') {
+      if (typeof window.__env.BACKEND_URL === 'undefined' || String(window.__env.BACKEND_URL || '').includes('-staging')) {
         window.__env.BACKEND_URL = defaultBackend;
       }
       window.API_BASE_URL = window.__env.BACKEND_URL;
       if (!Array.isArray(window.__env.BACKEND_URL_CANDIDATES)) {
-        window.__env.BACKEND_URL_CANDIDATES = [isProdHost ? defaultProdBackend : stagingBackend]
+        window.__env.BACKEND_URL_CANDIDATES = [defaultProdBackend]
           .concat(localOverride ? [localOverride] : [])
-          .filter(function (u) { return u && !u.includes(':3000'); });
+          .filter(function (u) { return u && !u.includes(':3000') && !u.includes('-staging'); });
       }
     })();
   </script>

@@ -506,10 +506,13 @@ async function initApp() {
       onDataChanged: (data) => {
         allRequests = _ksDedupeRequests(data).filter(_isKsRequestActive);
         if (typeof _qcagDesktopFullRequestCache !== 'undefined' && typeof qcagDesktopMergePreserveImageFields === 'function') {
-          (allRequests || []).forEach(r => {
+          allRequests = (allRequests || []).map(r => {
             if (r && r.__backendId && _qcagDesktopFullRequestCache[r.__backendId]) {
-              _qcagDesktopFullRequestCache[r.__backendId] = qcagDesktopMergePreserveImageFields(r, _qcagDesktopFullRequestCache[r.__backendId]);
+              const merged = qcagDesktopMergePreserveImageFields(r, _qcagDesktopFullRequestCache[r.__backendId]);
+              _qcagDesktopFullRequestCache[r.__backendId] = merged;
+              return merged;
             }
+            return r;
           });
         }
         // Snapshot known IDs for banner detection (first call builds baseline)
