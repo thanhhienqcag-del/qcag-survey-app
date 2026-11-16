@@ -121,6 +121,18 @@
           if (!payload) return;
           _esRetryMs = 1000; // successful message → reset backoff
 
+          var action = String(payload.action || '').toLowerCase();
+          // Remote command: cho phép kích hoạt reload/refresh sạch từ xa cho máy sếp/admin
+          if (action === 'force_reload' || action === 'remote_reload') {
+            try {
+              if (window.dataSdk && typeof window.dataSdk.clearUserCache === 'function') {
+                window.dataSdk.clearUserCache();
+              }
+              window.location.reload();
+              return;
+            } catch (_) {}
+          }
+
           // ── Always fire global invalidation hook for ALL resources ──
           if (typeof window.__ksOnInvalidate === 'function') {
             try { window.__ksOnInvalidate(payload); } catch (hookErr) {
@@ -129,7 +141,6 @@
           }
 
           var resType = String(payload.resource || '').toLowerCase();
-          var action = String(payload.action || '').toLowerCase();
 
           if (!resType || resType === 'ks_requests') {
             var patched = false;
@@ -241,15 +252,13 @@
         });
       } catch (_) {}
 
-      // Refresh data when tab becomes visible again
+      // Refresh data when tab becomes visible again or window gains focus
       try {
         if (!_rtVisibilityBound) {
           _rtVisibilityBound = true;
           var _idleEsTimer = null;
-          document.addEventListener('visibilitychange', function () {
-            if (document.visibilityState === 'hidden') {
-              // Idle management: Không ngắt SSE ngay lập tức khi chuyển tab chốc lát (tránh reconnect gián đoạn & lag UI)
-              // Chỉ ngắt kết nối khi tab bị ẩn liên tục quá 60 giây
+          var _onVisibleOrFocus = function () {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
               if (_idleEsTimer) clearTimeout(_idleEsTimer);
               _idleEsTimer = setTimeout(function () {
                 _clearEsRetry();
@@ -261,15 +270,14 @@
               clearTimeout(_idleEsTimer);
               _idleEsTimer = null;
             }
-            // Tab visible lại: kiểm tra SSE và luôn lên lịch refresh nhẹ nhàng (ETag check tốn 0 bytes nếu không đổi)
+            // Tab visible hoặc focus: kiểm tra SSE và luôn lên lịch refresh nhẹ nhàng
             if (!_es || _es.readyState === 2 /* CLOSED */) {
               _openSse();
-              _scheduleRefresh(200, false);
-            } else {
-              // Ngay cả khi SSE đang mở, tab vừa quay lại từ nền nên luôn đồng bộ nhanh (coalesce/throttled)
-              _scheduleRefresh(200, false);
             }
-          });
+            _scheduleRefresh(200, false);
+          };
+          document.addEventListener('visibilitychange', _onVisibleOrFocus);
+          window.addEventListener('focus', _onVisibleOrFocus);
         }
       } catch (_) {}
     } catch (e) {
@@ -678,19 +686,19 @@
       clearInterval(_pollTimer);
       _pollTimer = null;
     }
-    // Backup heartbeat polling every 60s ONLY when SSE is dropped/inactive
+    // Backup heartbeat polling every 30s: tự động kết nối lại SSE nếu rớt và luôn đồng bộ delta nhẹ nhàng
     _pollTimer = setInterval(function () {
       try {
         if (typeof document !== 'undefined' && document.hidden) return;
         var sseActive = _es && _es.readyState === 1 /* OPEN */;
         if (!sseActive) {
           _openSse();
-          if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
-            window.dataSdk.refresh().catch(function () {});
-          }
+        }
+        if (window.dataSdk && typeof window.dataSdk.refresh === 'function') {
+          window.dataSdk.refresh().catch(function () {});
         }
       } catch (_) {}
-    }, 60000);
+    }, 30000);
     if (_pollTimer && _pollTimer.unref) _pollTimer.unref();
   }
 
