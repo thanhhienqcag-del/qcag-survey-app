@@ -492,6 +492,7 @@ html:not(.theme-dark):not([data-theme="dark"]) .hk-card-thumb {
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   display: -webkit-box !important;
+  line-clamp: 1 !important;
   -webkit-line-clamp: 1 !important;
   -webkit-box-orient: vertical !important;
   flex: 1 1 auto !important;
@@ -1138,7 +1139,7 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
   }
 
   .hk-quote-desktop-table td {
-    padding: 10px 12px !important;
+    padding: 10px 10px !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
     color: #f8fafc !important;
   }
@@ -1146,6 +1147,23 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
   html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-desktop-table td {
     border-bottom: 1px solid #f1f5f9 !important;
     color: #0f172a !important;
+  }
+
+  .hk-quote-desktop-table td.hk-tbl-name,
+  .hk-quote-desktop-table .mobile-quote-item-title {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.35 !important;
+  }
+
+  .hk-quote-desktop-table td.hk-tbl-code,
+  .hk-quote-desktop-table td.hk-tbl-center,
+  .hk-quote-desktop-table td.hk-tbl-qty,
+  .hk-quote-desktop-table td.hk-tbl-price,
+  .hk-quote-desktop-table td.hk-tbl-total,
+  .hk-quote-desktop-table td.hk-tbl-right {
+    white-space: nowrap !important;
   }
 
   .hk-quote-desktop-table tr:hover td {

@@ -162,6 +162,9 @@
   <link rel="stylesheet" id="css-qcag-mobile" href="app/css/qcag-mobile.css?v=3.0.2" data-app-mode="qcag-mobile">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
@@ -1904,26 +1907,99 @@
       </div>
 
       <div id="qcagNavMapPanel" class="qcag-nav-panel hidden">
-        <div class="qcag-nav-panel-header">
-          <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()">&#x2190; Quay lại</button>
-          <span class="qcag-nav-panel-title">Bản đồ điểm bán</span>
-          <span id="qcagNavMapCount" class="qcag-nav-panel-count"></span>
-          <button id="qcagNavTooltipToggleBtn" class="qcag-nav-tooltip-toggle" onclick="qcagNavToggleMapTooltips()"
-            title="Hiện thẻ thông tin">
-            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <path d="M8 10h8M8 14h4" />
-            </svg>
-            Thẻ thông tin
-          </button>
+        <div class="qcag-nav-panel-header qcag-map-header">
+          <div class="flex items-center gap-2.5 flex-shrink-0">
+            <button class="qcag-nav-panel-back" onclick="qcagNavClosePanel()" title="Quay lại màn hình chính">&#x2190; Quay lại</button>
+            <span class="qcag-nav-panel-title">Bản Đồ Điểm Bán</span>
+          </div>
+
+          <!-- Thanh Lọc Khu Vực Trên Header: Chỉ hiển thị tên Khu Vực, không kèm số (Số hiển thị ở cột danh sách) -->
+          <div class="qcag-map-region-bar">
+            <button type="button" onclick="qcagNavMapSetRegion('all')" id="qcagMapReg_all" class="qcag-map-reg-btn active" title="Tất cả các khu vực">Tất Cả</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s4')" id="qcagMapReg_s4" class="qcag-map-reg-btn" title="Khu vực S4 - Hậu Giang">S4 - Hậu Giang</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s5')" id="qcagMapReg_s5" class="qcag-map-reg-btn" title="Khu vực S5 - Cà Mau">S5 - Cà Mau</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s16')" id="qcagMapReg_s16" class="qcag-map-reg-btn" title="Khu vực S16 - An Giang">S16 - An Giang</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s17')" id="qcagMapReg_s17" class="qcag-map-reg-btn" title="Khu vực S17 - Kiên Giang">S17 - Kiên Giang</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s24')" id="qcagMapReg_s24" class="qcag-map-reg-btn" title="Khu vực S24 - Kiên Giang 2">S24 - Kiên Giang</button>
+            <button type="button" onclick="qcagNavMapSetRegion('s19')" id="qcagMapReg_s19" class="qcag-map-reg-btn" title="Khu vực S19 - Bạc Liêu">S19 - Bạc Liêu</button>
+            <button type="button" onclick="qcagNavMapSetRegion('mot8')" id="qcagMapReg_mot8" class="qcag-map-reg-btn" title="Khu vực MOT8 - Phú Quốc">MOT8 - Phú Quốc</button>
+            <button type="button" onclick="qcagNavMapSetRegion('npp')" id="qcagMapReg_npp" class="qcag-map-reg-btn" title="Nhà Phân Phối (NPP)">NPP</button>
+          </div>
+
+          <div class="qcag-map-header-actions flex items-center gap-2 flex-shrink-0">
+            <button id="qcagMapFitBtn" class="qcag-map-tool-btn" onclick="qcagNavMapFitAll()" title="Thu phóng bao quát tất cả điểm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+              </svg>
+              <span>Bao quát</span>
+            </button>
+            <button id="qcagMapLocateBtn" class="qcag-map-tool-btn" onclick="qcagNavMapLocateMe()" title="Định vị vị trí hiện tại">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="22" y1="12" x2="18" y2="12" />
+                <line x1="6" y1="12" x2="2" y2="12" />
+                <line x1="12" y1="6" x2="12" y2="2" />
+                <line x1="12" y1="22" x2="12" y2="18" />
+              </svg>
+              <span>Vị trí</span>
+            </button>
+            <button id="qcagMapToggleSidebarBtn" class="qcag-map-tool-btn" onclick="qcagNavMapToggleSidebar()" title="Ẩn/Hiện danh sách outlet">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
+              <span>DS Outlet</span>
+            </button>
+          </div>
         </div>
-        <div class="qcag-nav-map-search-bar">
-          <input id="qcagNavMapSearch" type="search"
-            placeholder="Tìm theo Outlet code, Mã TK, Tên outlet, Tên Sale, Tên SS, Khu vực..."
-            oninput="qcagNavMapOnSearch(this.value)" class="qcag-nav-map-search-input">
+
+        <div class="qcag-map-workspace">
+          <!-- Cột Trái: Sidebar Danh Sách Điểm Bán (Outlets) -->
+          <aside id="qcagMapSidebar" class="qcag-map-sidebar">
+            <div class="qcag-map-sidebar-top">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Danh Sách Điểm Bán</span>
+                <span id="qcagNavMapCount" class="qcag-map-count-badge">0 / 0 điểm</span>
+              </div>
+
+              <!-- Ô tìm kiếm thông minh -->
+              <div class="qcag-map-search-wrap">
+                <svg class="qcag-map-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input id="qcagNavMapSearch" type="search"
+                  placeholder="Tìm tên điểm bán, mã outlet, địa chỉ..."
+                  oninput="qcagNavMapOnSearch(this.value)" class="qcag-map-search-input" />
+              </div>
+
+              <!-- Dải Segmented Tabs Lọc Trạng Thái Đơn Gọn Gàng (1 hàng) -->
+              <div class="qcag-map-status-segment">
+                <button type="button" class="qcag-status-seg-btn active" data-status="all" onclick="qcagNavMapSetStatus('all')">
+                  Tất cả <span id="kpiAll" class="kpi-num">0</span>
+                </button>
+                <button type="button" class="qcag-status-seg-btn status-ks" data-status="pending_survey" onclick="qcagNavMapSetStatus('pending_survey')">
+                  Chờ KS <span id="kpiPendingSurvey" class="kpi-num">0</span>
+                </button>
+                <button type="button" class="qcag-status-seg-btn status-tk" data-status="pending_design" onclick="qcagNavMapSetStatus('pending_design')">
+                  Chờ TK <span id="kpiPendingDesign" class="kpi-num">0</span>
+                </button>
+                <button type="button" class="qcag-status-seg-btn status-edit" data-status="pending_edit" onclick="qcagNavMapSetStatus('pending_edit')">
+                  Chờ sửa <span id="kpiPendingEdit" class="kpi-num">0</span>
+                </button>
+                <button type="button" class="qcag-status-seg-btn status-done" data-status="done" onclick="qcagNavMapSetStatus('done')">
+                  Xong <span id="kpiDone" class="kpi-num">0</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Danh sách các thẻ Điểm Bán (Outlets) -->
+            <div id="qcagMapOutletList" class="qcag-map-outlet-list" tabindex="0"></div>
+          </aside>
+
+          <!-- Cột Phải: Map Container Canvas -->
+          <main id="qcagNavMapContainer" class="qcag-nav-map-container"></main>
         </div>
-        <div id="qcagNavMapContainer" class="qcag-nav-map-container"></div>
       </div>
 
       <!-- Nav Stats Panel: Thống Kê & Phân Tích Khối Lượng Vận Hành -->

@@ -2579,14 +2579,14 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
     return `
       <tr class="transition-colors">
         <td class="hk-tbl-code text-center font-bold whitespace-nowrap">${ksEscapeHtml(codeStr)}</td>
-        <td class="hk-tbl-name whitespace-nowrap">
-          <span class="font-bold mobile-quote-item-title whitespace-nowrap">${content}</span>
+        <td class="hk-tbl-name text-left leading-snug">
+          <span class="font-bold mobile-quote-item-title break-words">${content}</span>
         </td>
         <td class="hk-tbl-center text-center whitespace-nowrap">${bBadge || '<span class="text-gray-400 text-xs font-normal">-</span>'}</td>
-        <td class="hk-tbl-center text-center font-medium whitespace-nowrap">${ksEscapeHtml(sizeStr)}</td>
-        <td class="hk-tbl-center text-center font-semibold whitespace-nowrap">${ksEscapeHtml(qtyStr)}</td>
-        <td class="hk-tbl-right text-right font-medium whitespace-nowrap">${ksEscapeHtml(priceStr)}</td>
-        <td class="hk-tbl-right text-right font-bold mobile-quote-total-val whitespace-nowrap pr-6">${ksEscapeHtml(totalItemStr)}</td>
+        <td class="hk-tbl-center hk-tbl-size text-center font-medium leading-tight">${ksEscapeHtml(sizeStr)}</td>
+        <td class="hk-tbl-center hk-tbl-qty text-center font-semibold whitespace-nowrap">${ksEscapeHtml(qtyStr)}</td>
+        <td class="hk-tbl-right hk-tbl-price text-right font-medium whitespace-nowrap font-mono">${ksEscapeHtml(priceStr)}</td>
+        <td class="hk-tbl-right hk-tbl-total text-right font-bold mobile-quote-total-val whitespace-nowrap font-mono pr-4 lg:pr-6">${ksEscapeHtml(totalItemStr)}</td>
       </tr>
     `;
   }).join('');
@@ -2755,17 +2755,17 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
             </div>
 
             <!-- Desktop Table View -->
-            <div class="flex-1 overflow-y-auto rounded-xl border hk-quote-table-wrap">
+            <div class="flex-1 overflow-x-auto overflow-y-auto rounded-xl border hk-quote-table-wrap">
               <table class="hk-quote-desktop-table w-full">
                 <thead>
                   <tr>
-                    <th class="w-12 text-center whitespace-nowrap">STT</th>
-                    <th class="text-left whitespace-nowrap">Tên Hạng Mục</th>
-                    <th class="w-24 text-center whitespace-nowrap">Brand</th>
-                    <th class="w-28 text-center whitespace-nowrap">Kích Thước</th>
-                    <th class="w-20 text-center whitespace-nowrap">Số Lượng</th>
-                    <th class="w-28 text-right whitespace-nowrap">Đơn Giá</th>
-                    <th class="w-32 text-right whitespace-nowrap pr-6">Thành Tiền</th>
+                    <th class="hk-col-stt text-center whitespace-nowrap">STT</th>
+                    <th class="hk-col-name text-left whitespace-nowrap">Tên Hạng Mục</th>
+                    <th class="hk-col-brand text-center whitespace-nowrap">Brand</th>
+                    <th class="hk-col-size text-center whitespace-nowrap">Kích Thước</th>
+                    <th class="hk-col-qty text-center whitespace-nowrap">Số Lượng</th>
+                    <th class="hk-col-price text-right whitespace-nowrap">Đơn Giá</th>
+                    <th class="hk-col-total text-right whitespace-nowrap pr-4 lg:pr-6">Thành Tiền</th>
                   </tr>
                 </thead>
                 <tbody>

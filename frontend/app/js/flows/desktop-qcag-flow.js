@@ -114,7 +114,7 @@ function qcagIsNppRequest(r) {
       r._cachedIsNpp = true;
       return true;
     }
-  } catch (_) {}
+  } catch (_) { }
   const content = String(r.content || '').trim();
   if (/\b(npp|nhà phân phối)\b/i.test(content)) {
     r._cachedIsNpp = true;
@@ -273,7 +273,7 @@ function qcagDesktopMergePreserveImageFields(nextReq, prevReq) {
   if (prevReq.updatedAt && nextReq.updatedAt) {
     try {
       prevIsNewer = new Date(prevReq.updatedAt).getTime() > new Date(nextReq.updatedAt).getTime();
-    } catch (_) {}
+    } catch (_) { }
   }
 
   if ((!_hasNonEmptyList(merged.items) && _hasNonEmptyList(prevReq.items)) || (prevIsNewer && _hasNonEmptyList(prevReq.items))) {
@@ -501,11 +501,11 @@ async function qcagDesktopGetFullRequest(idOrReq, forceRefresh) {
   const base = (typeof idOrReq === 'object' && idOrReq)
     ? idOrReq
     : allRequests.find(r => r && (
-        r.__backendId === id ||
-        String(r.__backendId || '').trim() === String(id).trim() ||
-        String(r.id || '').trim() === String(id).trim() ||
-        String(r.tkCode || '').trim() === String(id).trim()
-      ));
+      r.__backendId === id ||
+      String(r.__backendId || '').trim() === String(id).trim() ||
+      String(r.id || '').trim() === String(id).trim() ||
+      String(r.tkCode || '').trim() === String(id).trim()
+    ));
   if (!base) return null;
 
   const cached = _qcagDesktopFullRequestCache[id];
@@ -644,7 +644,7 @@ function qcagExtractItemDimensions(it) {
   if (it.surveySize) {
     let sObj = it.surveySize;
     if (typeof sObj === 'string') {
-      try { sObj = JSON.parse(sObj); } catch (_) {}
+      try { sObj = JSON.parse(sObj); } catch (_) { }
     }
     if (sObj && typeof sObj === 'object') {
       sw = parseFloat(sObj.width || sObj.w || 0);
@@ -3770,7 +3770,7 @@ function _qcagDesktopInPlaceRefresh(updatedRequest) {
           const fullItems = qcagDesktopParseJson(full.items, []);
           itemsSec.innerHTML = qcagDesktopBuildItemsHtml(fullItems, qcagDesktopCanEditItems(full), full);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }
 
@@ -4618,51 +4618,51 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
         </div>`;
   }).join('')}
       ${(() => {
-        // Render các dòng Báo giá dư thừa chưa được ghép cặp (Báo giá nhiều dòng hơn Khảo sát)
-        if (!isTaskMode || !reqId || !Array.isArray(quoteItems) || quoteItems.length === 0) return '';
-        const matchedQuoteIdxs = new Set();
-        if (matchMap && matchMap.size > 0) {
-          matchMap.forEach(q => { if (q && typeof q._qIdx !== 'undefined') matchedQuoteIdxs.add(q._qIdx); });
-        }
-        const unassignedQuotes = quoteItems.filter((q, qIdx) => !matchedQuoteIdxs.has(qIdx) && !matchedQuoteIdxs.has(q._qIdx));
-        if (unassignedQuotes.length === 0) return '';
+      // Render các dòng Báo giá dư thừa chưa được ghép cặp (Báo giá nhiều dòng hơn Khảo sát)
+      if (!isTaskMode || !reqId || !Array.isArray(quoteItems) || quoteItems.length === 0) return '';
+      const matchedQuoteIdxs = new Set();
+      if (matchMap && matchMap.size > 0) {
+        matchMap.forEach(q => { if (q && typeof q._qIdx !== 'undefined') matchedQuoteIdxs.add(q._qIdx); });
+      }
+      const unassignedQuotes = quoteItems.filter((q, qIdx) => !matchedQuoteIdxs.has(qIdx) && !matchedQuoteIdxs.has(q._qIdx));
+      if (unassignedQuotes.length === 0) return '';
 
-        return unassignedQuotes.map((q, uIdx) => {
-          const parsed = (typeof qcagParseQuoteItemInfo === 'function') ? qcagParseQuoteItemInfo(q) : {};
-          const qName = parsed.displayType || q.type || q.product_name || q.content || 'Hạng mục Báo giá';
-          const qAct = parsed.displayAction || q.action || 'Làm mới';
-          const qBr = q.brand || '-';
-          const qW = parseFloat(q.width || q.w || 0);
-          const qH = parseFloat(q.height || q.h || 0);
-          // Định dạng kích thước chuẩn không có .00 (ví dụ 3m x 1m)
-          const qSz = (qW > 0 || qH > 0) ? qcagFormatDimensionText(qW, qH) : '-';
-          const sttNum = displayItems.length + uIdx + 1;
+      return unassignedQuotes.map((q, uIdx) => {
+        const parsed = (typeof qcagParseQuoteItemInfo === 'function') ? qcagParseQuoteItemInfo(q) : {};
+        const qName = parsed.displayType || q.type || q.product_name || q.content || 'Hạng mục Báo giá';
+        const qAct = parsed.displayAction || q.action || 'Làm mới';
+        const qBr = q.brand || '-';
+        const qW = parseFloat(q.width || q.w || 0);
+        const qH = parseFloat(q.height || q.h || 0);
+        // Định dạng kích thước chuẩn không có .00 (ví dụ 3m x 1m)
+        const qSz = (qW > 0 || qH > 0) ? qcagFormatDimensionText(qW, qH) : '-';
+        const sttNum = displayItems.length + uIdx + 1;
 
-          // Xác định màu brandClass chuẩn theo App 2
-          let qBrandClass = 'brand-default';
-          try {
-            const bb = String(qBr).toLowerCase().trim();
-            if (bb.indexOf('heineken') !== -1) qBrandClass = 'brand-heineken';
-            else if (bb.indexOf('tiger') !== -1) qBrandClass = 'brand-tiger';
-            else if (bb.indexOf('bivina') !== -1) qBrandClass = 'brand-bivina';
-            else if (bb.indexOf('bia việt') !== -1 || bb.indexOf('bia viet') !== -1) qBrandClass = 'brand-biaviet';
-            else if (bb.indexOf('larue') !== -1) qBrandClass = 'brand-larue';
-            else if (bb.indexOf('strongbow') !== -1) qBrandClass = 'brand-strongbow';
-            else if (bb.indexOf('shopname') !== -1) qBrandClass = 'brand-shopname';
-          } catch (_) { }
+        // Xác định màu brandClass chuẩn theo App 2
+        let qBrandClass = 'brand-default';
+        try {
+          const bb = String(qBr).toLowerCase().trim();
+          if (bb.indexOf('heineken') !== -1) qBrandClass = 'brand-heineken';
+          else if (bb.indexOf('tiger') !== -1) qBrandClass = 'brand-tiger';
+          else if (bb.indexOf('bivina') !== -1) qBrandClass = 'brand-bivina';
+          else if (bb.indexOf('bia việt') !== -1 || bb.indexOf('bia viet') !== -1) qBrandClass = 'brand-biaviet';
+          else if (bb.indexOf('larue') !== -1) qBrandClass = 'brand-larue';
+          else if (bb.indexOf('strongbow') !== -1) qBrandClass = 'brand-strongbow';
+          else if (bb.indexOf('shopname') !== -1) qBrandClass = 'brand-shopname';
+        } catch (_) { }
 
-          // Xác định màu loại bảng hiệu theo App 2
-          let qTypeClass = '';
-          try {
-            const tt = String(qName).toLowerCase();
-            if (tt.includes('rèm') || tt.includes('rem')) qTypeClass = 'qcag-type-bang';
-            else if (tt.includes('mái che') || tt.includes('mai che') || tt.includes('mái hiên') || tt.includes('mai hien')) qTypeClass = 'qcag-type-maiche';
-            else if (tt.includes('bảng')) qTypeClass = 'qcag-type-bang';
-            else if (tt.includes('hộp đèn') || tt.includes('hộp') || tt.includes('hop')) qTypeClass = 'qcag-type-hopden';
-            else if (tt.includes('logo')) qTypeClass = 'qcag-type-logo';
-          } catch (_) { }
+        // Xác định màu loại bảng hiệu theo App 2
+        let qTypeClass = '';
+        try {
+          const tt = String(qName).toLowerCase();
+          if (tt.includes('rèm') || tt.includes('rem')) qTypeClass = 'qcag-type-bang';
+          else if (tt.includes('mái che') || tt.includes('mai che') || tt.includes('mái hiên') || tt.includes('mai hien')) qTypeClass = 'qcag-type-maiche';
+          else if (tt.includes('bảng')) qTypeClass = 'qcag-type-bang';
+          else if (tt.includes('hộp đèn') || tt.includes('hộp') || tt.includes('hop')) qTypeClass = 'qcag-type-hopden';
+          else if (tt.includes('logo')) qTypeClass = 'qcag-type-logo';
+        } catch (_) { }
 
-          return `<div class="qcag-items-row qcag-items-row--unmatched-quote" style="opacity: 0.9; border-left: 3px solid #f59e0b;">
+        return `<div class="qcag-items-row qcag-items-row--unmatched-quote" style="opacity: 0.9; border-left: 3px solid #f59e0b;">
             <div class="qcag-stt-cell"><div class="qcag-stt-num">${sttNum}</div></div>
             <div class="qcag-item-type ${qTypeClass}"><div class="qcag-cell-val font-semibold">${escapeHtml(qName)}</div><div class="qcag-cell-subnote diff" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;" title="Hạng mục có trong Báo giá nhưng chưa có trong Yêu cầu khảo sát">⚠️ Chưa có trong Khảo sát</div></div>
             <div class="qcag-col-action"><div class="qcag-cell-val">${escapeHtml(qAct)}</div></div>
@@ -4672,8 +4672,8 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
             <div class="qcag-col-req"><div class="qcag-cell-val qcag-cell-val--wrap" style="color: #94a3b8; font-style: italic;">(Hạng mục có trong Báo giá nhưng chưa có trong Yêu cầu khảo sát)</div></div>
             <div class="qcag-col-action-btns"></div>
           </div>`;
-        }).join('');
-      })()}
+      }).join('');
+    })()}
     </div>
   `;
 }
@@ -4763,7 +4763,7 @@ async function qcagConfirmSurveySize() {
     comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: autoCommentText, createdAt: now });
 
     const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
-    
+
     const reqBackendId = currentDetailRequest.__backendId || currentDetailRequest.id;
     const inAll = (typeof allRequests !== 'undefined' && Array.isArray(allRequests)) ? allRequests.find(r => r.__backendId === reqBackendId || r.id === reqBackendId || (currentDetailRequest.tkCode && (r.tkCode === currentDetailRequest.tkCode || r.tk_code === currentDetailRequest.tkCode))) : null;
     if (inAll) {
@@ -6466,7 +6466,7 @@ async function qcagDesktopMarkProcessed() {
         if (gcsUrl && !gcsUrl.startsWith('data:')) {
           finalDesignImages = [gcsUrl];
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (finalDesignImages.some(img => typeof img === 'string' && img.startsWith('data:'))
@@ -6611,7 +6611,7 @@ async function qcagDesktopMarkProcessed() {
       let tQuotes = [];
       if (Array.isArray(_qcagCurrentTaskOrder.quotes)) tQuotes = _qcagCurrentTaskOrder.quotes;
       else if (typeof _qcagCurrentTaskOrder.quotes === 'string') {
-        try { tQuotes = JSON.parse(_qcagCurrentTaskOrder.quotes); } catch (_) {}
+        try { tQuotes = JSON.parse(_qcagCurrentTaskOrder.quotes); } catch (_) { }
       }
       const curTk = String(updated.tkCode || updated.tk_code || '').trim().toLowerCase();
       const curQ = String(updated.quoteCode || updated.quote_code || '').trim().toLowerCase();
@@ -6702,22 +6702,22 @@ async function qcagDesktopMarkProcessed() {
           saleCode: requesterSaleCode,
         })
       })
-      .then(function (r) { return r && r.ok ? r.json() : null; })
-      .then(function (res) {
-        if (res && res.ok) {
-          if (res.sent > 0) {
-            const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
-            showToast(`${actionLabel} • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (res) {
+          if (res && res.ok) {
+            if (res.sent > 0) {
+              const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
+              showToast(`${actionLabel} • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
+            } else {
+              showToast(`${actionLabel} • Sale chưa kích hoạt nhận thông báo`, 'done', 4000);
+            }
           } else {
-            showToast(`${actionLabel} • Sale chưa kích hoạt nhận thông báo`, 'done', 4000);
+            showToast(`${actionLabel} • Chưa thể gửi thông báo tới Sale`, 'done', 3500);
           }
-        } else {
-          showToast(`${actionLabel} • Chưa thể gửi thông báo tới Sale`, 'done', 3500);
-        }
-      })
-      .catch(function (e) {
-        console.warn('[push] confirm push error (non-fatal):', e);
-      });
+        })
+        .catch(function (e) {
+          console.warn('[push] confirm push error (non-fatal):', e);
+        });
     } catch (pushErr) {
       console.warn('[push] confirm-done push error (non-fatal):', pushErr);
     }
@@ -6976,7 +6976,7 @@ async function qcagDesktopSendComment() {
           const u = await window.dataSdk.uploadImage(img, `comment_${Date.now()}_${idx}.webp`, reqId, 'comments');
           if (typeof u === 'string' && u.trim()) return u.trim();
           if (u && typeof u.url === 'string' && u.url.trim()) return u.url.trim();
-        } catch (_) {}
+        } catch (_) { }
       }
       return img;
     }));
@@ -7180,10 +7180,6 @@ function qcagCloseNavSidebar() {
   backdrop && backdrop.classList.add('hidden');
 }
 
-let _qcagNavMapInstance = null;
-let _qcagNavMapMarkers = []; // [{marker, tooltipHtml, data}]
-let _qcagNavMapSearchQ = '';
-let _qcagNavTooltipsVisible = false;
 
 function qcagNavShowView(viewName) {
   qcagCloseNavSidebar();
@@ -7218,10 +7214,20 @@ function qcagNavShowView(viewName) {
     if (!panel) return;
     panel.classList.remove('hidden');
     _qcagNavMapSearchQ = '';
+    _qcagNavMapRegion = 'all';
+    _qcagNavMapStatus = 'all';
     const si = document.getElementById('qcagNavMapSearch');
     if (si) si.value = '';
+    const selS = document.getElementById('qcagMapStatusFilter');
+    if (selS) selS.value = 'all';
+    const bar = document.querySelector('.qcag-map-region-bar');
+    if (bar) {
+      bar.querySelectorAll('.qcag-map-reg-btn').forEach(btn => btn.classList.remove('active'));
+      const allBtn = document.getElementById('qcagMapReg_all');
+      if (allBtn) allBtn.classList.add('active');
+    }
     // Defer so the panel is visible before Leaflet measures the container
-    setTimeout(() => qcagNavRenderMap(), 80);
+    setTimeout(() => qcagNavRenderMap(), 100);
   } else if (viewName === 'stats') {
     const panel = document.getElementById('qcagNavStatsPanel');
     if (panel) {
@@ -7966,9 +7972,9 @@ function qcagNavUpdateMetricsAndCounts(reqs) {
   // Lọc theo năm để số lượng badge khớp với tập dữ liệu đang xem
   const targetList = (yf !== null)
     ? all.filter(r => {
-        try { return new Date(r.createdAt || 0).getFullYear() === yf; }
-        catch (e) { return false; }
-      })
+      try { return new Date(r.createdAt || 0).getFullYear() === yf; }
+      catch (e) { return false; }
+    })
     : all;
 
   let total = targetList.length;
@@ -8841,86 +8847,689 @@ function qcagNavListExportCSV() {
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
 }
 
-// ---------- MAP VIEW ------------------------------------
-function qcagNavMapOnSearch(val) {
-  _qcagNavMapSearchQ = (val || '').toLowerCase().trim();
-  _qcagNavApplyMapFilter();
+// ============================================================================
+// MAP VIEW — TEARDROP MAP PINS (THẢ GHIM BẢN ĐỒ CHUYÊN NGHIỆP THEO MÀU NGHIỆP VỤ)
+// ============================================================================
+let _qcagNavMapInstance = null;
+let _qcagNavMapLayerGroup = null;     // LayerGroup chứa toàn bộ Marker cây ghim
+let _qcagStoreLabelsLayer = null;     // LayerGroup chứa nhãn Store Badge khi Zoom >= 14
+let _qcagNavOutlets = [];             // Toàn bộ danh sách Điểm Bán (Outlets)
+let _qcagNavFilteredOutlets = [];     // Danh sách Điểm Bán sau khi áp dụng bộ lọc
+let _qcagNavMapMarkersMap = new Map(); // outletKey -> { marker, outlet }
+let _qcagNavActiveOutletKey = null;
+let _qcagNavMapSearchQ = '';
+let _qcagNavMapRegion = 'all';
+let _qcagNavMapStatus = 'all';
+let _qcagNavSearchDebounce = null;
+let _qcagNavUserLocMarker = null;
+
+/**
+ * Lấy thông số màu sắc nghiệp vụ chuẩn doanh nghiệp (Heineken Green, Amber, Cyan, Rose)
+ */
+function _qcagNavGetOutletColor(statusKey) {
+  if (statusKey === 'pending_survey') {
+    return { fill: '#f59e0b', stroke: '#ffffff', glow: 'rgba(245, 158, 11, 0.45)', label: 'Chờ khảo sát' };
+  }
+  if (statusKey === 'pending_design') {
+    return { fill: '#06b6d4', stroke: '#ffffff', glow: 'rgba(6, 182, 212, 0.45)', label: 'Chờ thiết kế' };
+  }
+  if (statusKey === 'pending_edit') {
+    return { fill: '#f43f5e', stroke: '#ffffff', glow: 'rgba(244, 63, 94, 0.55)', label: 'Chờ sửa' };
+  }
+  // Mặc định là Hoàn thành: Xanh lá Heineken / Emerald sang trọng
+  return { fill: '#10b981', stroke: '#ffffff', glow: 'rgba(16, 185, 129, 0.35)', label: 'Hoàn thành' };
 }
 
-function _qcagNavApplyMapFilter() {
-  const q = _qcagNavMapSearchQ;
-  const countEl = document.getElementById('qcagNavMapCount');
-  let visible = 0;
-  _qcagNavMapMarkers.forEach(({ marker, data }) => {
-    const show = !q ||
-      data.outletCode.includes(q) ||
-      data.outletName.includes(q) ||
-      data.saleName.includes(q) ||
-      data.saleCode.includes(q) ||
-      data.ssName.includes(q) ||
-      data.region.includes(q);
-    if (show) {
-      if (!_qcagNavMapInstance.hasLayer(marker)) marker.addTo(_qcagNavMapInstance);
-      visible++;
-    } else {
-      if (_qcagNavMapInstance.hasLayer(marker)) _qcagNavMapInstance.removeLayer(marker);
-    }
+/**
+ * Bộ nhớ đệm Icon Ghim (Icon Cache) - Tránh khởi tạo DOM & chuỗi HTML lặp lại cho 4,000+ điểm bán
+ */
+const _qcagPinIconCache = new Map();
+let _qcagLastRenderedZoomTier = null;
+
+function _qcagGetZoomTier(zoom) {
+  if (zoom <= 7) return 'xs';
+  if (zoom <= 9) return 'sm';
+  if (zoom <= 12) return 'md';
+  if (zoom <= 14) return 'lg';
+  return 'xl';
+}
+
+/**
+ * Tạo Icon Cây Ghim (Teardrop Pin) theo màu trạng thái và co giãn thông minh theo Zoom
+ * ĐÃ TỐI ƯU: Triệt tiêu CSS filter drop-shadow trên hàng ngàn pin thường, chống lag GPU và vệt đen dày đặc
+ */
+function _qcagBuildPinIcon(outlet, zoom, isActive) {
+  const statusKey = (outlet && outlet.statusKey) || 'done';
+  const tier = _qcagGetZoomTier(zoom);
+  const cacheKey = `${statusKey}_${tier}_${isActive ? 1 : 0}`;
+
+  if (_qcagPinIconCache.has(cacheKey)) {
+    return _qcagPinIconCache.get(cacheKey);
+  }
+
+  const color = _qcagNavGetOutletColor(statusKey);
+  let w = 18;
+  let h = 24;
+  let strokeW = '1.2';
+
+  if (tier === 'xs') {
+    w = 11;
+    h = 15;
+    strokeW = '0.9';
+  } else if (tier === 'sm') {
+    w = 14;
+    h = 19;
+    strokeW = '1.0';
+  } else if (tier === 'md') {
+    w = 18;
+    h = 24;
+    strokeW = '1.2';
+  } else if (tier === 'lg') {
+    w = 23;
+    h = 30;
+    strokeW = '1.4';
+  } else {
+    w = 28;
+    h = 36;
+    strokeW = '1.6';
+  }
+
+  if (isActive) {
+    w = Math.round(w * 1.3);
+    h = Math.round(h * 1.3);
+    strokeW = '2.4';
+  }
+
+  const strokeColor = isActive ? '#38bdf8' : '#ffffff';
+  // CHỈ áp dụng drop-shadow glow khi pin đang được chọn (Active)
+  // Tuyệt đối KHÔNG áp dụng drop-shadow lên hàng ngàn pin thường để GPU không bị quá tải blur và không tích tụ bóng đen dầy đặc
+  const filterStyle = isActive
+    ? 'filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.95)) drop-shadow(0 3px 6px rgba(0, 0, 0, 0.5));'
+    : '';
+
+  const html = `
+    <div class="qcag-map-pin ${isActive ? 'is-active' : ''}" style="width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+      <svg width="${w}" height="${h}" viewBox="0 0 24 31" fill="none" xmlns="http://www.w3.org/2000/svg" style="${filterStyle}display:block;transition:transform 0.15s ease;">
+        <path d="M12 0.8C5.814 0.8 0.8 5.814 0.8 12C0.8 19.8 12 30.2 12 30.2C12 30.2 23.2 19.8 23.2 12C23.2 5.814 18.186 0.8 12 0.8Z" 
+              fill="${color.fill}" 
+              stroke="${strokeColor}" 
+              stroke-width="${strokeW}"/>
+        <circle cx="12" cy="11.5" r="4.2" fill="#ffffff"/>
+      </svg>
+    </div>
+  `;
+
+  const icon = L.divIcon({
+    className: 'qcag-pin-div-icon',
+    html: html,
+    iconSize: [w, h],
+    iconAnchor: [w / 2, h],
+    popupAnchor: [0, -h + 2],
+    tooltipAnchor: [0, -h]
   });
-  if (countEl) {
-    const total = _qcagNavMapMarkers.length;
-    countEl.textContent = q ? `${visible} / ${total} điểm` : `${total} điểm có định vị`;
+
+  _qcagPinIconCache.set(cacheKey, icon);
+  return icon;
+}
+
+/**
+ * Hiển thị nhãn Thẻ Điểm Bán (Store Badge) trực tiếp trên bản đồ khi phóng to gần (Zoom >= 14)
+ */
+function _qcagUpdateStoreLabelsOnMap() {
+  if (!_qcagNavMapInstance || !_qcagStoreLabelsLayer) return;
+  _qcagStoreLabelsLayer.clearLayers();
+
+  const z = _qcagNavMapInstance.getZoom();
+  if (z < 14) return; // Chỉ hiển thị Store Badge khi zoom cấp Xã/Phường/Tuyến đường
+
+  const bounds = _qcagNavMapInstance.getBounds();
+  let count = 0;
+
+  _qcagNavFilteredOutlets.forEach(ot => {
+    if (count >= 120) return; // Bảo vệ hiệu năng 60 FPS, tối đa 120 nhãn nổi trong màn hình
+    if (!bounds.contains([ot.lat, ot.lng])) return;
+
+    count++;
+    const color = _qcagNavGetOutletColor(ot.statusKey);
+    const labelIcon = L.divIcon({
+      className: 'qcag-store-badge-pin',
+      html: `
+        <div class="qcag-store-badge-pill" onclick="qcagNavSelectOutlet('${escapeHtml(ot.key)}')">
+          <span class="qcag-badge-dot" style="background:${color.fill}"></span>
+          <span class="qcag-badge-name">${escapeHtml(ot.outletName)}</span>
+        </div>
+      `,
+      iconSize: [0, 0],
+      iconAnchor: [0, -8]
+    });
+
+    const m = L.marker([ot.lat, ot.lng], {
+      icon: labelIcon,
+      interactive: true,
+      zIndexOffset: 50
+    });
+    _qcagStoreLabelsLayer.addLayer(m);
+  });
+}
+
+/**
+ * Vẽ toàn bộ các cây ghim lên bản đồ (Có cơ chế Viewport Virtualization & Smart Icon Caching mượt 60 FPS)
+ */
+function _qcagRenderMapPins() {
+  if (!_qcagNavMapInstance || !_qcagNavMapLayerGroup) return;
+
+  const z = _qcagNavMapInstance.getZoom();
+  const currentTier = _qcagGetZoomTier(z);
+  const tierChanged = (currentTier !== _qcagLastRenderedZoomTier);
+  _qcagLastRenderedZoomTier = currentTier;
+
+  const bounds = _qcagNavMapInstance.getBounds().pad(0.35); // Vùng đệm 35% ra ngoài màn hình
+  const isLargeSet = _qcagNavFilteredOutlets.length > 800;
+
+  _qcagNavMapLayerGroup.clearLayers();
+
+  _qcagNavFilteredOutlets.forEach(ot => {
+    // Nếu danh sách lọc quá lớn (>800 điểm), chỉ render những điểm trong khung nhìn + buffer để giữ 60 FPS
+    if (isLargeSet && !bounds.contains([ot.lat, ot.lng])) return;
+
+    let markerItem = _qcagNavMapMarkersMap.get(ot.key);
+    if (!markerItem || !markerItem.marker) return;
+
+    const isActive = (ot.key === _qcagNavActiveOutletKey);
+    // Tối ưu vượt bậc: chỉ setIcon khi zoom tier thay đổi hoặc pin này đang active
+    if (tierChanged || isActive || markerItem._renderedTier !== currentTier) {
+      markerItem.marker.setIcon(_qcagBuildPinIcon(ot, z, isActive));
+      markerItem._renderedTier = currentTier;
+    }
+    _qcagNavMapLayerGroup.addLayer(markerItem.marker);
+  });
+
+  _qcagUpdateStoreLabelsOnMap();
+}
+
+function qcagNavMapSetRegion(regionKey) {
+  _qcagNavMapRegion = String(regionKey || 'all').toLowerCase().trim();
+  // Cập nhật class active trên các button ở Header đồng bộ chuẩn UI
+  const bar = document.querySelector('.qcag-map-region-bar');
+  if (bar) {
+    bar.querySelectorAll('.qcag-map-reg-btn').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.getElementById('qcagMapReg_' + _qcagNavMapRegion);
+    if (targetBtn) targetBtn.classList.add('active');
+  }
+  qcagNavApplyMapFilter();
+}
+
+function qcagNavMapSetStatus(statusKey) {
+  _qcagNavMapStatus = String(statusKey || 'all').toLowerCase().trim();
+  const segWrap = document.querySelector('.qcag-map-status-segment');
+  if (segWrap) {
+    segWrap.querySelectorAll('.qcag-status-seg-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-status') === _qcagNavMapStatus);
+    });
+  }
+  qcagNavApplyMapFilter();
+}
+
+function qcagNavMapOnSearch(val) {
+  _qcagNavMapSearchQ = (val || '').toLowerCase().trim();
+  if (_qcagNavSearchDebounce) clearTimeout(_qcagNavSearchDebounce);
+  _qcagNavSearchDebounce = setTimeout(() => {
+    qcagNavApplyMapFilter();
+  }, 200);
+}
+
+function qcagNavMapToggleSidebar() {
+  const sidebar = document.getElementById('qcagMapSidebar');
+  const btn = document.getElementById('qcagMapToggleSidebarBtn');
+  if (!sidebar) return;
+  sidebar.classList.toggle('is-collapsed');
+  if (btn) btn.classList.toggle('is-active', !sidebar.classList.contains('is-collapsed'));
+  setTimeout(() => {
+    if (_qcagNavMapInstance) _qcagNavMapInstance.invalidateSize();
+  }, 220);
+}
+
+function qcagNavMapFitAll() {
+  if (!_qcagNavMapInstance) return;
+  if (_qcagNavFilteredOutlets.length > 0) {
+    const latlngs = _qcagNavFilteredOutlets.map(o => [o.lat, o.lng]);
+    try {
+      _qcagNavMapInstance.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 15 });
+    } catch (_) { }
   }
 }
 
+function qcagNavMapLocateMe() {
+  if (!navigator.geolocation) {
+    if (typeof showToast === 'function') showToast('Trình duyệt không hỗ trợ định vị GPS.');
+    return;
+  }
+  if (typeof showToast === 'function') showToast('Đang lấy toạ độ vị trí hiện tại...');
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      if (!_qcagNavMapInstance) return;
+      if (_qcagNavUserLocMarker) {
+        try { _qcagNavMapInstance.removeLayer(_qcagNavUserLocMarker); } catch (_) { }
+      }
+      const myIcon = L.divIcon({
+        className: 'qcag-user-location-pin',
+        html: `<div style="width:16px;height:16px;border-radius:50%;background:#0284c7;border:3px solid #ffffff;box-shadow:0 0 12px rgba(2,132,199,0.8);animation:pulse 2s infinite"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      _qcagNavUserLocMarker = L.marker([lat, lng], { icon: myIcon }).addTo(_qcagNavMapInstance);
+      _qcagNavUserLocMarker.bindPopup('<div style="font-weight:600;font-size:12px;padding:4px">Vị trí hiện tại của bạn</div>').openPopup();
+      _qcagNavMapInstance.flyTo([lat, lng], 15, { duration: 0.8 });
+    },
+    err => {
+      if (typeof showToast === 'function') showToast('Không thể lấy vị trí hiện tại: ' + (err.message || 'Bị từ chối'));
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+  );
+}
+
+/**
+ * Gom gộp các yêu cầu khảo sát theo Điểm Bán duy nhất (Deduplication by Outlet)
+ */
+function _qcagNavAggregateOutlets(requests) {
+  const reqs = Array.isArray(requests) ? requests : [];
+  const mapByOutlet = new Map();
+
+  reqs.forEach(r => {
+    if (!r) return;
+    const lat = parseFloat(r.outletLat || r.outlet_lat);
+    const lng = parseFloat(r.outletLng || r.outlet_lng);
+    if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
+
+    const rawCode = String(r.outletCode || r.outlet_code || '').trim();
+    const rawName = String(r.outletName || r.outlet_name || '').trim();
+    const key = rawCode ? rawCode.toUpperCase() : (rawName ? rawName.toUpperCase() : `${lat.toFixed(5)}_${lng.toFixed(5)}`);
+
+    const requester = qcagDesktopParseJson(r.requester, {});
+    let regionKey = String(qcagDesktopGetRequestRegionKey(r) || requester.region || '').toLowerCase().trim();
+    if (regionKey === '24') regionKey = 's24';
+    const regionDisplay = qcagFormatRegionDisplay(regionKey);
+
+    let outlet = mapByOutlet.get(key);
+    if (!outlet) {
+      outlet = {
+        key: key,
+        outletCode: rawCode,
+        outletName: rawName || 'Điểm bán không tên',
+        address: r.address || r.outletAddress || requester.address || '',
+        lat: lat,
+        lng: lng,
+        regionKey: regionKey,
+        regionDisplay: regionDisplay,
+        saleName: requester.saleName || requester.name || requester.phone || '',
+        saleCode: requester.saleCode || '',
+        salePhone: requester.phone || requester.salePhone || '',
+        ssName: requester.ssName || '',
+        requests: []
+      };
+      mapByOutlet.set(key, outlet);
+    }
+
+    outlet.requests.push(r);
+  });
+
+  // Xác định trạng thái nghiệp vụ ưu tiên cho từng Điểm Bán
+  const outlets = Array.from(mapByOutlet.values());
+  outlets.forEach(ot => {
+    ot.requests.sort((a, b) => {
+      const ta = new Date(a.createdAt || a.created_at || 0).getTime();
+      const tb = new Date(b.createdAt || b.created_at || 0).getTime();
+      return tb - ta;
+    });
+    ot.latestRequest = ot.requests[0] || {};
+
+    let statusKey = 'done';
+    let statusLabel = 'Hoàn thành';
+
+    const hasSurvey = ot.requests.some(r => {
+      const st = String(r.status || '').toLowerCase();
+      return st === 'pending_survey' || st === 'chờ khảo sát' || (!st && !r.content);
+    });
+    const hasEdit = ot.requests.some(r => qcagDesktopHasHeinekenEditRequest(r));
+    const hasDesign = ot.requests.some(r => {
+      const st = String(r.status || '').toLowerCase();
+      return st === 'pending_design' || st === 'chờ thiết kế';
+    });
+
+    if (hasSurvey) {
+      statusKey = 'pending_survey';
+      statusLabel = 'Chờ khảo sát';
+    } else if (hasEdit) {
+      statusKey = 'pending_edit';
+      statusLabel = 'Chờ chỉnh sửa';
+    } else if (hasDesign) {
+      statusKey = 'pending_design';
+      statusLabel = 'Chờ thiết kế';
+    }
+
+    ot.statusKey = statusKey;
+    ot.statusLabel = statusLabel;
+  });
+
+  return outlets;
+}
+
+/**
+ * Cập nhật số lượng điểm bán lên thanh tab Khu Vực tại Header
+ */
+function _qcagNavUpdateRegionHeaderCounts() {
+  const counts = { all: _qcagNavOutlets.length, s4: 0, s5: 0, s16: 0, s17: 0, s24: 0, s19: 0, mot8: 0, npp: 0 };
+  _qcagNavOutlets.forEach(ot => {
+    const rk = ot.regionKey;
+    if (counts[rk] !== undefined) counts[rk]++;
+  });
+
+  Object.keys(counts).forEach(k => {
+    const el = document.getElementById('qcagMapCnt_' + k);
+    if (el) el.textContent = counts[k];
+  });
+}
+
+/**
+ * Tạo nội dung popup chi tiết cho Điểm Bán (kèm danh sách các đợt khảo sát)
+ */
+function _qcagNavBuildPopupHtml(outlet) {
+  const latest = outlet.latestRequest || {};
+  const latestReqId = latest.id || latest.__backendId || '';
+  const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${outlet.lat},${outlet.lng}`;
+
+  let badgeClass = 'badge-done';
+  if (outlet.statusKey === 'pending_survey') badgeClass = 'badge-survey';
+  else if (outlet.statusKey === 'pending_design') badgeClass = 'badge-design';
+  else if (outlet.statusKey === 'pending_edit') badgeClass = 'badge-edit';
+
+  let reqListHtml = '';
+  if (outlet.requests && outlet.requests.length > 0) {
+    reqListHtml = `
+      <div style="font-size:11px;font-weight:700;margin:6px 0 3px;color:#64748b">CÁC ĐỢT YÊU CẦU KHẢO SÁT (${outlet.requests.length}):</div>
+      <div class="qcag-map-popup-req-list">
+    `;
+    outlet.requests.forEach((req, idx) => {
+      const tk = req.tkCode || req.tk_code || req.code || ('Đợt ' + (idx + 1));
+      const stBadge = qcagDesktopStatusBadge(req);
+      const stLabel = stBadge ? stBadge.label : (req.status || 'Chờ xử lý');
+      const rid = req.id || req.__backendId || '';
+      reqListHtml += `
+        <div class="qcag-map-popup-req-item">
+          <div>
+            <span style="font-weight:700;color:#2563eb">${escapeHtml(tk)}</span>
+            <span style="font-size:10px;color:#94a3b8;margin-left:4px">${req.createdAt ? new Date(req.createdAt).toLocaleDateString('vi-VN') : ''}</span>
+          </div>
+          <button type="button" onclick="qcagNavOpenInMainView('${escapeHtml(String(rid))}')" style="background:none;border:none;color:#0284c7;font-size:10.5px;font-weight:600;cursor:pointer;text-decoration:underline">Mở đơn</button>
+        </div>`;
+    });
+    reqListHtml += `</div>`;
+  }
+
+  return `
+    <div class="qcag-map-popup-card">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <span class="qcag-point-badge ${badgeClass}">${escapeHtml(outlet.statusLabel)}</span>
+        <span style="font-size:11px;font-weight:600;color:#64748b">${escapeHtml(outlet.regionDisplay || '-')}</span>
+      </div>
+      <div class="qcag-map-popup-title">${escapeHtml(outlet.outletName)}</div>
+      <div class="qcag-map-popup-meta">
+        <span>Mã Outlet: <strong>${escapeHtml(outlet.outletCode || 'Chưa có')}</strong></span>
+      </div>
+      <div class="qcag-map-popup-info">
+        ${outlet.address ? `<div><strong>Đ/C:</strong> ${escapeHtml(outlet.address)}</div>` : ''}
+        <div><strong>Sale:</strong> ${escapeHtml(outlet.saleName || '-')} ${outlet.salePhone ? `(${escapeHtml(outlet.salePhone)})` : ''}</div>
+        ${outlet.ssName ? `<div><strong>SS/SE:</strong> ${escapeHtml(outlet.ssName)}</div>` : ''}
+      </div>
+      ${reqListHtml}
+      <div class="qcag-map-popup-actions">
+        <a href="${navUrl}" target="_blank" rel="noopener noreferrer" class="qcag-map-act-btn btn-navigate" title="Chỉ đường Google Maps">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="3 11 22 2 13 21 11 13 3 11" />
+          </svg>
+          Chỉ đường
+        </a>
+        <button type="button" class="qcag-map-act-btn btn-open" onclick="qcagNavOpenInMainView('${escapeHtml(String(latestReqId))}')" title="Mở đơn mới nhất ở màn hình chính">
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+          Mở đơn
+        </button>
+      </div>
+    </div>`;
+}
+
+/**
+ * Render danh sách các thẻ Điểm Bán (Outlets) bên Sidebar trái
+ */
+function _qcagNavRenderOutletCards(outlets) {
+  const container = document.getElementById('qcagMapOutletList');
+  if (!container) return;
+
+  if (!outlets.length) {
+    container.innerHTML = `
+      <div style="padding:40px 16px;text-align:center;color:#64748b;font-size:13px">
+        Không tìm thấy điểm bán phù hợp với bộ lọc.
+      </div>`;
+    return;
+  }
+
+  let html = '';
+  outlets.forEach(ot => {
+    const isActive = ot.key === _qcagNavActiveOutletKey;
+    let badgeClass = 'badge-done';
+    if (ot.statusKey === 'pending_survey') badgeClass = 'badge-survey';
+    else if (ot.statusKey === 'pending_design') badgeClass = 'badge-design';
+    else if (ot.statusKey === 'pending_edit') badgeClass = 'badge-edit';
+
+    const reqCountText = `${ot.requests.length} đợt`;
+
+    html += `
+      <div class="qcag-map-card ${isActive ? 'is-active' : ''}" data-key="${escapeHtml(ot.key)}" onclick="qcagNavSelectOutlet('${escapeHtml(ot.key)}')">
+        <div class="flex items-start justify-between gap-2">
+          <div class="qcag-map-card-name">${escapeHtml(ot.outletName)}</div>
+          <span style="font-size:10px;font-weight:700;color:#38bdf8;background:rgba(56,189,248,0.12);padding:1px 5px;border-radius:4px;flex-shrink:0">${escapeHtml(ot.regionDisplay || '')}</span>
+        </div>
+        <div class="qcag-map-card-sub">
+          <span>Mã: <strong style="color:var(--text-main,#0f172a)">${escapeHtml(ot.outletCode || 'Chưa có')}</strong></span>
+          <span class="qcag-outlet-req-count">${escapeHtml(reqCountText)}</span>
+        </div>
+        ${ot.address ? `<div class="qcag-map-card-addr" title="${escapeHtml(ot.address)}">${escapeHtml(ot.address)}</div>` : ''}
+        <div class="qcag-map-card-meta">
+          <span style="color:#64748b;font-size:10.5px">Sale: <strong>${escapeHtml(ot.saleName || '-')}</strong></span>
+          <span class="qcag-point-badge ${badgeClass}">${escapeHtml(ot.statusLabel)}</span>
+        </div>
+      </div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+/**
+ * Chọn điểm bán từ Sidebar hoặc khi click vào điểm bán trên Map
+ */
+function qcagNavSelectOutlet(key) {
+  const curZoom = _qcagNavMapInstance ? _qcagNavMapInstance.getZoom() : 10;
+
+  // Bỏ active điểm cũ, khôi phục icon cây ghim bình thường
+  if (_qcagNavActiveOutletKey && _qcagNavMapMarkersMap.has(_qcagNavActiveOutletKey)) {
+    const prevItem = _qcagNavMapMarkersMap.get(_qcagNavActiveOutletKey);
+    if (prevItem && prevItem.marker) {
+      prevItem.marker.setIcon(_qcagBuildPinIcon(prevItem.outlet, curZoom, false));
+    }
+  }
+
+  _qcagNavActiveOutletKey = key;
+
+  // Cập nhật thẻ active trong Sidebar
+  const container = document.getElementById('qcagMapOutletList');
+  if (container) {
+    container.querySelectorAll('.qcag-map-card').forEach(c => {
+      const isCur = c.getAttribute('data-key') === key;
+      c.classList.toggle('is-active', isCur);
+      if (isCur) c.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
+  const item = _qcagNavMapMarkersMap.get(key);
+  if (!item || !_qcagNavMapInstance) return;
+
+  const { marker, outlet } = item;
+  // Làm nổi bật ghim đang chọn (Phóng to + Neon Cyan)
+  marker.setIcon(_qcagBuildPinIcon(outlet, curZoom, true));
+
+  _qcagNavMapInstance.flyTo([outlet.lat, outlet.lng], Math.max(_qcagNavMapInstance.getZoom(), 16), { duration: 0.8 });
+  setTimeout(() => marker.openPopup(), 400);
+}
+
+/**
+ * Áp dụng bộ lọc (Khu vực tại Header, Segmented Status, Từ khoá tìm kiếm)
+ */
+function qcagNavApplyMapFilter() {
+  const q = _qcagNavMapSearchQ;
+  const region = _qcagNavMapRegion;
+  const status = _qcagNavMapStatus;
+
+  // Đếm theo toàn bộ Điểm Bán trong khu vực đang chọn
+  let kpiAll = 0;
+  let kpiSurvey = 0;
+  let kpiDesign = 0;
+  let kpiEdit = 0;
+  let kpiDone = 0;
+
+  _qcagNavFilteredOutlets = _qcagNavOutlets.filter(ot => {
+    // 1. Lọc theo Khu Vực
+    if (region !== 'all' && ot.regionKey !== region) return false;
+
+    // Đếm KPI theo khu vực trước khi lọc trạng thái
+    kpiAll++;
+    if (ot.statusKey === 'pending_survey') kpiSurvey++;
+    else if (ot.statusKey === 'pending_design') kpiDesign++;
+    else if (ot.statusKey === 'pending_edit') kpiEdit++;
+    else if (ot.statusKey === 'done') kpiDone++;
+
+    // 2. Lọc theo Trạng Thái
+    if (status !== 'all' && ot.statusKey !== status) return false;
+
+    // 3. Lọc theo Từ Khoá
+    if (q) {
+      const matchText = (
+        ot.outletCode + ' ' +
+        ot.outletName + ' ' +
+        ot.address + ' ' +
+        ot.saleName + ' ' +
+        ot.saleCode + ' ' +
+        ot.ssName + ' ' +
+        ot.regionDisplay + ' ' +
+        ot.requests.map(r => (r.tkCode || r.tk_code || r.code || '')).join(' ')
+      ).toLowerCase();
+      if (!matchText.includes(q)) return false;
+    }
+
+    return true;
+  });
+
+  // Cập nhật bộ đếm hiển thị ở danh sách điểm bán
+  const countEl = document.getElementById('qcagNavMapCount');
+  if (countEl) {
+    if (_qcagNavFilteredOutlets.length === _qcagNavOutlets.length) {
+      countEl.textContent = `${_qcagNavOutlets.length.toLocaleString('vi-VN')} điểm`;
+    } else {
+      countEl.textContent = `${_qcagNavFilteredOutlets.length.toLocaleString('vi-VN')} / ${_qcagNavOutlets.length.toLocaleString('vi-VN')} điểm`;
+    }
+  }
+
+  // Cập nhật dải Segmented Tabs số lượng
+  const elAll = document.getElementById('kpiAll');
+  const elSurvey = document.getElementById('kpiPendingSurvey');
+  const elDesign = document.getElementById('kpiPendingDesign');
+  const elEdit = document.getElementById('kpiPendingEdit');
+  const elDone = document.getElementById('kpiDone');
+  if (elAll) elAll.textContent = kpiAll;
+  if (elSurvey) elSurvey.textContent = kpiSurvey;
+  if (elDesign) elDesign.textContent = kpiDesign;
+  if (elEdit) elEdit.textContent = kpiEdit;
+  if (elDone) elDone.textContent = kpiDone;
+
+  // Vẽ danh sách Card Outlet bên trái
+  _qcagNavRenderOutletCards(_qcagNavFilteredOutlets);
+
+  // Vẽ các Cây Ghim (Teardrop Pins) lên bản đồ
+  _qcagRenderMapPins();
+}
+
+/**
+ * Khởi tạo và render bản đồ chính (Thả Ghim Bản Đồ Teardrop Pins Chuyên Nghiệp)
+ */
 function qcagNavRenderMap() {
   const container = document.getElementById('qcagNavMapContainer');
   if (!container) return;
 
-  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
-  const points = reqs.filter(r => r.outletLat && r.outletLng);
-  const countEl = document.getElementById('qcagNavMapCount');
-  if (countEl) countEl.textContent = points.length + ' điểm có định vị';
-
-  // Leaflet guard
   if (typeof L === 'undefined') {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#9ca3af">Leaflet chưa được tải</div>';
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;color:#9ca3af">Thư viện Leaflet chưa sẵn sàng. Vui lòng tải lại trang.</div>';
     return;
   }
 
-  // Destroy previous instance
+  // 1. Gom gộp dữ liệu thành danh sách Điểm Bán (Outlets)
+  const reqs = (typeof allRequests !== 'undefined' ? allRequests : []) || [];
+  _qcagNavOutlets = _qcagNavAggregateOutlets(reqs);
+
+  // Cập nhật số đếm lên thanh tab Khu Vực tại Header (nếu có)
+  _qcagNavUpdateRegionHeaderCounts();
+
+  // 2. Dọn dẹp bản đồ cũ nếu có
   if (_qcagNavMapInstance) {
     try { _qcagNavMapInstance.remove(); } catch (e) { }
     _qcagNavMapInstance = null;
   }
-  _qcagNavMapMarkers = [];
+  _qcagNavMapMarkersMap.clear();
+  _qcagNavActiveOutletKey = null;
   container.innerHTML = '';
 
+  // 3. Khởi tạo Leaflet Map
   const defaultCenter = [10.3, 105.5];
-  const map = L.map(container, { center: defaultCenter, zoom: 8, maxZoom: 25 });
+  const map = L.map(container, {
+    center: defaultCenter,
+    zoom: 8,
+    maxZoom: 22,
+    preferCanvas: true
+  });
   _qcagNavMapInstance = map;
 
+  // 4. Tile layers Google Maps & Satellite
   const _osmDesktop = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
     attribution: '© Google Maps',
     subdomains: '0123',
-    maxZoom: 25,
+    maxZoom: 22,
     maxNativeZoom: 21,
     keepBuffer: 6
   });
   const _satDesktop = L.tileLayer('https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
     attribution: '© Google Maps Satellite',
     subdomains: '0123',
-    maxZoom: 25,
+    maxZoom: 22,
     maxNativeZoom: 21,
     keepBuffer: 6
   });
   _osmDesktop.addTo(map);
 
-  // Layer toggle control
-  var _desktopMapSat = false;
-  var layerCtrl = L.control({ position: 'topright' });
+  // 5. Nút chuyển đổi Vệ tinh / Bản đồ đường bộ Flat
+  let _desktopMapSat = false;
+  const layerCtrl = L.control({ position: 'topright' });
   layerCtrl.onAdd = function () {
-    var div = L.DomUtil.create('div', 'leaflet-bar');
-    div.innerHTML = '<a href="#" title="Chuyển sang vệ tinh" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;font-size:11px;font-weight:600;background:#fff;color:#333;text-decoration:none;cursor:pointer" id="qcagMapLayerBtn">🛰️</a>';
+    const div = L.DomUtil.create('div', 'leaflet-bar');
+    div.innerHTML = `
+      <a href="#" title="Chuyển sang ảnh vệ tinh" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:#fff;color:#333;text-decoration:none;cursor:pointer;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.2)" id="qcagMapLayerBtn">
+        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
+        </svg>
+      </a>`;
     L.DomEvent.disableClickPropagation(div);
     div.querySelector('a').addEventListener('click', function (e) {
       e.preventDefault();
@@ -8928,106 +9537,96 @@ function qcagNavRenderMap() {
         map.removeLayer(_satDesktop);
         _osmDesktop.addTo(map);
         _desktopMapSat = false;
-        this.title = 'Chuyển sang vệ tinh';
+        this.title = 'Chuyển sang ảnh vệ tinh';
+        this.style.background = '#ffffff';
       } else {
         map.removeLayer(_osmDesktop);
         _satDesktop.addTo(map);
         _desktopMapSat = true;
-        this.title = 'Chuyển sang bản đồ thường';
+        this.title = 'Chuyển sang bản đồ đường phố';
+        this.style.background = '#e2e8f0';
       }
     });
     return div;
   };
   layerCtrl.addTo(map);
 
-  const latlngs = [];
-  points.forEach(r => {
-    const lat = parseFloat(r.outletLat);
-    const lng = parseFloat(r.outletLng);
-    if (isNaN(lat) || isNaN(lng)) return;
-    latlngs.push([lat, lng]);
-    const requester = qcagDesktopParseJson(r.requester, {});
-    const statusBadge = qcagDesktopStatusBadge(r);
-    const saleName = escapeHtml(requester.saleName || requester.phone || '-');
-    const outletName = escapeHtml(r.outletName || r.outletCode || '-');
-    const outletCode = escapeHtml(r.outletCode || '');
-    const saleCode = escapeHtml(requester.saleCode || '');
-    const ssName = escapeHtml(requester.ssName || '-');
-    const region = escapeHtml(qcagFormatRegionDisplay(r.region || requester.region) || '-');
-    const statusLabel = escapeHtml(statusBadge ? statusBadge.label : '-');
+  // 6. LayerGroup hiển thị Marker Cây Ghim & LayerGroup hiển thị Store Badge khi zoom gần
+  _qcagNavMapLayerGroup = L.layerGroup();
+  map.addLayer(_qcagNavMapLayerGroup);
 
-    const popupHtml = `
-      <div style="min-width:190px;font-family:inherit">
-        <strong style="font-size:13px">${outletName}</strong><br>
-        <span style="font-size:12px;color:#6b7280">${outletCode}</span><br>
-        <hr style="margin:6px 0;border:none;border-top:1px solid #e5e7eb">
-        <div style="font-size:12px">
-          <div>Sale: <strong>${saleName}</strong></div>
-          <div>Khu vực: <strong>${region}</strong></div>
-          <div>Trạng thái: <strong>${statusLabel}</strong></div>
-        </div>
+  _qcagStoreLabelsLayer = L.layerGroup();
+  map.addLayer(_qcagStoreLabelsLayer);
+
+  // 7. Mini Legend Chú thích Màu Sắc Nghiệp Vụ ở góc dưới trái
+  const legendCtrl = L.control({ position: 'bottomleft' });
+  legendCtrl.onAdd = function () {
+    const div = L.DomUtil.create('div', 'qcag-map-legend-wrap');
+    div.innerHTML = `
+      <div class="qcag-map-legend">
+        <span class="qcag-legend-item"><span class="qcag-legend-dot" style="background:#10b981"></span> Hoàn thành</span>
+        <span class="qcag-legend-item"><span class="qcag-legend-dot" style="background:#f59e0b"></span> Chờ KS</span>
+        <span class="qcag-legend-item"><span class="qcag-legend-dot" style="background:#06b6d4"></span> Chờ TK</span>
+        <span class="qcag-legend-item"><span class="qcag-legend-dot" style="background:#f43f5e"></span> Chờ sửa</span>
       </div>`;
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  };
+  legendCtrl.addTo(map);
 
-    const tooltipHtml = `
-      <div style="font-family:inherit;font-size:11px;line-height:1.5;max-width:160px;pointer-events:none">
-        <div style="font-weight:700;color:var(--mtt-name,#111827);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">${outletName}</div>
-        <div style="color:var(--mtt-sale,#374151);margin-top:1px">${saleName}</div>
-        <div style="color:var(--mtt-region,#6b7280);font-size:10px;margin-top:1px">${region}</div>
-      </div>`;
+  const initialZoom = map.getZoom();
 
-    const marker = L.marker([lat, lng]).addTo(map).bindPopup(popupHtml);
-    marker.bindTooltip(tooltipHtml, {
-      permanent: _qcagNavTooltipsVisible,
+  // 8. Tạo Cây Ghim (Teardrop Marker) cho từng Điểm Bán
+  _qcagNavOutlets.forEach(ot => {
+    const color = _qcagNavGetOutletColor(ot.statusKey);
+    const marker = L.marker([ot.lat, ot.lng], {
+      icon: _qcagBuildPinIcon(ot, initialZoom, false),
+      riseOnHover: true
+    });
+
+    marker.bindPopup(() => _qcagNavBuildPopupHtml(ot), { maxWidth: 360 });
+
+    // Hiệu ứng hover: hiển thị tooltip tên quán + mã outlet + màu sắc trạng thái
+    marker.bindTooltip(`
+      <div style="font-weight:700;font-size:12px;display:flex;align-items:center;gap:5px">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color.fill}"></span>
+        <span>${escapeHtml(ot.outletName)}</span>
+      </div>
+      <div style="font-size:10.5px;color:#94a3b8;margin-top:2px">Mã: ${escapeHtml(ot.outletCode || 'Chưa có')} · ${escapeHtml(ot.statusLabel)}</div>
+    `, {
       direction: 'top',
-      offset: [0, -10],
-      className: 'qcag-map-marker-label'
+      offset: [0, -26],
+      className: 'qcag-map-store-tooltip'
     });
 
-    // Store searchable data alongside marker
-    _qcagNavMapMarkers.push({
-      marker,
-      tooltipHtml,
-      data: {
-        outletCode: (r.outletCode || '').toLowerCase(),
-        outletName: (r.outletName || '').toLowerCase(),
-        saleName: (requester.saleName || requester.phone || '').toLowerCase(),
-        saleCode: (requester.saleCode || '').toLowerCase(),
-        ssName: (requester.ssName || '').toLowerCase(),
-        region: (requester.region || '').toLowerCase()
-      }
+    marker.on('click', () => {
+      qcagNavSelectOutlet(ot.key);
     });
+
+    _qcagNavMapMarkersMap.set(ot.key, { marker: marker, outlet: ot, _renderedTier: _qcagGetZoomTier(initialZoom) });
   });
 
-  if (latlngs.length > 0) {
-    map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40] });
+  // 9. Lắng nghe Zoom & Move để render Ghim mượt mà theo Viewport Virtualization
+  map.on('zoomend', () => {
+    _qcagRenderMapPins();
+  });
+
+  map.on('moveend', () => {
+    _qcagRenderMapPins();
+  });
+
+  // 10. Áp dụng bộ lọc ban đầu và vẽ danh sách
+  qcagNavApplyMapFilter();
+
+  // 11. Tự động bao quát toàn bộ điểm
+  if (_qcagNavOutlets.length > 0) {
+    const latlngs = _qcagNavOutlets.map(o => [o.lat, o.lng]);
+    try {
+      map.fitBounds(L.latLngBounds(latlngs), { padding: [40, 40], maxZoom: 14 });
+    } catch (_) { }
   }
 
-  setTimeout(() => map.invalidateSize(), 100);
-  // Apply any pending search filter
-  if (_qcagNavMapSearchQ) _qcagNavApplyMapFilter();
-  // Sync toggle button state
-  _qcagNavSyncTooltipBtn();
-}
-
-function qcagNavToggleMapTooltips() {
-  _qcagNavTooltipsVisible = !_qcagNavTooltipsVisible;
-  _qcagNavMapMarkers.forEach(({ marker, tooltipHtml }) => {
-    marker.unbindTooltip();
-    marker.bindTooltip(tooltipHtml, {
-      permanent: _qcagNavTooltipsVisible,
-      direction: 'top',
-      offset: [0, -10],
-      className: 'qcag-map-marker-label'
-    });
-  });
-  _qcagNavSyncTooltipBtn();
-}
-
-function _qcagNavSyncTooltipBtn() {
-  const btn = document.getElementById('qcagNavTooltipToggleBtn');
-  if (!btn) return;
-  btn.classList.toggle('is-active', _qcagNavTooltipsVisible);
-  btn.title = _qcagNavTooltipsVisible ? 'Ẩn thẻ thông tin' : 'Hiện thẻ thông tin';
+  setTimeout(() => map.invalidateSize(), 120);
 }
 
 // ── Tra cứu ĐVHC 2 cấp (34 tỉnh mới + lịch sử sáp nhập) ─────────────
@@ -9337,7 +9936,7 @@ async function qcagFetchImageAsPngBlob(rawUrl) {
     try {
       const cachedRes = await fetch(_qcagDesktopImageBlobUrlCache[url]);
       if (cachedRes.ok) rawBlob = await cachedRes.blob();
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // 2. Tải trực tiếp qua GCS CDN / Local URL (siêu nhanh ~80ms, bỏ qua Cloud Run trung gian)
@@ -9351,7 +9950,7 @@ async function qcagFetchImageAsPngBlob(rawUrl) {
         if (directRes.ok) {
           rawBlob = await directRes.blob();
         }
-      } catch (_) {}
+      } catch (_) { }
 
       // Nếu gặp lỗi CORS thì mới fallback sang backend proxy Production
       if (!rawBlob) {
@@ -9395,7 +9994,7 @@ async function qcagFetchImageAsPngBlob(rawUrl) {
       pngBlob = await new Promise((resolve, reject) => {
         canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png');
       });
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // Fallback thẻ Image() truyền thống nếu browser cũ không hỗ trợ createImageBitmap

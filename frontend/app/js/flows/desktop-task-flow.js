@@ -40,7 +40,7 @@ function qcagTaskParseJson(raw, fallback) {
 function qcagTaskGetActiveDesignImages(req) {
     if (!req) return [];
     if (typeof qcagDesktopGetActiveDesignImages === 'function') {
-        try { return qcagDesktopGetActiveDesignImages(req) || []; } catch (_) {}
+        try { return qcagDesktopGetActiveDesignImages(req) || []; } catch (_) { }
     }
     const raw = qcagTaskParseJson(req.designImages || req.design_images || req.images, []);
     return Array.isArray(raw) ? raw.filter(Boolean) : [];
@@ -49,7 +49,7 @@ function qcagTaskGetActiveDesignImages(req) {
 function qcagTaskIsPendingEdit(req) {
     if (!req) return false;
     if (typeof qcagDesktopIsPendingEditRequest === 'function') {
-        try { return qcagDesktopIsPendingEditRequest(req); } catch (_) {}
+        try { return qcagDesktopIsPendingEditRequest(req); } catch (_) { }
     }
     const status = String(req.productionApprovalStatus || req.status || '').toLowerCase();
     return status === 'pending-edit' || status === 'edit_requested' || status.includes('sửa');
@@ -61,7 +61,7 @@ function qcagGetCompletedTaskOrders() {
             const raw = localStorage.getItem('qcag_completed_task_orders');
             if (raw) return JSON.parse(raw);
         }
-    } catch (_) {}
+    } catch (_) { }
     return {};
 }
 
@@ -108,7 +108,7 @@ function qcagPruneStaleTaskStorage(activeOrders) {
                 }
             }
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 function qcagIsTaskOrderCompleted(orderId) {
@@ -170,7 +170,7 @@ function qcagMarkTaskOrderCompleted(orderId, orderCode) {
                         status: 'approved',
                         timestamp: Date.now()
                     });
-                } catch (_) {}
+                } catch (_) { }
             }
         }
 
@@ -198,13 +198,13 @@ function qcagMarkTaskOrderCompleted(orderId, orderCode) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            }).catch(() => {});
+            }).catch(() => { });
 
             fetch((base ? base : '') + '/api/ks/pending-orders/' + encodeURIComponent(orderId) + '/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            }).catch(() => {});
+            }).catch(() => { });
         });
 
     } catch (e) {
@@ -293,7 +293,7 @@ async function fetchQcagPendingOrders() {
     try {
         const base = resolvePendingOrdersApiBase();
         const isTaskActive = !!((typeof _qcagCurrentTaskOrder !== 'undefined' && _qcagCurrentTaskOrder) ||
-                             (typeof document !== 'undefined' && document.getElementById('qcagTaskDropdown') && !document.getElementById('qcagTaskDropdown').classList.contains('hidden')));
+            (typeof document !== 'undefined' && document.getElementById('qcagTaskDropdown') && !document.getElementById('qcagTaskDropdown').classList.contains('hidden')));
         // Zero Oversized Transfers: Chỉ nạp /pending-orders?summary=1 (~20KB), KHÔNG nạp trước toàn bộ 6,400 quotations
         const [resOrders, approvalsMap] = await Promise.all([
             fetch(base + '/pending-orders?summary=1').catch(() => null),
@@ -341,7 +341,7 @@ async function fetchQcagPendingOrders() {
                 if (typeof localStorage !== 'undefined' && Array.isArray(orders)) {
                     localStorage.setItem('pending_orders_v1', JSON.stringify(orders));
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Tự động dọn sạch rác localStorage của các đơn hàng không còn tồn tại
             qcagPruneStaleTaskStorage(orders);
@@ -357,11 +357,11 @@ async function fetchQcagPendingOrders() {
             const local2 = localStorage.getItem('pendingOrders');
             if (local1) _qcagPendingOrders = JSON.parse(local1);
             else if (local2) _qcagPendingOrders = JSON.parse(local2);
-        } catch (_) {}
+        } catch (_) { }
     }
 
     updateDesktopTaskBadge();
-    
+
     // If Task Dropdown is currently open, refresh its list
     const taskDd = document.getElementById('qcagTaskDropdown');
     if (taskDd && !taskDd.classList.contains('hidden')) {
@@ -426,7 +426,7 @@ let _qcagTaskApp1Sse = null;
 
 function closeDesktopTaskSSE() {
     if (_qcagTaskApp1Sse) {
-        try { _qcagTaskApp1Sse.close(); } catch (_) {}
+        try { _qcagTaskApp1Sse.close(); } catch (_) { }
         _qcagTaskApp1Sse = null;
     }
 }
@@ -463,7 +463,7 @@ function ensureDesktopTaskSSE() {
             if (!res || res === 'ks_requests' || res === 'ping' || res === 'heartbeat') return;
 
             // TUYỆT ĐỐI KHÔNG thêm po_tay_quotations (PO tay là ngách riêng của App 1)
-            const isRelevant = 
+            const isRelevant =
                 res === 'pending_orders' || res === 'pending-orders' ||
                 res === 'production-orders' || res === 'production_orders' ||
                 res === 'orders' ||
@@ -511,7 +511,7 @@ function ensureDesktopTaskSSE() {
                             const oc = String(oq.quote_code || oq.quoteCode || '').trim().toLowerCase();
                             const otk = String(oq.tk_code || oq.tkCode || '').trim().toLowerCase();
                             return (qObj.quote_code && oc === String(qObj.quote_code).toLowerCase()) ||
-                                   (qObj.tk_code && otk === String(qObj.tk_code).toLowerCase());
+                                (qObj.tk_code && otk === String(qObj.tk_code).toLowerCase());
                         });
                         if (matchInOrder) {
                             matchInOrder.items = qObj.items;
@@ -519,19 +519,19 @@ function ensureDesktopTaskSSE() {
                         }
                     }
                     freshQuoteLoaded = true;
-                } catch (_) {}
+                } catch (_) { }
             }
 
             // 4. Nếu đang ở Task Mode và chưa có full quote trong SSE payload, nạp ngầm cho điểm đang mở (chống bão query ở chế độ thường)
             const isTaskActive = !!((typeof _qcagCurrentTaskOrder !== 'undefined' && _qcagCurrentTaskOrder) ||
-                                 (typeof document !== 'undefined' && document.getElementById('qcagTaskDropdown') && !document.getElementById('qcagTaskDropdown').classList.contains('hidden')));
+                (typeof document !== 'undefined' && document.getElementById('qcagTaskDropdown') && !document.getElementById('qcagTaskDropdown').classList.contains('hidden')));
             if (isTaskActive && !freshQuoteLoaded && typeof qcagFetchTaskQuoteDetail === 'function') {
                 const targetQuoteId = (data && (data.quote_code || data.code || data.id || (data.data && (data.data.quote_code || data.data.id)))) || null;
                 if (targetQuoteId) {
                     await qcagFetchTaskQuoteDetail(targetQuoteId);
                 } else if (typeof _qcagDesktopCurrentId !== 'undefined' && _qcagDesktopCurrentId) {
-                    const curReq = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) || 
-                                   (typeof allRequests !== 'undefined' && allRequests.find(r => r.__backendId === _qcagDesktopCurrentId || r.id === _qcagDesktopCurrentId));
+                    const curReq = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) ||
+                        (typeof allRequests !== 'undefined' && allRequests.find(r => r.__backendId === _qcagDesktopCurrentId || r.id === _qcagDesktopCurrentId));
                     const fetchId = curReq && (curReq.quoteCode || curReq.quote_code || curReq.tkCode || curReq.tk_code || curReq.outletCode);
                     if (fetchId) {
                         await qcagFetchTaskQuoteDetail(fetchId);
@@ -552,7 +552,7 @@ function ensureDesktopTaskSSE() {
             _qcagTaskApp1Sse = new EventSource(sseApp1Url);
             _qcagTaskApp1Sse.addEventListener('invalidate', handleSseMessage);
             _qcagTaskApp1Sse.onmessage = handleSseMessage;
-        } catch (_) {}
+        } catch (_) { }
     }
 }
 
@@ -600,7 +600,7 @@ function initDesktopTaskFlow() {
     // Click outside dropdown handler
     if (!_qcagTaskClickOutsideBound && typeof document !== 'undefined') {
         _qcagTaskClickOutsideBound = true;
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             const wrap = document.getElementById('qcagTaskDropdownWrap');
             const dd = document.getElementById('qcagTaskDropdown');
             if (dd && !dd.classList.contains('hidden')) {
@@ -708,7 +708,7 @@ function renderQcagTaskList() {
 
         const totalPoints = quotes.length || order.totalPoints || 0;
         const createdDate = order.createdAt ? new Date(order.createdAt).toLocaleString('vi-VN') : '-';
-        
+
         let uniqueAreas = [...new Set(quotes.map(q => q.area || q.khu_vuc || q.region).filter(Boolean))];
         if (uniqueAreas.length === 0 && order.areaList) uniqueAreas = [order.areaList];
         if (uniqueAreas.length === 0 && order.area_list) uniqueAreas = [order.area_list];
@@ -882,7 +882,7 @@ function qcagGetTaskOrderRequests(order) {
         } else if (!qStatus) {
             qStatus = 'pending';
         }
-        const rawQuoteItems = Array.isArray(q.items) ? q.items : (Array.isArray(q.quote_items) ? q.quote_items : (typeof q.items === 'string' ? (() => { try { return JSON.parse(q.items); } catch(_) { return []; } })() : []));
+        const rawQuoteItems = Array.isArray(q.items) ? q.items : (Array.isArray(q.quote_items) ? q.quote_items : (typeof q.items === 'string' ? (() => { try { return JSON.parse(q.items); } catch (_) { return []; } })() : []));
 
         if (existing) {
             // Thẻ điểm này đã tồn tại trong danh sách nhiệm vụ -> Cập nhật thông tin nếu cần, tuyệt đối không tạo thêm thẻ trùng
@@ -968,7 +968,7 @@ function qcagGetTaskOrderRequests(order) {
             if (tkCodeNorm) usedTkCodes.add(tkCodeNorm);
 
             const isPointEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
-            let matchedComments = Array.isArray(matched.comments) ? matched.comments.slice() : (typeof matched.comments === 'string' ? (() => { try { return JSON.parse(matched.comments); } catch(_) { return []; } })() : []);
+            let matchedComments = Array.isArray(matched.comments) ? matched.comments.slice() : (typeof matched.comments === 'string' ? (() => { try { return JSON.parse(matched.comments); } catch (_) { return []; } })() : []);
             if (isPointEdit && qRejectReason) {
                 const hasComment = matchedComments.some(c => (c.text && c.text.includes(qRejectReason)) || c.commentType === 'edit-request');
                 if (!hasComment) {
@@ -1042,7 +1042,7 @@ function qcagGetTaskOrderRequests(order) {
             if (!fallbackOutletName) fallbackOutletName = q.outlet_code || 'Outlet';
 
             const isSynthEdit = (qStatus === 'pending-edit' || qStatus === 'edit_requested' || qStatus === 'rejected');
-            let synthComments = typeof q.comments === 'string' ? (() => { try { return JSON.parse(q.comments); } catch(_) { return []; } })() : (Array.isArray(q.comments) ? q.comments.slice() : []);
+            let synthComments = typeof q.comments === 'string' ? (() => { try { return JSON.parse(q.comments); } catch (_) { return []; } })() : (Array.isArray(q.comments) ? q.comments.slice() : []);
             if (isSynthEdit && qRejectReason && !synthComments.some(c => c.commentType === 'edit-request')) {
                 synthComments.push({
                     authorRole: 'sale',
@@ -1128,7 +1128,7 @@ function updateDesktopTaskBannerUI() {
 
     const reqs = qcagGetTaskOrderRequests(_qcagCurrentTaskOrder);
     const total = reqs.length;
-    
+
     if (leftListCount) leftListCount.textContent = `${total} điểm`;
 
     let quotes = [];
@@ -1245,9 +1245,9 @@ function qcagDesktopStartTaskMode(orderId) {
         const editReq = taskReqs.find(r => {
             const appr = (typeof qcagGetSaleProductionApprovalStatus === 'function') ? qcagGetSaleProductionApprovalStatus(r) : null;
             return (appr && (appr.key === 'pending-edit' || appr.key === 'rejected')) ||
-                   r.hasEditRequest ||
-                   r.isPendingEdit ||
-                   (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(r));
+                r.hasEditRequest ||
+                r.isPendingEdit ||
+                (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(r));
         });
         const targetReq = editReq || taskReqs[0];
         openQCAGDesktopRequest(targetReq.__backendId || targetReq.id);
@@ -1342,7 +1342,7 @@ async function qcagFetchTaskOrderChecklists(orderId) {
                     fetchedData = res.data;
                     break;
                 }
-            } catch (_) {}
+            } catch (_) { }
         }
 
         if (fetchedData) {
@@ -1352,14 +1352,14 @@ async function qcagFetchTaskOrderChecklists(orderId) {
             Object.keys(fetchedData).forEach(tk => {
                 const itm = fetchedData[tk];
                 if (itm && itm.checklistData) {
-                    try { localStorage.setItem('qcag_task_chk_' + tk, JSON.stringify(itm.checklistData)); } catch (_) {}
+                    try { localStorage.setItem('qcag_task_chk_' + tk, JSON.stringify(itm.checklistData)); } catch (_) { }
                 }
                 if (itm && typeof itm.printReady === 'boolean') {
                     if (itm.printReady) gridSaved[tk] = true;
                     else delete gridSaved[tk];
                 }
             });
-            try { localStorage.setItem('qcag_grid_checked_' + orderId, JSON.stringify(gridSaved)); } catch (_) {}
+            try { localStorage.setItem('qcag_grid_checked_' + orderId, JSON.stringify(gridSaved)); } catch (_) { }
 
             if (typeof renderQCAGDesktopList === 'function') renderQCAGDesktopList();
             if (typeof updateDesktopTaskBannerUI === 'function') updateDesktopTaskBannerUI();
@@ -1403,7 +1403,7 @@ function qcagSaveTaskChecklist(req, data) {
     // 1. Save to local storage for zero latency
     try {
         localStorage.setItem('qcag_task_chk_' + key, JSON.stringify(data || {}));
-    } catch (_) {}
+    } catch (_) { }
 
     // 2. Update memory cache and send to Database
     if (_qcagCurrentTaskOrder) {
@@ -1443,7 +1443,7 @@ function qcagSaveTaskChecklist(req, data) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
-            }).catch(() => {});
+            }).catch(() => { });
         });
     }
 }
@@ -1495,7 +1495,7 @@ async function qcagFetchTaskQuoteDetail(quoteIdentifier) {
                         const oc = String(oq.quote_code || oq.quoteCode || '').trim().toLowerCase();
                         const otk = String(oq.tk_code || oq.tkCode || '').trim().toLowerCase();
                         return (q.quote_code && oc === String(q.quote_code).toLowerCase()) ||
-                               (q.tk_code && otk === String(q.tk_code).toLowerCase());
+                            (q.tk_code && otk === String(q.tk_code).toLowerCase());
                     });
                     if (matchInOrder) {
                         matchInOrder.items = q.items;
@@ -1512,8 +1512,8 @@ async function qcagFetchTaskQuoteDetail(quoteIdentifier) {
                 if (typeof _qcagDesktopCurrentId !== 'undefined' && _qcagDesktopCurrentId) {
                     const itemsSec = document.getElementById('qcagItemsSection');
                     const summaryEl = document.querySelector('.qcag-task-point-summary');
-                    const activeReq = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) || 
-                                   (typeof allRequests !== 'undefined' && allRequests.find(r => r.__backendId === _qcagDesktopCurrentId || r.id === _qcagDesktopCurrentId));
+                    const activeReq = (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) ||
+                        (typeof allRequests !== 'undefined' && allRequests.find(r => r.__backendId === _qcagDesktopCurrentId || r.id === _qcagDesktopCurrentId));
                     if (activeReq) {
                         delete activeReq.quote_items;
                         if (itemsSec && typeof qcagDesktopBuildItemsHtml === 'function') {
@@ -1603,8 +1603,8 @@ function qcagUpdateTaskCardChecklistBadge(identifier) {
     }
 
     // 4. Cập nhật badge duy nhất trên thẻ: Trạng thái phê duyệt từ Sale (Chờ Sale / Yêu cầu sửa / Từ chối / Đã duyệt)
-    const saleAppr = (typeof qcagGetSaleProductionApprovalStatus === 'function') 
-        ? qcagGetSaleProductionApprovalStatus(targetReq) 
+    const saleAppr = (typeof qcagGetSaleProductionApprovalStatus === 'function')
+        ? qcagGetSaleProductionApprovalStatus(targetReq)
         : { key: 'pending', label: 'Chờ Sale', cls: 'status-pending' };
     const newBadgeHtml = `<span class="qcag-status-badge qcag-sale-appr-badge ${saleAppr.cls}" style="font-size:10px;padding:2px 8px;">${escapeHtml(saleAppr.label)}</span>`;
 
@@ -1697,13 +1697,13 @@ function qcagCheckPointQuoteMatch(req) {
     let foundQuote = null;
 
     // Luôn ưu tiên tra cứu Báo giá mới nhất từ RAM cache hoặc nguồn đồng bộ (Zero Zombie Cache)
-    const q = (typeof qcagGetTaskQuoteForRequest === 'function') 
-        ? qcagGetTaskQuoteForRequest(req) 
+    const q = (typeof qcagGetTaskQuoteForRequest === 'function')
+        ? qcagGetTaskQuoteForRequest(req)
         : ((typeof qcagFindMatchingQuoteForRequest === 'function') ? qcagFindMatchingQuoteForRequest(req) : null);
     if (q) {
         foundQuote = q;
-        quoteItems = Array.isArray(q.quote_items) && q.quote_items.length > 0 
-            ? q.quote_items 
+        quoteItems = Array.isArray(q.quote_items) && q.quote_items.length > 0
+            ? q.quote_items
             : (Array.isArray(q.items) ? q.items : []);
     }
 
@@ -1728,7 +1728,7 @@ function qcagCheckPointQuoteMatch(req) {
     let items = [];
     if (Array.isArray(req.items)) items = req.items;
     else if (typeof req.items === 'string') {
-        try { items = JSON.parse(req.items); } catch(_) { items = []; }
+        try { items = JSON.parse(req.items); } catch (_) { items = []; }
     }
     const signageItems = items.filter(it => (typeof qcagIsSignageProductionItem === 'function' ? qcagIsSignageProductionItem(it) : true));
     if (signageItems.length === 0) {
@@ -1814,10 +1814,10 @@ function qcagGetSaleProductionApprovalStatus(req) {
     // 2. Tra cứu từ thuộc tính của chính req nếu chưa có từ map
     if (!raw) {
         raw = String(
-            req.productionApprovalStatus || 
-            req.production_approval_status || 
-            req.approval_status || 
-            req.quoteStatus || 
+            req.productionApprovalStatus ||
+            req.production_approval_status ||
+            req.approval_status ||
+            req.quoteStatus ||
             ''
         ).toLowerCase().trim();
     }
@@ -1859,22 +1859,22 @@ function qcagToggleTaskPointVerified(reqId) {
     if (_qcagCurrentTaskOrder && typeof qcagGetTaskOrderRequests === 'function') {
         const reqs = qcagGetTaskOrderRequests(_qcagCurrentTaskOrder);
         req = reqs.find(r => (
-            String(r.__backendId) === String(reqId) || 
-            String(r.id) === String(reqId) || 
+            String(r.__backendId) === String(reqId) ||
+            String(r.id) === String(reqId) ||
             String(r.tkCode) === String(reqId) ||
             (r.quoteCode && String(r.quoteCode) === String(reqId))
         ));
     }
     if (!req && typeof allRequests !== 'undefined') {
         req = allRequests.find(r => (
-            String(r.__backendId) === String(reqId) || 
-            String(r.id) === String(reqId) || 
+            String(r.__backendId) === String(reqId) ||
+            String(r.id) === String(reqId) ||
             String(r.tkCode) === String(reqId) ||
             (r.quoteCode && String(r.quoteCode) === String(reqId))
         ));
     }
 
-    const current = (typeof qcagIsTaskPointVerified === 'function' && req) 
+    const current = (typeof qcagIsTaskPointVerified === 'function' && req)
         ? qcagIsTaskPointVerified(req)
         : ((typeof localStorage !== 'undefined') ? (localStorage.getItem('qcag_point_vfd_' + orderId + '_' + String(reqId)) === 'true') : false);
     const nextState = !current;
@@ -1898,7 +1898,7 @@ function qcagToggleTaskPointVerified(reqId) {
                 }
             });
         }
-    } catch (_) {}
+    } catch (_) { }
 
     if (typeof showToast === 'function') {
         const name = req ? (req.outletName || reqId) : reqId;
@@ -1955,8 +1955,8 @@ function qcagComputeTaskItemChecklist(req) {
 
     const isPointVerified = qcagIsTaskPointVerified(req);
 
-    const saleAppr = (typeof qcagGetSaleProductionApprovalStatus === 'function') 
-        ? qcagGetSaleProductionApprovalStatus(req) 
+    const saleAppr = (typeof qcagGetSaleProductionApprovalStatus === 'function')
+        ? qcagGetSaleProductionApprovalStatus(req)
         : { key: String(req.productionApprovalStatus || 'pending').toLowerCase() };
 
     const isPendingEdit = (saleAppr.key === 'pending-edit') || (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req));
@@ -2356,9 +2356,9 @@ function qcagIsSignageProductionItem(item) {
     if (!txt && !brand) return false;
 
     // 1. Explicitly exclude non-print / structural / auxiliary / fee items
-    if (txt.includes('tôn') || txt.includes('tole') || txt.includes('trụ') || txt.includes('tru ') || 
-        txt.includes('giấy phép') || txt.includes('xin phép') || txt.includes('hồ sơ') || 
-        txt.includes('phí gửi xe') || txt.includes('phí gởi xe') || txt.includes('phí') || 
+    if (txt.includes('tôn') || txt.includes('tole') || txt.includes('trụ') || txt.includes('tru ') ||
+        txt.includes('giấy phép') || txt.includes('xin phép') || txt.includes('hồ sơ') ||
+        txt.includes('phí gửi xe') || txt.includes('phí gởi xe') || txt.includes('phí') ||
         txt.includes('vận chuyển') || txt.includes('tháo dỡ')) {
         return false;
     }
@@ -2375,9 +2375,9 @@ function qcagIsSignageProductionItem(item) {
 
     // 4. QC Signage Print Items (bảng hiệu, hộp đèn, hiflex, bạt, decal, mica, alu, chữ nổi, poster...)
     const isSignage = txt.includes('bảng') || txt.includes('bang') || txt.includes('hộp đèn') || txt.includes('hop den') ||
-                      txt.includes('hiflex') || txt.includes('bạt') || txt.includes('bat') || txt.includes('decal') ||
-                      txt.includes('mica') || txt.includes('alu') || txt.includes('chữ nổi') || txt.includes('chu noi') ||
-                      txt.includes('poster') || txt.includes('standee') || txt.includes('in ấn') || txt.includes('in ');
+        txt.includes('hiflex') || txt.includes('bạt') || txt.includes('bat') || txt.includes('decal') ||
+        txt.includes('mica') || txt.includes('alu') || txt.includes('chữ nổi') || txt.includes('chu noi') ||
+        txt.includes('poster') || txt.includes('standee') || txt.includes('in ấn') || txt.includes('in ');
     if (isSignage) return true;
 
     // Default fallback: If item has dimensions and brand and is not mechanical/sheet metal/poles, include it
@@ -2505,7 +2505,7 @@ function qcagGetTaskGridSaved(orderId) {
         const raw = localStorage.getItem('qcag_grid_checked_' + orderId);
         const loc = raw ? JSON.parse(raw) : {};
         result = { ...result, ...loc };
-    } catch (_) {}
+    } catch (_) { }
     return result;
 }
 
@@ -2513,7 +2513,7 @@ function qcagSaveTaskGridSaved(orderId, saved) {
     if (!orderId) return;
     try {
         localStorage.setItem('qcag_grid_checked_' + orderId, JSON.stringify(saved || {}));
-    } catch (_) {}
+    } catch (_) { }
 
     // Persist print_ready state to Database for each request
     if (_qcagCurrentTaskOrder && _qcagCurrentTaskOrder.id === orderId) {
@@ -2545,7 +2545,7 @@ function qcagSaveTaskGridSaved(orderId, saved) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
-                }).catch(() => {});
+                }).catch(() => { });
             });
         });
     }
@@ -2685,7 +2685,7 @@ function renderTaskGridCards() {
                 designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(req.designImages || req.design_images, []));
                 statusImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(req.statusImages || req.status_images, []));
             }
-        } catch (_) {}
+        } catch (_) { }
 
         const hasMq = designImgs.length > 0;
         const imgUrl = hasMq ? designImgs[0] : (statusImgs.length > 0 ? statusImgs[0] : '');

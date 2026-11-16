@@ -1320,6 +1320,7 @@ html:not(.theme-dark):not([data-theme="dark"]) .hk-mini-page-prefix {
   text-align: center !important;
   padding: 0 !important;
   outline: none !important;
+  appearance: textfield !important;
   -moz-appearance: textfield !important;
   transition: all 0.15s ease !important;
 }
@@ -1519,6 +1520,7 @@ html:not(.theme-dark):not([data-theme="dark"]) .hk-desktop-card:hover .hk-card-t
   overflow: hidden !important;
   text-overflow: ellipsis !important;
   display: -webkit-box !important;
+  line-clamp: 1 !important;
   -webkit-line-clamp: 1 !important;
   -webkit-box-orient: vertical !important;
   flex: 1 1 auto !important;
@@ -2121,7 +2123,7 @@ html:not(.theme-dark):not([data-theme="dark"]) .qcag-chat-head {
   color: #ffffff;
   font-size: 10.5px;
   font-weight: 700;
-  font-mono: monospace;
+  font-family: monospace;
 }
 
 /* Timeline */
@@ -3135,26 +3137,45 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
     color: #334155 !important;
   }
 
-  /* 2-Column Content Grid */
+  /* 2-Column Content Grid: Co giãn linh hoạt theo kích thước màn hình */
   .hk-quote-modal-content-grid {
     display: grid !important;
-    grid-template-columns: 480px 1fr !important;
+    grid-template-columns: 330px 1fr !important;
     gap: 0 !important;
     height: calc(100% - 64px) !important;
     overflow: hidden !important;
   }
 
+  @media (min-width: 1366px) {
+    .hk-quote-modal-content-grid {
+      grid-template-columns: 360px 1fr !important;
+    }
+  }
+
+  @media (min-width: 1560px) {
+    .hk-quote-modal-content-grid {
+      grid-template-columns: 420px 1fr !important;
+    }
+  }
+
   .hk-quote-modal-sidebar {
-    width: 480px !important;
-    max-width: 480px !important;
+    width: 100% !important;
+    max-width: 100% !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 14px !important;
-    padding: 18px 20px !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
     overflow-y: auto !important;
     border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     background: #0f172a !important;
     box-sizing: border-box !important;
+  }
+
+  @media (min-width: 1560px) {
+    .hk-quote-modal-sidebar {
+      padding: 18px 20px !important;
+      gap: 14px !important;
+    }
   }
 
   html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-modal-sidebar {
@@ -3279,11 +3300,14 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
 
   /* Right main table column in modal */
   .hk-quote-modal-main-table {
-    padding: 18px 22px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 14px 18px !important;
     overflow-y: auto !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 12px !important;
+    gap: 10px !important;
     background: #0b0f19 !important;
   }
 
@@ -3295,7 +3319,12 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
     background: #0a0e17 !important;
     border: 1px solid #1e293b !important;
     border-radius: 14px !important;
-    overflow: hidden !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-table-wrap {
@@ -3317,7 +3346,7 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
     font-size: 11px !important;
     text-transform: uppercase !important;
     letter-spacing: 0.04em !important;
-    padding: 11px 12px !important;
+    padding: 10px 10px !important;
     border-bottom: 1px solid #334155 !important;
     position: sticky !important;
     top: 0 !important;
@@ -3332,11 +3361,11 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
   }
 
   .hk-quote-desktop-table td {
-    padding: 11px 12px !important;
+    padding: 10px 10px !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
     color: #f8fafc !important;
-    white-space: nowrap !important;
     font-family: inherit !important;
+    vertical-align: middle !important;
   }
 
   html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-desktop-table td {
@@ -3355,31 +3384,70 @@ html:not(.theme-dark):not([data-theme="dark"]) #detailScreen #quoteBridgeSection
   .hk-tbl-code {
     color: #f59e0b !important;
     font-weight: 700 !important;
+    white-space: nowrap !important;
   }
 
   html:not(.theme-dark):not([data-theme="dark"]) .hk-tbl-code {
     color: #d97706 !important;
   }
 
-  .mobile-quote-item-title {
+  /* Cột Tên Hạng Mục: Luôn nằm gọn trong màn hình, thiếu chỗ thì tự động xuống dòng */
+  .hk-quote-desktop-table td.hk-tbl-name,
+  .hk-quote-desktop-table .mobile-quote-item-title {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.35 !important;
+    min-width: 130px !important;
     color: #f8fafc !important;
     font-size: 13px !important;
     font-weight: 700 !important;
   }
 
-  html:not(.theme-dark):not([data-theme="dark"]) .mobile-quote-item-title {
+  html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-desktop-table td.hk-tbl-name,
+  html:not(.theme-dark):not([data-theme="dark"]) .hk-quote-desktop-table .mobile-quote-item-title {
     color: #0f172a !important;
   }
+
+  /* Cột Kích thước: Xuống dòng nhẹ nếu màn hình hẹp */
+  .hk-quote-desktop-table td.hk-tbl-size {
+    white-space: normal !important;
+    word-break: break-word !important;
+    line-height: 1.25 !important;
+    min-width: 75px !important;
+  }
+
+  /* Các cột số liệu & đơn giá & thành tiền: Giữ nguyên dòng, hiển thị đầy đủ, không bao giờ mất giá */
+  .hk-quote-desktop-table td.hk-tbl-code,
+  .hk-quote-desktop-table td.hk-tbl-center,
+  .hk-quote-desktop-table td.hk-tbl-qty,
+  .hk-quote-desktop-table td.hk-tbl-price,
+  .hk-quote-desktop-table td.hk-tbl-total,
+  .hk-quote-desktop-table td.hk-tbl-right {
+    white-space: nowrap !important;
+    font-variant-numeric: tabular-nums !important;
+  }
+
+  /* Cột Header độ rộng tối ưu */
+  .hk-col-stt { width: 44px !important; }
+  .hk-col-name { min-width: 140px !important; }
+  .hk-col-brand { width: 80px !important; }
+  .hk-col-size { width: 95px !important; }
+  .hk-col-qty { width: 75px !important; }
+  .hk-col-price { width: 100px !important; }
+  .hk-col-total { width: 120px !important; }
 
   .hk-tbl-right {
     font-family: inherit !important;
     letter-spacing: -0.01em !important;
   }
 
-  /* Padding-right 24px cho Thành tiền */
+  /* Padding-right cho Thành tiền */
+  .hk-quote-desktop-table td.pr-4,
+  .hk-quote-desktop-table th.pr-4,
   .hk-quote-desktop-table td.pr-6,
   .hk-quote-desktop-table th.pr-6 {
-    padding-right: 24px !important;
+    padding-right: 18px !important;
   }
 
   /* Sticky Bottom Bar */
