@@ -739,7 +739,11 @@
     if (!normalized.statusImages && normalized.status_images != null) normalized.statusImages = normalized.status_images;
     if (!normalized.designImages && normalized.design_images != null) normalized.designImages = normalized.design_images;
     if (!normalized.acceptanceImages && normalized.acceptance_images != null) normalized.acceptanceImages = normalized.acceptance_images;
-    if (!normalized.editingRequestedAt && normalized.editing_requested_at != null) normalized.editingRequestedAt = normalized.editing_requested_at;
+    if (normalized.editing_requested_at !== undefined) {
+      normalized.editingRequestedAt = normalized.editing_requested_at;
+    } else if (normalized.editingRequestedAt == null && normalized.editing_requested_at != null) {
+      normalized.editingRequestedAt = normalized.editing_requested_at;
+    }
     if (!normalized.createdAt && normalized.created_at != null) normalized.createdAt = normalized.created_at;
     if (!normalized.updatedAt && normalized.updated_at != null) normalized.updatedAt = normalized.updated_at;
     if (!normalized.outletPhone) {
@@ -831,9 +835,11 @@
   function _isActiveProcessingRow(r) {
     if (!r) return false;
     var st = String(r.status || 'pending').trim().toLowerCase();
+    var sub = String(r.subStatus || r.sub_status || r.design_status || '').trim().toLowerCase();
     var hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
     var isDone = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled' || hasQuote);
-    if (r.editingRequestedAt || r.editing_requested_at) return true;
+    var hasEditTime = Boolean(r.editingRequestedAt || r.editing_requested_at);
+    if (hasEditTime && (sub === 'pending_edit' || sub === 'pending-edit' || !isDone)) return true;
     if (!isDone) return true;
     return false;
   }

@@ -3291,8 +3291,23 @@ const KS_REQUESTS_SELECT_SQL = `
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
-      r.status,
-      COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
+      CASE 
+        WHEN COALESCE(r.status, '') IN ('pending', 'processing') AND q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> '' 
+        THEN 'quoted'::varchar(32) 
+        ELSE r.status 
+      END AS status,
+      CASE 
+        WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+          AND (
+            n_edit.created_at IS NULL 
+            OR (n_res.created_at IS NOT NULL AND n_res.created_at >= n_edit.created_at)
+            OR (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+            OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+            OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
+          )
+        THEN NULL::varchar(32)
+        ELSE r.sub_status::varchar(32)
+      END AS sub_status,
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
@@ -3328,9 +3343,12 @@ const KS_REQUESTS_SELECT_SQL = `
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
-            COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
-            AND COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL 
-            AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at
+            (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+            AND (
+              (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+              OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+              OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
+            )
           )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
@@ -3524,9 +3542,10 @@ const KS_REQUESTS_LITE_SQL = `
             OR (n_res.created_at IS NOT NULL AND n_res.created_at >= n_edit.created_at)
             OR (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
             OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+            OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
           )
         THEN NULL::varchar(32)
-        ELSE COALESCE(r.sub_status, 'pending')::varchar(32)
+        ELSE r.sub_status::varchar(32)
       END AS sub_status,
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
@@ -3553,6 +3572,7 @@ const KS_REQUESTS_LITE_SQL = `
             AND (
               (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
               OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+              OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
             )
           )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
@@ -4497,8 +4517,44 @@ async function getRequestDetailDirect(idOrTkCode) {
               THEN 'quoted'::varchar(32) 
               ELSE r.status 
             END AS status,
-            COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
-            COALESCE(r.sub_status, 'pending')::varchar(32) AS design_status,
+            CASE 
+              WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+                AND (
+                  n_edit.created_at IS NULL 
+                  OR (n_res.created_at IS NOT NULL AND n_res.created_at >= n_edit.created_at)
+                  OR (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+                  OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+                  OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
+                )
+              THEN NULL::varchar(32)
+              ELSE r.sub_status::varchar(32)
+            END AS sub_status,
+            CASE 
+              WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+                AND (
+                  n_edit.created_at IS NULL 
+                  OR (n_res.created_at IS NOT NULL AND n_res.created_at >= n_edit.created_at)
+                  OR (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+                  OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+                  OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
+                )
+              THEN NULL::varchar(32)
+              ELSE r.sub_status::varchar(32)
+            END AS design_status,
+            CASE 
+              WHEN n_edit.created_at IS NOT NULL 
+                AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
+                AND NOT (
+                  (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+                  AND (
+                    (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+                    OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+                    OR (r.updated_at >= n_edit.created_at AND COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed'))
+                  )
+                )
+              THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
+              ELSE NULL::timestamptz
+            END AS editing_requested_at,
             COALESCE(q_lat.quote_code, '') AS quote_code,
             COALESCE(q_lat.total_amount, 0) AS total_amount,
             COALESCE(q_lat.quote_status, '') AS quote_status,
@@ -4573,6 +4629,16 @@ async function getRequestDetailDirect(idOrTkCode) {
         LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
         LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
         LEFT JOIN LATERAL (
+          SELECT n.created_at
+          FROM notes n
+          WHERE (
+              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
+            )
+            AND n.note_type IN ('edit-request', 'edit_request')
+          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+        ) n_edit ON true
+        LEFT JOIN LATERAL (
           SELECT n.created_at, n.author_name
           FROM notes n
           WHERE (
@@ -4582,6 +4648,18 @@ async function getRequestDetailDirect(idOrTkCode) {
             AND n.note_type IN ('edit-resolved', 'edit-done')
           ORDER BY n.created_at DESC, n.id DESC LIMIT 1
         ) n_res ON true
+        LEFT JOIN LATERAL (
+          SELECT n.created_at
+          FROM notes n
+          WHERE (
+              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
+              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
+            )
+            AND n.note_type IN ('edit-request', 'edit_request')
+            AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+          ORDER BY n.created_at ASC
+          LIMIT 1
+        ) n_edit_first ON true
         LEFT JOIN LATERAL (
           SELECT 
               q_sub.quote_code, 
@@ -4778,15 +4856,20 @@ async function getRequestDetailDirect(idOrTkCode) {
         ? (designRows[0].updated_at || designRows[0].created_at)
         : row.design_updated_at;
     if (latestDesignTs) row.design_updated_at = latestDesignTs;
-    // Chặn trường hợp đơn đã xong và đã cập nhật thiết kế sau mốc yêu cầu sửa
-    if (editingRequestedAt && ['done', 'completed', 'quoted', 'processed'].includes(String(row.status || '').toLowerCase())) {
-        const editTime = new Date(editingRequestedAt).getTime();
+    // Chặn trường hợp đơn đã xong và đã cập nhật thiết kế / yêu cầu sau mốc yêu cầu sửa
+    const finalEditAt = row.editing_requested_at || editingRequestedAt;
+    if (finalEditAt && ['done', 'completed', 'quoted', 'processed'].includes(String(row.status || '').toLowerCase())) {
+        const editTime = new Date(finalEditAt).getTime();
         const designUpdatedTime = latestDesignTs ? new Date(latestDesignTs).getTime() : 0;
-        if (designUpdatedTime >= editTime) {
-            editingRequestedAt = null;
+        const rowUpdatedTime = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+        if (designUpdatedTime >= editTime || rowUpdatedTime >= editTime) {
+            row.editing_requested_at = null;
+        } else {
+            row.editing_requested_at = finalEditAt;
         }
+    } else {
+        row.editing_requested_at = finalEditAt;
     }
-    row.editing_requested_at = editingRequestedAt;
     row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
     row.has_pending_survey = (finalItems || []).some(it => {
         if (!it || it.type === 'Hạng mục khác') return false;

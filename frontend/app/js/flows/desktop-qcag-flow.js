@@ -857,6 +857,9 @@ function qcagDesktopIsPendingEditRequest(req) {
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at) {
+    if (isQuotedOrDone && sub !== 'pending_edit' && sub !== 'pending-edit' && sub !== 'edit_requested' && sub !== 'request-edit') {
+      return false;
+    }
     return true;
   }
   if (req.hasEditRequest || req.isEditPending) {
@@ -2806,7 +2809,8 @@ function qcagDesktopUpdateFilterCounts() {
 
     const t = qcagDesktopGetRequestType(r);
     const status = String(r.status || 'pending').toLowerCase();
-    const isDone = status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed';
+    const hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
+    const isDone = status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed' || hasQuote;
 
     const isNPP = qcagIsNppRequest(r);
     const regKey = isNPP ? 'npp' : qcagDesktopGetRequestRegionKey(r);
