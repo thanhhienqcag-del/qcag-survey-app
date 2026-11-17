@@ -795,7 +795,7 @@ async function initKsDB() {
 // ======================== END KS MOBILE DB INIT ========================
 
 // ── Push notification helper ──────────────────────────────────────────
-async function sendKsPush({ title, body, data = {}, targetPhone = null }) {
+async function sendKsPush({ title, body, data = {}, targetPhone = null, targetRole = null, targetSaleCode = null }) {
     const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
     const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
     const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@qcag.vn';
@@ -805,9 +805,15 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null }) {
     try {
         let query_str = 'SELECT subscription FROM push_subscriptions';
         let params = [];
-        if (targetPhone) {
+        if (targetSaleCode) {
+            query_str += ' WHERE sale_code = ?';
+            params.push(String(targetSaleCode).trim());
+        } else if (targetPhone) {
             query_str += ' WHERE phone = ?';
             params.push(targetPhone);
+        } else if (targetRole) {
+            query_str += ' WHERE role = ?';
+            params.push(targetRole);
         }
         const [rows] = await pool.query(query_str, params);
         if (!rows || rows.length === 0) return;
@@ -833,7 +839,7 @@ app.get('/api/push', (req, res) => {
 // ── POST /api/ks/push/subscribe — save or update a device subscription ─
 app.post('/api/ks/push/subscribe', async (req, res) => {
     try {
-        const { subscription, phone, role } = req.body || {};
+        const { subscription, phone, role, saleCode } = req.body || {};
         if (!subscription) return res.status(400).json({ ok: false, error: 'missing_subscription' });
         const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
         // Upsert by endpoint — each browser endpoint is unique
@@ -841,19 +847,41 @@ app.post('/api/ks/push/subscribe', async (req, res) => {
         const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpoint.slice(-40) + '%']);
         if (existing && existing.length > 0) {
             await pool.query(
-                'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, updated_at = NOW() WHERE id = ?',
-                [subStr, phone || null, role || null, existing[0].id]
+                'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, sale_code = COALESCE(?, sale_code), updated_at = NOW() WHERE id = ?',
+                [subStr, phone || null, role || null, saleCode || null, existing[0].id]
             );
         } else {
             await pool.query(
-                'INSERT INTO push_subscriptions (subscription, phone, role, created_at, updated_at) VALUES (?, ?, ?, NOW(), NOW())',
-                [subStr, phone || null, role || null]
+                'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
+                [subStr, phone || null, role || null, saleCode || null]
             );
         }
         return res.json({ ok: true });
     } catch (err) {
         console.error('[push] subscribe error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'subscribe_failed' });
+    }
+});
+
+// ── POST /api/ks/push/send — send web push notification directly from Cloud Run ─
+app.post('/api/ks/push/send', async (req, res) => {
+    try {
+        const { title, body: msgBody, data = {}, phone, role, saleCode } = req.body || {};
+        if (!phone && !role && !saleCode) {
+            return res.status(400).json({ ok: false, error: 'missing phone, saleCode or role' });
+        }
+        await sendKsPush({
+            title: title || 'QCAG',
+            body: msgBody || '',
+            data,
+            targetPhone: phone || null,
+            targetRole: role || null,
+            targetSaleCode: saleCode || null
+        });
+        return res.json({ ok: true });
+    } catch (err) {
+        console.error('[push] send error:', err && err.message ? err.message : err);
+        return res.status(500).json({ ok: false, error: 'send_failed' });
     }
 });
 

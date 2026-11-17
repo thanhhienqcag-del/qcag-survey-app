@@ -113,12 +113,13 @@
       };
     }
   </script>
-  <script src="/api/env" onerror="window.__env = window.__env || {};"></script>
   <script>
-    // Runtime config — BACKEND_URL trỏ đến KS backend
-    // Local dev  : thường là http://localhost:3000 hoặc http://localhost:3101
-    // Production : ưu tiên lấy từ /api/env (BACKEND_URL, BACKEND_URL_CANDIDATES)
-    window.__env = window.__env || {};
+    // Runtime config — BACKEND_URL trỏ trực tiếp đến KS backend Cloud Run (Bypass Vercel Serverless Function)
+    var defaultProdBackend = "https://ks-backend-493469512136.asia-southeast1.run.app";
+    window.__env = window.__env || {
+      BACKEND_URL: defaultProdBackend,
+      BACKEND_URL_CANDIDATES: [defaultProdBackend]
+    };
     (function () {
       var localOverride = '';
       try {
@@ -132,7 +133,6 @@
           localStorage.removeItem('app1_backend_url');
         }
       } catch (_) { }
-      var defaultProdBackend = "https://ks-backend-493469512136.asia-southeast1.run.app";
       var defaultBackend = localOverride || defaultProdBackend;
       if (typeof window.__env.BACKEND_URL === 'undefined' || String(window.__env.BACKEND_URL || '').includes('-staging')) {
         window.__env.BACKEND_URL = defaultBackend;

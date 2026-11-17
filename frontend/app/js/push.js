@@ -14,9 +14,10 @@ function urlBase64ToUint8Array(base64String) {
 
 async function getVapidPublicKey() {
   try {
-    const isLocal = typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-    const pushUrl = isLocal ? 'https://qcag-survey-app.vercel.app/api/push' : '/api/push';
-    const res = await fetch(pushUrl).catch(() => null);
+    const base = (typeof window !== 'undefined' && window.API_BASE_URL)
+      ? window.API_BASE_URL
+      : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    const res = await fetch(base.replace(/\/+$/, '') + '/api/push').catch(() => null);
     if (!res || !res.ok) return null;
     const data = await res.json().catch(() => null);
     return data && data.ok ? data.publicKey : null;
@@ -84,8 +85,11 @@ async function subscribeForPush() {
 }
 
 async function saveSubscriptionToServer(subscription, phone, role, saleCode) {
-  // Always call the frontend-local subscribe endpoint (same-origin serverless function)
-  const res = await fetch('/api/ks/push/subscribe', {
+  // Call KS backend directly to bypass Vercel serverless function invocations
+  const base = (typeof window !== 'undefined' && window.API_BASE_URL)
+    ? window.API_BASE_URL
+    : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+  const res = await fetch(base.replace(/\/+$/, '') + '/api/ks/push/subscribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ subscription, phone: phone || null, role: role || null, saleCode: saleCode || null })

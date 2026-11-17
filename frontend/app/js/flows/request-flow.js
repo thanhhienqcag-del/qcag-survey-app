@@ -1507,9 +1507,10 @@ async function submitNewRequest() {
         const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
         const senderPhone = (typeof currentSession !== 'undefined' && currentSession && currentSession.phone) || '';
         const reqRegion = request.region || (typeof currentSession !== 'undefined' && currentSession && currentSession.region) || '';
-        var pushUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-          ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
-          : '/api/ks/push/send';
+        const app2Base = (typeof window !== 'undefined' && window.API_BASE_URL)
+          ? window.API_BASE_URL.replace(/\/+$/, '')
+          : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+        var pushUrl = app2Base + '/api/ks/push/send';
         fetch(pushUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

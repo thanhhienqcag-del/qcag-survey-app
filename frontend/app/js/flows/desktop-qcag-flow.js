@@ -6701,9 +6701,10 @@ async function qcagDesktopMarkProcessed() {
       const pushBody = isPendingEdit
         ? `Outlet "${outletLabel}" đã được QCAG chỉnh sửa xong. Vui lòng mở app để kiểm tra MQ.`
         : `Outlet "${outletLabel}" đã có MQ, vui lòng mở app để xem chi tiết`;
-      const pushEndpoint = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
-        ? 'https://qcag-survey-app.vercel.app/api/ks/push/send'
-        : '/api/ks/push/send';
+      const app2Base = (typeof window !== 'undefined' && window.API_BASE_URL)
+        ? window.API_BASE_URL.replace(/\/+$/, '')
+        : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+      const pushEndpoint = app2Base + '/api/ks/push/send';
       fetch(pushEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

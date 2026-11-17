@@ -375,9 +375,10 @@ function sendPushNotification(opts) {
   // opts: { title, body, role, phone, saleCode, data }
   // Best-effort, never blocks UI
   try {
-    var pushUrl = (location.hostname === 'qcag-survey-app.vercel.app')
-      ? '/api/ks/push/send'
-      : 'https://qcag-survey-app.vercel.app/api/ks/push/send';
+    var base = (typeof window !== 'undefined' && window.API_BASE_URL)
+      ? window.API_BASE_URL.replace(/\/+$/, '')
+      : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    var pushUrl = base + '/api/ks/push/send';
     fetch(pushUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
