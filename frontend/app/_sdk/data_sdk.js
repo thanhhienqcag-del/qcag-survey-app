@@ -831,9 +831,10 @@
   function _isActiveProcessingRow(r) {
     if (!r) return false;
     var st = String(r.status || 'pending').trim().toLowerCase();
-    var isDone = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled');
+    var hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
+    var isDone = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled' || hasQuote);
+    if (r.editingRequestedAt || r.editing_requested_at) return true;
     if (!isDone) return true;
-    if (r.editingRequestedAt) return true;
     return false;
   }
 

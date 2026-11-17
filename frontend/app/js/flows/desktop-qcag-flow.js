@@ -832,12 +832,23 @@ function qcagDesktopIsPendingEditRequest(req) {
   if (!req) return false;
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
   const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
+  const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
+  const isQuotedOrDone = (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted' || hasQuote);
+  const hasActiveEditTime = Boolean(req.editingRequestedAt || req.editing_requested_at);
 
   // 1. Ưu tiên tuyệt đối: sub_status từ DB hoặc status chính là yêu cầu chỉnh sửa
+  // CHÚ Ý: Nếu đơn đã có báo giá hoặc status hoàn thành (done/quoted/completed) mà KHÔNG có editingRequestedAt
+  // thì sub_status 'pending_edit' là vết cũ của đợt sửa trước đã hoàn tất -> Không được xem là pending edit!
   if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
+    if (isQuotedOrDone && !hasActiveEditTime) {
+      return false;
+    }
     return true;
   }
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
+    if (isQuotedOrDone && !hasActiveEditTime) {
+      return false;
+    }
     return true;
   }
   // 2. Chặn cờ phủ quyết nếu client/server đã xác nhận không còn pending edit
@@ -856,7 +867,7 @@ function qcagDesktopIsPendingEditRequest(req) {
     return true;
   }
   // 4. Nếu status đã hoàn thành/done/quoted mà không có cờ chỉnh sửa thì không xem là pending edit
-  if (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted') {
+  if (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted' || hasQuote) {
     return false;
   }
   return Boolean(qcagDesktopHasHeinekenEditRequest(req));
@@ -2486,7 +2497,8 @@ function getQCAGDesktopVisibleRequests() {
     wrapped = wrapped.filter(w => {
       const r = w.sortKey;
       const status = String(r.status || 'pending').toLowerCase();
-      const isDone = status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed';
+      const hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
+      const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed' || hasQuote);
       if (!isDone) return false;
       const hasEditRequest = qcagDesktopIsPendingEditRequest(r);
       return !hasEditRequest;
@@ -2501,7 +2513,8 @@ function getQCAGDesktopVisibleRequests() {
       if (!typeMatch) return false;
       if (_qcagDesktopStatusFilter === 'done') return true;
       const status = String(r.status || 'pending').toLowerCase();
-      const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed');
+      const hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
+      const isDone = (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed' || hasQuote);
       const needsEdit = qcagDesktopIsPendingEditRequest(r);
       // Nếu đã hoàn thành và không cần chỉnh sửa thì tuyệt đối không giữ ở tab Đang xử lý
       if (isDone && !needsEdit) return false;

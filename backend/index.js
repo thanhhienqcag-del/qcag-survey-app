@@ -3484,8 +3484,22 @@ const KS_REQUESTS_LITE_SQL = `
       r.content,
       COALESCE(r.old_content, false)::boolean AS old_content,
       r.old_content_extra,
-      r.status,
-      COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
+      CASE 
+        WHEN COALESCE(r.status, '') IN ('pending', 'processing') AND q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> '' 
+        THEN 'quoted'::varchar(32) 
+        ELSE r.status 
+      END AS status,
+      CASE 
+        WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+          AND (
+            n_edit.created_at IS NULL 
+            OR (n_res.created_at IS NOT NULL AND n_res.created_at >= n_edit.created_at)
+            OR (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+            OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+          )
+        THEN NULL::varchar(32)
+        ELSE COALESCE(r.sub_status, 'pending')::varchar(32)
+      END AS sub_status,
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
@@ -3507,9 +3521,11 @@ const KS_REQUESTS_LITE_SQL = `
         WHEN n_edit.created_at IS NOT NULL 
           AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
           AND NOT (
-            COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed')
-            AND COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL 
-            AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at
+            (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
+            AND (
+              (COALESCE(d_lat.updated_at, d_lat.created_at) IS NOT NULL AND COALESCE(d_lat.updated_at, d_lat.created_at) >= n_edit.created_at)
+              OR (q_lat.updated_at IS NOT NULL AND q_lat.updated_at >= n_edit.created_at)
+            )
           )
         THEN COALESCE(n_edit_first.created_at, n_edit.created_at)
         ELSE NULL::timestamptz
@@ -4350,7 +4366,8 @@ app.get('/api/ks/requests', async (req, res) => {
                     const ar = _ksRequestsCache.rows[ai];
                     if (!ar) continue;
                     const st = String(ar.status || 'pending').trim().toLowerCase();
-                    const isDoneStatus = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled');
+                    const hasQuote = Boolean(ar.quoteCode || ar.quote_code || (ar.bridge && (ar.bridge.quote_code || ar.bridge.quoteCode)));
+                    const isDoneStatus = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled' || hasQuote);
                     if (!isDoneStatus || ar.editingRequestedAt) {
                         const key = ar.tkCode || ar.id || ar.__backendId;
                         if (key) activeProcessingIds.push(String(key));
@@ -4447,8 +4464,20 @@ async function getRequestDetailDirect(idOrTkCode) {
             r.content,
             COALESCE(r.old_content, false)::boolean AS old_content,
             r.old_content_extra,
-            r.status,
+            CASE 
+              WHEN COALESCE(r.status, '') IN ('pending', 'processing') AND q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> '' 
+              THEN 'quoted'::varchar(32) 
+              ELSE r.status 
+            END AS status,
+            COALESCE(r.sub_status, 'pending')::varchar(32) AS sub_status,
             COALESCE(r.sub_status, 'pending')::varchar(32) AS design_status,
+            COALESCE(q_lat.quote_code, '') AS quote_code,
+            COALESCE(q_lat.total_amount, 0) AS total_amount,
+            COALESCE(q_lat.quote_status, '') AS quote_status,
+            COALESCE(q_lat.spo_status, '') AS spo_status,
+            COALESCE(q_lat.spo_number, '') AS spo_number,
+            COALESCE(q_lat.order_number, '') AS order_number,
+            COALESCE(q_lat.production_approval_status, '') AS production_approval_status,
             COALESCE(r.is_tba, false) AS is_tba,
       COALESCE((EXISTS (SELECT 1 FROM request_items ri WHERE ri.request_tk_code = r.tk_code AND (ri.type ILIKE '%Nhà Phân Phối%' OR ri.type ILIKE '%NPP%')) OR o.name ILIKE 'CP%' OR o.name ILIKE 'KP%'), false) AS is_npp,
             COALESCE(r.is_deleted, false) AS is_deleted,
@@ -4525,6 +4554,23 @@ async function getRequestDetailDirect(idOrTkCode) {
             AND n.note_type IN ('edit-resolved', 'edit-done')
           ORDER BY n.created_at DESC, n.id DESC LIMIT 1
         ) n_res ON true
+        LEFT JOIN LATERAL (
+          SELECT 
+              q_sub.quote_code, 
+              q_sub.total_amount, 
+              q_sub.status AS quote_status,
+              q_sub.spo_status,
+              q_sub.spo_number,
+              ord_sub.order_no AS order_number,
+              COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status,
+              q_sub.updated_at
+          FROM quotations q_sub
+          LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
+          LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
+          WHERE (q_sub.tk_code = r.tk_code OR q_sub.request_tk_code = r.tk_code)
+            AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
+          ORDER BY q_sub.created_at DESC LIMIT 1
+        ) q_lat ON true
         WHERE (r.tk_code = ? OR r.id = ? OR r.id = ?)
         LIMIT 1
     `, [cleanId, cleanId, rawId]);
@@ -5575,11 +5621,12 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const s = String(rawInput || '').trim();
             if (s) {
                 const lower = s.toLowerCase();
+                if (lower.includes('như') || lower === 'usr_huynhnhu' || lower === 'usr_huynhnhu_designer' || lower.includes('nhu')) return 'USR_huynhnhu_designer';
                 if (lower.includes('thảo') || lower === 'usr_thao_designer' || lower.includes('th_o')) return 'USR_thao_designer';
                 if (lower.includes('hiển') || lower === 'usr_0966767731' || lower.includes('88000255') || lower.includes('0966767731')) return 'USR_0966767731';
                 if (lower.includes('admin') || lower === 'usr_adminqcag') return 'USR_adminqcag';
                 if (lower.includes('thái') || lower === 'usr_doanminhthai' || lower.includes('minh_th_i')) return 'USR_doanminhthai';
-                if (s === 'USR_doanminhthai' || s === 'USR_thao_designer' || s === 'USR_0966767731' || s === 'USR_adminqcag') return s;
+                if (s === 'USR_doanminhthai' || s === 'USR_thao_designer' || s === 'USR_0966767731' || s === 'USR_adminqcag' || s === 'USR_huynhnhu_designer') return s;
             }
             const a = String(area || region || '').toUpperCase().trim();
             if (a === 'S16' || a === 'S4') return 'USR_0966767731';
