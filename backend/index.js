@@ -6300,10 +6300,38 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         if (b.status === 'done' && !isAlreadyQuoted) {
             try {
-                await pool.query(`UPDATE design_tasks SET status = 'done', updated_at = NOW() WHERE tk_code = ?`, [tkCode]);
+                const desId = resolveDesignerIdHelper(b.designCreatedBy || b.designLastEditedBy || b.designerId, currentReq.outlet_area, currentReq.sale_region);
+                await pool.query(`
+                    INSERT INTO design_tasks (
+                        tk_code,
+                        ks_backend_id,
+                        sale_phone,
+                        outlet_phone,
+                        address,
+                        designer_id,
+                        status,
+                        created_at,
+                        updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())
+                    ON CONFLICT (tk_code) DO UPDATE SET
+                        ks_backend_id = COALESCE(EXCLUDED.ks_backend_id, design_tasks.ks_backend_id),
+                        designer_id = COALESCE(EXCLUDED.designer_id, design_tasks.designer_id),
+                        sale_phone = COALESCE(EXCLUDED.sale_phone, design_tasks.sale_phone),
+                        outlet_phone = COALESCE(EXCLUDED.outlet_phone, design_tasks.outlet_phone),
+                        address = COALESCE(EXCLUDED.address, design_tasks.address),
+                        status = 'pending',
+                        updated_at = NOW()
+                `, [
+                    tkCode,
+                    currentReq.id,
+                    currentReq.requester_phone || null,
+                    currentReq.outlet_phone || null,
+                    currentReq.address || null,
+                    desId
+                ]);
                 wsInvalidate('design_tasks', { action: 'update', tk_code: tkCode });
             } catch (dtDoneErr) {
-                console.warn('[ks/update] design_tasks done update warning:', dtDoneErr && dtDoneErr.message);
+                console.warn('[ks/update] design_tasks pending ensure warning:', dtDoneErr && dtDoneErr.message);
             }
         }
 
