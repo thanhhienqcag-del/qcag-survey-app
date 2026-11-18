@@ -3336,7 +3336,11 @@ const KS_REQUESTS_SELECT_SQL = `
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
-        'saleCode', COALESCE(u.username, ''),
+        'saleCode', CASE 
+          WHEN u.sale_code IS NOT NULL AND u.sale_code <> '' THEN u.sale_code
+          WHEN u.username NOT LIKE 'USR_PHONE_%' AND u.username NOT LIKE 'USR_REQ_%' AND u.username NOT LIKE 'USR_%' THEN COALESCE(u.username, '')
+          ELSE ''
+        END,
         'phone', COALESCE(u.phone, o.phone, ''),
         'region', COALESCE(NULLIF(TRIM(o.area), ''), u.region, ''),
         'outletArea', COALESCE(o.area, ''),
@@ -3597,7 +3601,11 @@ const KS_REQUESTS_LITE_SQL = `
       json_build_object(
         'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
         'saleName', COALESCE(u.fullname, ''),
-        'saleCode', COALESCE(u.username, ''),
+        'saleCode', CASE 
+          WHEN u.sale_code IS NOT NULL AND u.sale_code <> '' THEN u.sale_code
+          WHEN u.username NOT LIKE 'USR_PHONE_%' AND u.username NOT LIKE 'USR_REQ_%' AND u.username NOT LIKE 'USR_%' THEN COALESCE(u.username, '')
+          ELSE ''
+        END,
         'phone', COALESCE(u.phone, o.phone, ''),
         'region', COALESCE(NULLIF(TRIM(o.area), ''), u.region, ''),
         'outletArea', COALESCE(o.area, ''),
@@ -4673,13 +4681,21 @@ async function getRequestDetailDirect(idOrTkCode) {
             COALESCE(u.fullname, '') AS sale_name,
             COALESCE(u.phone, '') AS sale_phone,
             COALESCE(COALESCE(o.phone, u.phone), '') AS phone,
-            COALESCE(u.sale_code, u.username, '') AS sale_code,
+            CASE 
+              WHEN u.sale_code IS NOT NULL AND u.sale_code <> '' THEN u.sale_code
+              WHEN u.username NOT LIKE 'USR_PHONE_%' AND u.username NOT LIKE 'USR_REQ_%' AND u.username NOT LIKE 'USR_%' THEN COALESCE(u.username, '')
+              ELSE ''
+            END AS sale_code,
             COALESCE(u.ss_name, '') AS ss_name,
             '' AS ss_code,
             json_build_object(
                 'role', CASE WHEN u.role IS NOT NULL THEN u.role ELSE 'heineken' END,
                 'saleName', COALESCE(u.fullname, ''),
-                'saleCode', COALESCE(u.sale_code, u.username, ''),
+                'saleCode', CASE 
+                  WHEN u.sale_code IS NOT NULL AND u.sale_code <> '' THEN u.sale_code
+                  WHEN u.username NOT LIKE 'USR_PHONE_%' AND u.username NOT LIKE 'USR_REQ_%' AND u.username NOT LIKE 'USR_%' THEN COALESCE(u.username, '')
+                  ELSE ''
+                END,
                 'phone', COALESCE(u.phone, o.phone, ''),
                 'region', COALESCE(NULLIF(TRIM(o.area), ''), u.region, ''),
                 'ssName', COALESCE(u.ss_name, ''),

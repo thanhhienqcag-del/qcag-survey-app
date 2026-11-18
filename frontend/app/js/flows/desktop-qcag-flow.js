@@ -5529,7 +5529,11 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
           </div>
           <div class="qcag-requester-grid">
             <div><span>Tên Sale</span><strong>${escapeHtml(String(requester.saleName || requester.sale_name || requester.name || requester.phone || '-').toUpperCase())}</strong></div>
-            <div><span>Mã Sale</span><strong>${escapeHtml(requester.saleCode || requester.sale_code || '-')}</strong></div>
+            <div><span>Mã Sale</span><strong>${(() => {
+              const sc = String(requester.saleCode || requester.sale_code || '').trim();
+              if (!sc || sc.startsWith('USR_PHONE_') || sc.startsWith('USR_REQ_') || sc.startsWith('USR_')) return '-';
+              return escapeHtml(sc);
+            })()}</strong></div>
             <div><span>SĐT Sale</span><strong>${escapeHtml(requester.phone || requester.salePhone || requester.sale_phone || '-')}</strong></div>
             <div><span>Khu vực</span><strong>${escapeHtml(qcagFormatRegionDisplay(requester.region || '-'))}</strong></div>
             <div><span>${(() => {
@@ -6062,7 +6066,10 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             if (strong) {
               if (label === 'Khu vực' && (reqObj.region || full.region)) strong.textContent = qcagFormatRegionDisplay(reqObj.region || full.region);
               if (label === 'Tên Sale' && reqObj.saleName) strong.textContent = String(reqObj.saleName).toUpperCase();
-              if (label === 'Mã Sale' && reqObj.saleCode) strong.textContent = reqObj.saleCode;
+              if (label === 'Mã Sale') {
+                const sc = String(reqObj.saleCode || '').trim();
+                strong.textContent = (!sc || sc.startsWith('USR_PHONE_') || sc.startsWith('USR_REQ_') || sc.startsWith('USR_')) ? '-' : sc;
+              }
               if (label === 'SĐT Sale' && reqObj.phone) strong.textContent = reqObj.phone;
               if (label === 'Tên SS/SE' && reqObj.ssName) strong.textContent = String(reqObj.ssName).toUpperCase();
             }

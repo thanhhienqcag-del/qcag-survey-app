@@ -477,7 +477,8 @@ async function showRequestDetail(id) {
     const regionVal = displayRequester.region || request.region || '';
     const regionStr = (typeof qcagFormatRegionDisplay === 'function' ? qcagFormatRegionDisplay(regionVal) : regionVal) || '';
     const saleName = displayRequester.saleName || displayRequester.name || request.createdByName || '';
-    const saleCode = displayRequester.saleCode || request.saleCode || '';
+    const rawSaleCode = String(displayRequester.saleCode || request.saleCode || '').trim();
+    const saleCode = (rawSaleCode.startsWith('USR_PHONE_') || rawSaleCode.startsWith('USR_REQ_') || rawSaleCode.startsWith('USR_')) ? '' : rawSaleCode;
     const phone = displayRequester.phone || request.phone || '';
     const ssName = displayRequester.ssName || request.ssName || '';
     const ssCode = displayRequester.ssCode || request.ssCode || '';
