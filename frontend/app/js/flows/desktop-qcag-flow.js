@@ -833,20 +833,20 @@ function qcagDesktopIsPendingEditRequest(req) {
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
   const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
   const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
-  const isQuotedOrDone = (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted' || hasQuote);
+  const isQuotedOrDone = (s === 'done' || s === 'completed' || s === 'processed' || (s === 'quoted' && sub !== 'pending_edit') || (hasQuote && s !== 'processing' && s !== 'pending'));
   const hasActiveEditTime = Boolean(req.editingRequestedAt || req.editing_requested_at);
 
   // 1. Ưu tiên tuyệt đối: sub_status từ DB hoặc status chính là yêu cầu chỉnh sửa
-  // CHÚ Ý: Nếu đơn đã có báo giá hoặc status hoàn thành (done/quoted/completed) mà KHÔNG có editingRequestedAt
+  // CHÚ Ý: Nếu đơn đã explicitly hoàn thành (done/completed) mà KHÔNG có editingRequestedAt
   // thì sub_status 'pending_edit' là vết cũ của đợt sửa trước đã hoàn tất -> Không được xem là pending edit!
   if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
-    if (isQuotedOrDone && !hasActiveEditTime) {
+    if ((s === 'done' || s === 'completed') && !hasActiveEditTime) {
       return false;
     }
     return true;
   }
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
-    if (isQuotedOrDone && !hasActiveEditTime) {
+    if ((s === 'done' || s === 'completed') && !hasActiveEditTime) {
       return false;
     }
     return true;
@@ -857,7 +857,7 @@ function qcagDesktopIsPendingEditRequest(req) {
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at) {
-    if (isQuotedOrDone && sub !== 'pending_edit' && sub !== 'pending-edit' && sub !== 'edit_requested' && sub !== 'request-edit') {
+    if (s === 'done' || s === 'completed') {
       return false;
     }
     return true;
@@ -870,7 +870,7 @@ function qcagDesktopIsPendingEditRequest(req) {
     return true;
   }
   // 4. Nếu status đã hoàn thành/done/quoted mà không có cờ chỉnh sửa thì không xem là pending edit
-  if (s === 'done' || s === 'completed' || s === 'processed' || s === 'quoted' || hasQuote) {
+  if (s === 'done' || s === 'completed' || ((s === 'quoted' || hasQuote) && sub !== 'pending_edit' && sub !== 'pending-edit' && !hasActiveEditTime)) {
     return false;
   }
   return Boolean(qcagDesktopHasHeinekenEditRequest(req));
@@ -917,6 +917,9 @@ function qcagDesktopIsDone(req) {
     return false;
   }
   const s = String((req.status || '')).toLowerCase();
+  const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
+  if (sub === 'pending_edit' || sub === 'pending-edit') return false;
+  if (s === 'processing' || s === 'pending') return false;
   return s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed';
 }
 
@@ -2423,8 +2426,9 @@ function qcagDesktopStatusBadge(req) {
 
   // 2. ƯU TIÊN SỐ 2: Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
   const s = String(req && req.status || 'pending').toLowerCase();
+  const sub = String(req && (req.subStatus || req.sub_status || req.design_status) || '').toLowerCase();
   const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
-  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote);
+  const isDone = (s === 'done' || s === 'processed' || s === 'completed' || (s === 'quoted' && sub !== 'pending_edit' && sub !== 'pending-edit') || (hasQuote && s !== 'processing' && s !== 'pending' && sub !== 'pending_edit' && sub !== 'pending-edit'));
   if (isDone) {
     return { label: 'Hoàn thành', cls: 'done' };
   }

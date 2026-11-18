@@ -837,7 +837,7 @@
     var st = String(r.status || 'pending').trim().toLowerCase();
     var sub = String(r.subStatus || r.sub_status || r.design_status || '').trim().toLowerCase();
     var hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
-    var isDone = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled' || hasQuote);
+    var isDone = (st === 'done' || st === 'completed' || st === 'cancelled' || ((st === 'quoted' || st === 'processed' || hasQuote) && sub !== 'pending_edit' && sub !== 'pending-edit' && st !== 'processing' && st !== 'pending'));
     var hasEditTime = Boolean(r.editingRequestedAt || r.editing_requested_at);
     if (hasEditTime && (sub === 'pending_edit' || sub === 'pending-edit' || !isDone)) return true;
     if (!isDone) return true;
