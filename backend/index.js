@@ -5156,6 +5156,71 @@ function normalizePayloadStrings(obj) {
     return obj;
 }
 
+// ── POST /api/ks/users/profile ──────────────────────────────────────────
+// Cập nhật thông tin profile của Sale (SS/SE, Khu vực, Họ tên, Mã Sale)
+app.post(['/api/ks/users/profile', '/api/users/profile'], async (req, res) => {
+    try {
+        const b = req.body || {};
+        const phone = toNullableString(b.phone);
+        const saleCode = toNullableString(b.saleCode) || toNullableString(b.sale_code);
+        const saleName = toNullableString(b.saleName) || toNullableString(b.sale_name) || toNullableString(b.fullname);
+        const ssName = toNullableString(b.ssName) || toNullableString(b.ss_name);
+        const region = toNullableString(b.region);
+
+        if (!phone && !saleCode) {
+            return res.status(400).json({ ok: false, error: 'phone_or_sale_code_required' });
+        }
+
+        const updates = [];
+        const params = [];
+        if (ssName) {
+            updates.push('ss_name = ?');
+            params.push(ssName);
+        }
+        if (region) {
+            updates.push('region = ?');
+            params.push(region);
+        }
+        if (saleName) {
+            updates.push('fullname = COALESCE(NULLIF(?, \'\'), fullname)');
+            params.push(saleName);
+        }
+        if (saleCode) {
+            updates.push('sale_code = COALESCE(NULLIF(?, \'\'), sale_code)');
+            params.push(saleCode);
+        }
+
+        if (updates.length === 0) {
+            return res.json({ ok: true, message: 'no_changes' });
+        }
+
+        updates.push('updated_at = NOW()');
+
+        let whereClause = '';
+        if (phone && saleCode) {
+            whereClause = 'phone = ? OR sale_code = ? OR username = ? OR id = ? OR id = ?';
+            params.push(phone, saleCode, saleCode, 'USR_PHONE_' + phone, 'USR_SALE_' + saleCode);
+        } else if (phone) {
+            whereClause = 'phone = ? OR username = ? OR id = ?';
+            params.push(phone, phone, 'USR_PHONE_' + phone);
+        } else {
+            whereClause = 'sale_code = ? OR username = ? OR id = ?';
+            params.push(saleCode, saleCode, 'USR_SALE_' + saleCode);
+        }
+
+        const [result] = await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE ${whereClause}`,
+            params
+        );
+
+        console.log(`[users/profile] Updated user phone="${phone}", saleCode="${saleCode}", ssName="${ssName}", affected=${result && result.affectedRows}`);
+        return res.json({ ok: true, affected: result && result.affectedRows });
+    } catch (err) {
+        console.error('POST /api/ks/users/profile error:', err);
+        return res.status(500).json({ ok: false, error: err && err.message ? err.message : String(err) });
+    }
+});
+
 // POST /api/ks/requests
 app.post("/api/ks/requests", async (req, res) => {
     try {
@@ -5354,6 +5419,7 @@ app.post("/api/ks/requests", async (req, res) => {
                     phone = COALESCE(EXCLUDED.phone, users.phone),
                     region = COALESCE(EXCLUDED.region, users.region),
                     sale_code = COALESCE(EXCLUDED.sale_code, users.sale_code),
+                    ss_name = COALESCE(NULLIF(EXCLUDED.ss_name, ''), users.ss_name),
                     updated_at = EXCLUDED.updated_at
                 RETURNING id
             `, [
@@ -5362,6 +5428,34 @@ app.post("/api/ks/requests", async (req, res) => {
             const uRes = insertUserRes ? insertUserRes[0] : null;
             if (uRes && uRes.length > 0 && uRes[0].id) {
                 requesterId = uRes[0].id;
+            }
+        } else {
+            // Khi Sale đã tồn tại, đồng bộ ngay thông tin mới nhất vào bảng users (ss_name, region, fullname, sale_code)
+            const userUpdates = [];
+            const userParams = [];
+            if (ssName) {
+                userUpdates.push('ss_name = ?');
+                userParams.push(ssName);
+            }
+            if (userRegion) {
+                userUpdates.push('region = ?');
+                userParams.push(userRegion);
+            }
+            if (saleName) {
+                userUpdates.push('fullname = COALESCE(NULLIF(?, \'\'), fullname)');
+                userParams.push(saleName);
+            }
+            if (saleCode) {
+                userUpdates.push('sale_code = COALESCE(NULLIF(?, \'\'), sale_code)');
+                userParams.push(saleCode);
+            }
+            if (userUpdates.length > 0) {
+                userUpdates.push('updated_at = NOW()');
+                userParams.push(requesterId);
+                await pool.query(
+                    `UPDATE users SET ${userUpdates.join(', ')} WHERE id = ?`,
+                    userParams
+                );
             }
         }
 
@@ -6033,6 +6127,16 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 oFields.push('updated_at = NOW()');
                 oVals.push(currentReq.outlet_id);
                 await pool.query(`UPDATE outlets SET ${oFields.join(', ')} WHERE id = ?`, oVals);
+            }
+        }
+
+        // Cập nhật thông tin SS/SE của Sale nếu có truyền lên trong PATCH
+        if (currentReq.requester_id && ('ssName' in b || 'ss_name' in b || (b.requester && (b.requester.ssName || b.requester.ss_name)))) {
+            let reqObj = {};
+            try { reqObj = typeof b.requester === 'string' ? JSON.parse(b.requester || '{}') : (b.requester || {}); } catch (_) {}
+            const patchSsName = toNullableString(b.ssName) || toNullableString(b.ss_name) || toNullableString(reqObj.ssName) || toNullableString(reqObj.ss_name);
+            if (patchSsName) {
+                await pool.query('UPDATE users SET ss_name = ?, updated_at = NOW() WHERE id = ?', [patchSsName, currentReq.requester_id]);
             }
         }
 

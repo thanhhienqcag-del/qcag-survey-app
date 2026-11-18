@@ -1446,6 +1446,8 @@ async function submitNewRequest() {
     acceptanceImages: '[]',
     createdAt: new Date().toISOString(),
     status: 'pending',
+    ssName: sessionForReq.ssName || '',
+    ss_name: sessionForReq.ssName || '',
     requester: JSON.stringify(sessionForReq),
     __backendId: __preBackendId,
     allowDuplicate: Boolean(userConfirmedNewForOutlet || (duplicateOutletState && (duplicateOutletState.mode === 'produced' || (duplicateOutletState.backendLock && duplicateOutletState.backendLock.state === 'confirm_new_phase')))),

@@ -758,6 +758,13 @@
         if (_reqObj && _reqObj.region) normalized.region = _reqObj.region;
       } catch (_) {}
     }
+    if (!normalized.ssName && normalized.ss_name != null) normalized.ssName = normalized.ss_name;
+    if (!normalized.ssName && normalized.requester) {
+      try {
+        var _reqSsObj = typeof normalized.requester === 'string' ? JSON.parse(normalized.requester) : normalized.requester;
+        if (_reqSsObj && _reqSsObj.ssName) normalized.ssName = _reqSsObj.ssName;
+      } catch (_) {}
+    }
 
     if (normalized.deleteRequested == null && normalized.delete_requested != null) {
       normalized.deleteRequested = Boolean(normalized.delete_requested);

@@ -246,14 +246,32 @@ function loginHK2Submit() {
   }
 
   // Lưu cache máy thông tin bước 2 cho Sale để lần sau mở app tự động nạp
+  const ssVal = (saleType === 'dsm_sr') ? (document.getElementById('hkSSName').value.trim()) : '';
   try {
-    const ssVal = (saleType === 'dsm_sr') ? (document.getElementById('hkSSName').value.trim()) : '';
     localStorage.setItem('ks_hk_work_info', JSON.stringify({
       saleType,
       region: _loginSelectedRegion || '',
       ssName: ssVal
     }));
   } catch (_) {}
+
+  // Đồng bộ thông tin profile mới lên server ngay khi đăng nhập
+  if (ssVal || _loginSelectedRegion) {
+    const apiBase = (typeof window !== 'undefined' && window.API_BASE_URL)
+      ? window.API_BASE_URL.replace(/\/+$/, '')
+      : 'https://ks-backend-493469512136.asia-southeast1.run.app';
+    fetch(apiBase + '/api/ks/users/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: currentSession.phone || saved.phone || '',
+        saleCode: currentSession.saleCode || saved.saleCode || '',
+        saleName: currentSession.saleName || saved.saleName || '',
+        ssName: ssVal,
+        region: _loginSelectedRegion || ''
+      })
+    }).catch(function (e) { console.warn('[login/profile-sync]', e); });
+  }
 
   _justLoggedIn = true;
   try { sessionStorage.removeItem('ks_logged_out'); } catch (_) {}

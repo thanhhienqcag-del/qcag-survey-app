@@ -317,6 +317,32 @@ function saveAccountProfile() {
 			const saved = JSON.parse(localStorage.getItem(HK_PROFILE_KEY) || '{}');
 			localStorage.setItem(HK_PROFILE_KEY, JSON.stringify({ ...saved, phone }));
 		} catch (e) {}
+
+		try {
+			const savedWork = JSON.parse(localStorage.getItem('ks_hk_work_info') || '{}');
+			localStorage.setItem('ks_hk_work_info', JSON.stringify({
+				...savedWork,
+				saleType,
+				region,
+				ssName
+			}));
+		} catch (e) {}
+
+		// Đồng bộ thông tin profile mới lên server
+		const apiBase = (typeof window !== 'undefined' && window.API_BASE_URL)
+			? window.API_BASE_URL.replace(/\/+$/, '')
+			: 'https://ks-backend-493469512136.asia-southeast1.run.app';
+		fetch(apiBase + '/api/ks/users/profile', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				phone,
+				saleCode: currentSession.saleCode || '',
+				saleName: currentSession.saleName || '',
+				ssName,
+				region
+			})
+		}).catch(function (err) { console.warn('[profile-sync] failed:', err); });
 	}
 
 	localStorage.setItem(SESSION_KEY, JSON.stringify(currentSession));
