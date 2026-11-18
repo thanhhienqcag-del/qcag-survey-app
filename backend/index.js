@@ -3421,40 +3421,6 @@ const KS_REQUESTS_SELECT_SQL = `
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
-      SELECT n.created_at
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-request', 'edit_request')
-      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-    ) n_edit ON true
-    LEFT JOIN LATERAL (
-      SELECT n.created_at, n.author_name
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-resolved', 'edit-done')
-      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-    ) n_res ON true
-    LEFT JOIN LATERAL (
-      SELECT n.created_at
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-request', 'edit_request')
-        AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
-      ORDER BY n.created_at ASC
-      LIMIT 1
-    ) n_edit_first ON true
-    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
-    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
-    LEFT JOIN LATERAL (
       SELECT 
           q_sub.quote_code, 
           q_sub.total_amount, 
@@ -3462,7 +3428,8 @@ const KS_REQUESTS_SELECT_SQL = `
           q_sub.spo_status,
           q_sub.spo_number,
           ord_sub.order_no AS order_number,
-          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status
+          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status,
+          q_sub.updated_at
       FROM quotations q_sub
       LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
       LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
@@ -3470,6 +3437,31 @@ const KS_REQUESTS_SELECT_SQL = `
         AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
       ORDER BY q_sub.created_at DESC LIMIT 1
     ) q_lat ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-request', 'edit_request')
+      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+    ) n_edit ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at, n.author_name
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-resolved', 'edit-done')
+      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+    ) n_res ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-request', 'edit_request')
+        AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+      ORDER BY n.created_at ASC
+      LIMIT 1
+    ) n_edit_first ON true
+    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
 `;
 
 const KS_REQUESTS_LITE_SQL = `
@@ -3631,40 +3623,6 @@ const KS_REQUESTS_LITE_SQL = `
       ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
     ) d_lat ON true
     LEFT JOIN LATERAL (
-      SELECT n.created_at
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-request', 'edit_request')
-      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-    ) n_edit ON true
-    LEFT JOIN LATERAL (
-      SELECT n.created_at, n.author_name
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-resolved', 'edit-done')
-      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-    ) n_res ON true
-    LEFT JOIN LATERAL (
-      SELECT n.created_at
-      FROM notes n
-      WHERE (
-          (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-          OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-        )
-        AND n.note_type IN ('edit-request', 'edit_request')
-        AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
-      ORDER BY n.created_at ASC
-      LIMIT 1
-    ) n_edit_first ON true
-    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
-    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
-    LEFT JOIN LATERAL (
       SELECT 
           q_sub.quote_code, 
           q_sub.total_amount, 
@@ -3672,7 +3630,8 @@ const KS_REQUESTS_LITE_SQL = `
           q_sub.spo_status,
           q_sub.spo_number,
           ord_sub.order_no AS order_number,
-          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status
+          COALESCE(oq_sub.approval_status, q_sub.status) AS production_approval_status,
+          q_sub.updated_at
       FROM quotations q_sub
       LEFT JOIN order_quotes oq_sub ON oq_sub.quotation_code = q_sub.quote_code
       LEFT JOIN orders ord_sub ON ord_sub.id = oq_sub.order_id AND (ord_sub.is_deleted = false OR ord_sub.is_deleted IS NULL)
@@ -3680,6 +3639,31 @@ const KS_REQUESTS_LITE_SQL = `
         AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
       ORDER BY q_sub.created_at DESC LIMIT 1
     ) q_lat ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-request', 'edit_request')
+      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+    ) n_edit ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at, n.author_name
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-resolved', 'edit-done')
+      ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+    ) n_res ON true
+    LEFT JOIN LATERAL (
+      SELECT n.created_at
+      FROM notes n
+      WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+        AND n.note_type IN ('edit-request', 'edit_request')
+        AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+      ORDER BY n.created_at ASC
+      LIMIT 1
+    ) n_edit_first ON true
+    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
     WHERE COALESCE(r.is_deleted, false) = false
     ORDER BY r.created_at DESC
 `;
@@ -4629,38 +4613,6 @@ async function getRequestDetailDirect(idOrTkCode) {
         LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
         LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
         LEFT JOIN LATERAL (
-          SELECT n.created_at
-          FROM notes n
-          WHERE (
-              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-            )
-            AND n.note_type IN ('edit-request', 'edit_request')
-          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-        ) n_edit ON true
-        LEFT JOIN LATERAL (
-          SELECT n.created_at, n.author_name
-          FROM notes n
-          WHERE (
-              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-            )
-            AND n.note_type IN ('edit-resolved', 'edit-done')
-          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
-        ) n_res ON true
-        LEFT JOIN LATERAL (
-          SELECT n.created_at
-          FROM notes n
-          WHERE (
-              (n.ref_type = 'request' AND (n.ref_id = r.tk_code OR n.ref_id = r.id))
-              OR (n.ref_type = 'quotation' AND n.ref_id IN (SELECT q_sub.quote_code FROM quotations q_sub WHERE q_sub.request_tk_code = r.tk_code OR q_sub.tk_code = r.tk_code))
-            )
-            AND n.note_type IN ('edit-request', 'edit_request')
-            AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
-          ORDER BY n.created_at ASC
-          LIMIT 1
-        ) n_edit_first ON true
-        LEFT JOIN LATERAL (
           SELECT 
               q_sub.quote_code, 
               q_sub.total_amount, 
@@ -4677,6 +4629,29 @@ async function getRequestDetailDirect(idOrTkCode) {
             AND (q_sub.is_deleted = false OR q_sub.is_deleted IS NULL)
           ORDER BY q_sub.created_at DESC LIMIT 1
         ) q_lat ON true
+        LEFT JOIN LATERAL (
+          SELECT n.created_at
+          FROM notes n
+          WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+            AND n.note_type IN ('edit-request', 'edit_request')
+          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+        ) n_edit ON true
+        LEFT JOIN LATERAL (
+          SELECT n.created_at, n.author_name
+          FROM notes n
+          WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+            AND n.note_type IN ('edit-resolved', 'edit-done')
+          ORDER BY n.created_at DESC, n.id DESC LIMIT 1
+        ) n_res ON true
+        LEFT JOIN LATERAL (
+          SELECT n.created_at
+          FROM notes n
+          WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
+            AND n.note_type IN ('edit-request', 'edit_request')
+            AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+          ORDER BY n.created_at ASC
+          LIMIT 1
+        ) n_edit_first ON true
         WHERE (r.tk_code = ? OR r.id = ? OR r.id = ?)
         LIMIT 1
     `, [cleanId, cleanId, rawId]);
