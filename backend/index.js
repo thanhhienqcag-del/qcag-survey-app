@@ -5379,7 +5379,10 @@ app.post("/api/ks/requests", async (req, res) => {
         // Uu tiên 1: Tìm theo salePhone (định danh chuẩn của cá nhân Sale)
         if (salePhone) {
             const phoneRes = await pool.query(
-                "SELECT id, region FROM users WHERE phone = ? OR username = ? OR id = ('USR_PHONE_' || ?) LIMIT 1",
+                `SELECT id, region FROM users 
+                 WHERE phone = ? OR username = ? OR id = ('USR_PHONE_' || ?) 
+                 ORDER BY CASE WHEN id LIKE 'USR_SALE_%' THEN 1 WHEN sale_code IS NOT NULL AND sale_code <> '' THEN 2 ELSE 3 END, created_at DESC 
+                 LIMIT 1`,
                 [salePhone, salePhone, salePhone]
             );
             const uPhoneRows = phoneRes ? phoneRes[0] : null;
