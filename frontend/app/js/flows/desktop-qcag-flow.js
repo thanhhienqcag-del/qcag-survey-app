@@ -6600,6 +6600,8 @@ async function qcagDesktopMarkProcessed() {
       comments: JSON.stringify(dedupedComments),
       designImages: _finalDesignImgStr,
       designFilename: currentDetailRequest.designFilename || '',
+      mqRevisedAt: isPendingEdit ? now : (currentDetailRequest.mqRevisedAt || null),
+      quotePendingRevision: isPendingEdit ? true : false,
       ...extraFields
     };
 
@@ -6608,6 +6610,8 @@ async function qcagDesktopMarkProcessed() {
     const updated = {
       ...currentDetailRequest,
       ...patchPayload,
+      mqRevisedAt: isPendingEdit ? now : (currentDetailRequest.mqRevisedAt || null),
+      quotePendingRevision: isPendingEdit ? true : false,
       subStatus: null,
       sub_status: null,
       hasEditRequest: false,

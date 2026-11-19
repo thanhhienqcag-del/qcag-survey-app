@@ -451,14 +451,14 @@ async function showRequestDetail(id) {
   const scInfo = (typeof qcagResolveSignageContent === 'function')
     ? qcagResolveSignageContent(request2)
     : {
-        hasSignage: Array.isArray(items) && items.length > 0,
-        hasSignageContent: hasActualContent || hasExplicitOldContent,
-        isOld: hasExplicitOldContent || (Array.isArray(items) && items.length > 0 && !hasActualContent),
-        rawContent: reqContentClean,
-        oldExtra: (request2.oldContentExtra || request2.old_content_extra || '').trim(),
-        displayText: reqContentClean || 'Nội dung cũ',
-        oldImgs: oldContentImgs
-      };
+      hasSignage: Array.isArray(items) && items.length > 0,
+      hasSignageContent: hasActualContent || hasExplicitOldContent,
+      isOld: hasExplicitOldContent || (Array.isArray(items) && items.length > 0 && !hasActualContent),
+      rawContent: reqContentClean,
+      oldExtra: (request2.oldContentExtra || request2.old_content_extra || '').trim(),
+      displayText: reqContentClean || 'Nội dung cũ',
+      oldImgs: oldContentImgs
+    };
 
   const isReqOldContent = scInfo.isOld;
   const isNonSignageEmpty = !scInfo.hasSignageContent;
@@ -650,40 +650,40 @@ async function showRequestDetail(id) {
             <div class="w-full">
               <div class="space-y-3 hk-items-mobile-list">
                 ${items.map((item, idx) => {
-                  const isOther = item.type === 'Hạng mục khác' || String(item.type || '').toLowerCase().includes('khác');
-                  const requestText = isOther ? (item.otherContent || item.other_content || '') : (item.note || item.notes || '');
-                  const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
-                  let sizeMobileHtml = '-';
-                  if (!isOther) {
-                    if (item.survey) {
-                      let sW = null, sH = null;
-                      if (item.surveySize) {
-                        if (typeof item.surveySize === 'string') {
-                          try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) {}
-                        } else if (typeof item.surveySize === 'object') {
-                          sW = item.surveySize.width; sH = item.surveySize.height;
-                        }
-                      }
-                      if (sW == null && item.survey_width != null) sW = item.survey_width;
-                      if (sH == null && item.survey_height != null) sH = item.survey_height;
-                      if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
-                      if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
-                      const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
-                      if (hasSurveyDim) {
-                        const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
-                        const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
-                        sizeMobileHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap">${dim}${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
-                      } else {
-                        const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
-                        sizeMobileHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
-                      }
-                    } else if (item.useOldSize) {
-                      sizeMobileHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
-                    } else {
-                      sizeMobileHtml = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`;
-                    }
-                  }
-                  return `
+      const isOther = item.type === 'Hạng mục khác' || String(item.type || '').toLowerCase().includes('khác');
+      const requestText = isOther ? (item.otherContent || item.other_content || '') : (item.note || item.notes || '');
+      const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
+      let sizeMobileHtml = '-';
+      if (!isOther) {
+        if (item.survey) {
+          let sW = null, sH = null;
+          if (item.surveySize) {
+            if (typeof item.surveySize === 'string') {
+              try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) { }
+            } else if (typeof item.surveySize === 'object') {
+              sW = item.surveySize.width; sH = item.surveySize.height;
+            }
+          }
+          if (sW == null && item.survey_width != null) sW = item.survey_width;
+          if (sH == null && item.survey_height != null) sH = item.survey_height;
+          if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
+          if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
+          const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
+          if (hasSurveyDim) {
+            const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
+            const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+            sizeMobileHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap">${dim}${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
+          } else {
+            const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+            sizeMobileHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
+          }
+        } else if (item.useOldSize) {
+          sizeMobileHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
+        } else {
+          sizeMobileHtml = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`;
+        }
+      }
+      return `
                     <div class="hk-item-box rounded-xl p-3">
                       <div class="flex items-start justify-between">
                         <div class="flex-1">
@@ -701,7 +701,7 @@ async function showRequestDetail(id) {
                       </div>
                     </div>
                   `;
-                }).join('')}
+    }).join('')}
               </div>
             </div>
           </div>
@@ -711,33 +711,33 @@ async function showRequestDetail(id) {
               <h3 class="font-medium text-gray-900 dark:text-gray-100">Nội dung bảng hiệu</h3>
             </div>
             ${(() => {
-              if (scInfo.hasSignageContent) {
-                let inner = '';
-                if (scInfo.isOld) {
-                  inner += `
+          if (scInfo.hasSignageContent) {
+            let inner = '';
+            if (scInfo.isOld) {
+              inner += `
                     <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/40 text-xs font-semibold mb-2">
                       <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                       <span>Nội dung cũ</span>
                     </div>`;
-                  if (scInfo.oldExtra) {
-                    inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
-                  }
-                  if (scInfo.rawContent) {
-                    inner += `<p class="text-sm whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</p>`;
-                  }
-                  if (scInfo.oldImgs && scInfo.oldImgs.length > 0) {
-                    inner += `
+              if (scInfo.oldExtra) {
+                inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
+              }
+              if (scInfo.rawContent) {
+                inner += `<p class="text-sm whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</p>`;
+              }
+              if (scInfo.oldImgs && scInfo.oldImgs.length > 0) {
+                inner += `
                       <div class="flex flex-wrap gap-2 mt-2">
                         ${scInfo.oldImgs.map(img => `<img src="${img}" class="w-20 h-20 object-cover rounded-lg cursor-pointer" onclick="showImageFull(this.src, false)">`).join('')}
                       </div>`;
-                  }
-                } else {
-                  inner = `<p class="text-sm whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100">${escapeHtml(scInfo.rawContent)}</p>`;
-                }
-                return inner;
               }
-              return `<p class="text-sm whitespace-pre-wrap text-gray-400 dark:text-gray-500 italic">Hạng mục này không có nội dung</p>`;
-            })()}
+            } else {
+              inner = `<p class="text-sm whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100">${escapeHtml(scInfo.rawContent)}</p>`;
+            }
+            return inner;
+          }
+          return `<p class="text-sm whitespace-pre-wrap text-gray-400 dark:text-gray-500 italic">Hạng mục này không có nội dung</p>`;
+        })()}
           </div>
         ` : ''}
 
@@ -773,14 +773,14 @@ async function showRequestDetail(id) {
             </div>
 
             ${designPrimaryImg ? (() => {
-              const isPendingEdit = Boolean(request.editingRequestedAt || request.isPendingEdit || (typeof getRequestDesignState === 'function' && getRequestDesignState(request) === 'editing') || (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(request)));
-              return `
+          const isPendingEdit = Boolean(request.editingRequestedAt || request.isPendingEdit || (typeof getRequestDesignState === 'function' && getRequestDesignState(request) === 'editing') || (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(request)));
+          return `
               <div class="mq-display-card">
                 <div class="mq-display-frame mq-thumb-editing-wrap" onclick="viewDesign('${request.__backendId}')" title="${isPendingEdit ? 'Đang chỉnh sửa - Nhấn để xem toàn màn hình' : 'Nhấn để xem toàn màn hình'}">
                   <img id="mqMainPreviewImg" src="${designPrimaryImg}" class="mq-display-img ${isPendingEdit ? 'mq-img-editing' : ''}" alt="Bản vẽ Maquette" onerror="_imgBrokenFallback(this)">
                   ${isPendingEdit ? `<span class="mq-editing-badge-overlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Đang chỉnh sửa</span>` : ''}
                 </div>`;
-            })() + `
+        })() + `
                 ${designImgs.length > 1 ? `
                   <div class="mq-thumbnails-row">
                     ${designImgs.map((img, idx) => `
@@ -798,7 +798,7 @@ async function showRequestDetail(id) {
             `}
 
             ${(currentSession && String(currentSession.role || '').toLowerCase() === 'heineken') ? '' :
-            '<label class="w-full py-3 mt-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-100">\n          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">\n            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>\n          </svg>\n          Upload thiết kế\n          <input type="file" accept="image/*" multiple class="hidden" onchange="uploadDesign(this)">\n        </label>'}
+          '<label class="w-full py-3 mt-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-medium flex items-center justify-center gap-2 cursor-pointer active:bg-gray-100">\n          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">\n            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>\n          </svg>\n          Upload thiết kế\n          <input type="file" accept="image/*" multiple class="hidden" onchange="uploadDesign(this)">\n        </label>'}
           </div>
         ` : ''}
 
@@ -872,43 +872,43 @@ async function showRequestDetail(id) {
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800/60 font-medium">
                   ${items.map((item, idx) => {
-                    const isOther = item.type === 'Hạng mục khác' || String(item.type || '').toLowerCase().includes('khác');
-                    const brandText = !isOther ? (item.brand || '-') : '-';
-                    const actionText = !isOther ? (item.action || '-') : '-';
-                    const polesText = !isOther ? (item.poles ? (item.poles + ' trụ') : '0 trụ') : '-';
-                    const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
-                    let sizeHtml = '-';
-                    if (!isOther) {
-                      if (item.survey) {
-                        let sW = null, sH = null;
-                        if (item.surveySize) {
-                          if (typeof item.surveySize === 'string') {
-                            try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) {}
-                          } else if (typeof item.surveySize === 'object') {
-                            sW = item.surveySize.width; sH = item.surveySize.height;
-                          }
-                        }
-                        if (sW == null && item.survey_width != null) sW = item.survey_width;
-                        if (sH == null && item.survey_height != null) sH = item.survey_height;
-                        if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
-                        if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
-                        const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
-                        if (hasSurveyDim) {
-                          const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
-                          const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
-                          sizeHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap"><span class="font-mono text-xs font-semibold">${dim}</span>${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
-                        } else {
-                          const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
-                          sizeHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
-                        }
-                      } else if (item.useOldSize) {
-                        sizeHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
-                      } else {
-                        sizeHtml = `<span class="font-mono text-xs font-semibold">${typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`}</span>`;
-                      }
-                    }
-                    const reqNote = isOther ? (item.otherContent || item.other_content || '-') : (item.note || item.notes || '-');
-                    return `
+      const isOther = item.type === 'Hạng mục khác' || String(item.type || '').toLowerCase().includes('khác');
+      const brandText = !isOther ? (item.brand || '-') : '-';
+      const actionText = !isOther ? (item.action || '-') : '-';
+      const polesText = !isOther ? (item.poles ? (item.poles + ' trụ') : '0 trụ') : '-';
+      const canEnterSurvey = (typeof currentSession !== 'undefined' && currentSession && (currentSession.role === 'qcag' || currentSession.role === 'admin')) || (typeof isQcagSession === 'function' && isQcagSession());
+      let sizeHtml = '-';
+      if (!isOther) {
+        if (item.survey) {
+          let sW = null, sH = null;
+          if (item.surveySize) {
+            if (typeof item.surveySize === 'string') {
+              try { const p = JSON.parse(item.surveySize); sW = p.width; sH = p.height; } catch (_) { }
+            } else if (typeof item.surveySize === 'object') {
+              sW = item.surveySize.width; sH = item.surveySize.height;
+            }
+          }
+          if (sW == null && item.survey_width != null) sW = item.survey_width;
+          if (sH == null && item.survey_height != null) sH = item.survey_height;
+          if (sW == null && item.width != null && parseFloat(item.width) > 0) sW = item.width;
+          if (sH == null && item.height != null && parseFloat(item.height) > 0) sH = item.height;
+          const hasSurveyDim = parseFloat(sW || 0) > 0 && parseFloat(sH || 0) > 0;
+          if (hasSurveyDim) {
+            const dim = typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(sW, sH) : `${sW}m x ${sH}m`;
+            const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Sửa kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+            sizeHtml = `<div class="inline-flex items-center gap-1.5 flex-wrap"><span class="font-mono text-xs font-semibold">${dim}</span>${editBtn}</div><span class="text-[10px] text-amber-500 font-semibold block">(KT khảo sát)</span>`;
+          } else {
+            const editBtn = canEnterSurvey ? ` <button class="qcag-survey-btn" onclick="event.stopPropagation(); qcagOpenSurveySizeModal(${idx})" title="Nhập kích thước khảo sát"><svg class="qcag-survey-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : '';
+            sizeHtml = `<div class="inline-flex items-center gap-1.5"><span class="qcag-survey-badge">Khảo sát</span>${editBtn}</div>`;
+          }
+        } else if (item.useOldSize) {
+          sizeHtml = '<span class="qcag-oldsize-badge">KT cũ</span>';
+        } else {
+          sizeHtml = `<span class="font-mono text-xs font-semibold">${typeof qcagFormatDimensionText === 'function' ? qcagFormatDimensionText(item.width, item.height) : `${parseFloat(item.width) || item.width}m x ${parseFloat(item.height) || item.height}m`}</span>`;
+        }
+      }
+      const reqNote = isOther ? (item.otherContent || item.other_content || '-') : (item.note || item.notes || '-');
+      return `
                       <tr class="hover:bg-gray-50/80 dark:hover:bg-gray-800/40 transition-colors">
                         <td class="py-2.5 px-3 text-center text-gray-400 font-mono">${idx + 1}</td>
                         <td class="py-2.5 px-3 font-semibold text-gray-900 dark:text-gray-100">${escapeHtml(getItemDisplayName(item))}</td>
@@ -919,7 +919,7 @@ async function showRequestDetail(id) {
                         <td class="py-2.5 px-3 text-gray-600 dark:text-gray-300 max-w-xs truncate" title="${escapeHtml(reqNote)}">${escapeHtml(reqNote)}</td>
                       </tr>
                     `;
-                  }).join('')}
+    }).join('')}
                 </tbody>
               </table>
             </div>
@@ -957,33 +957,33 @@ async function showRequestDetail(id) {
               </h3>
             </div>
             ${(() => {
-              if (scInfo.hasSignageContent) {
-                let inner = '';
-                if (scInfo.isOld) {
-                  inner += `
+        if (scInfo.hasSignageContent) {
+          let inner = '';
+          if (scInfo.isOld) {
+            inner += `
                     <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/40 text-xs font-semibold mb-2">
                       <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                       <span>Nội dung cũ</span>
                     </div>`;
-                  if (scInfo.oldExtra) {
-                    inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
-                  }
-                  if (scInfo.rawContent) {
-                    inner += `<div class="text-sm leading-relaxed whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</div>`;
-                  }
-                  if (scInfo.oldImgs && scInfo.oldImgs.length > 0) {
-                    inner += `
+            if (scInfo.oldExtra) {
+              inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
+            }
+            if (scInfo.rawContent) {
+              inner += `<div class="text-sm leading-relaxed whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</div>`;
+            }
+            if (scInfo.oldImgs && scInfo.oldImgs.length > 0) {
+              inner += `
                       <div class="flex flex-wrap gap-2 mt-2">
                         ${scInfo.oldImgs.map(img => `<img src="${img}" class="w-16 h-16 object-cover rounded-lg cursor-pointer border border-gray-200 dark:border-gray-700 hover:opacity-80 transition-opacity" onclick="showImageFull(this.src, false)">`).join('')}
                       </div>`;
-                  }
-                } else {
-                  inner = `<div class="text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-100">${escapeHtml(scInfo.rawContent)}</div>`;
-                }
-                return inner;
-              }
-              return `<div class="text-sm leading-relaxed whitespace-pre-wrap text-gray-400 dark:text-gray-500 italic">Hạng mục này không có nội dung</div>`;
-            })()}
+            }
+          } else {
+            inner = `<div class="text-sm leading-relaxed whitespace-pre-wrap text-gray-800 dark:text-gray-100">${escapeHtml(scInfo.rawContent)}</div>`;
+          }
+          return inner;
+        }
+        return `<div class="text-sm leading-relaxed whitespace-pre-wrap text-gray-400 dark:text-gray-500 italic">Hạng mục này không có nội dung</div>`;
+      })()}
           </div>
         </div>
 
@@ -1006,14 +1006,14 @@ async function showRequestDetail(id) {
               </div>
 
               ${designPrimaryImg ? (() => {
-                const isPendingEdit = Boolean(request.editingRequestedAt || request.isPendingEdit || (typeof getRequestDesignState === 'function' && getRequestDesignState(request) === 'editing') || (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(request)));
-                return `
+        const isPendingEdit = Boolean(request.editingRequestedAt || request.isPendingEdit || (typeof getRequestDesignState === 'function' && getRequestDesignState(request) === 'editing') || (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(request)));
+        return `
                 <div class="mq-display-card">
                   <div class="mq-display-frame mq-thumb-editing-wrap cursor-pointer" onclick="viewDesign('${request.__backendId}')" title="${isPendingEdit ? 'Đang chỉnh sửa - Nhấn để xem toàn màn hình' : 'Nhấn để xem toàn màn hình'}">
                     <img id="mqMainPreviewImg" src="${designPrimaryImg}" class="mq-display-img object-contain w-full h-[220px] rounded-lg bg-black/40 ${isPendingEdit ? 'mq-img-editing' : ''}" alt="Bản vẽ Maquette" onerror="_imgBrokenFallback(this)">
                     ${isPendingEdit ? `<span class="mq-editing-badge-overlay"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Đang chỉnh sửa</span>` : ''}
                   </div>`;
-              })() + `
+      })() + `
                   ${designImgs.length > 1 ? `
                     <div class="mq-thumbnails-row mt-2 flex gap-2 overflow-x-auto pb-1">
                       ${designImgs.map((img, idx) => `
@@ -1032,7 +1032,7 @@ async function showRequestDetail(id) {
             </div>
 
             ${(currentSession && String(currentSession.role || '').toLowerCase() === 'heineken') ? '' :
-            '<label class="w-full py-2.5 mt-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors">\n      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>\n      Upload thiết kế\n      <input type="file" accept="image/*" multiple class="hidden" onchange="uploadDesign(this)">\n    </label>'}
+        '<label class="w-full py-2.5 mt-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors">\n      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>\n      Upload thiết kế\n      <input type="file" accept="image/*" multiple class="hidden" onchange="uploadDesign(this)">\n    </label>'}
           </div>
 
           <div class="hk-detail-card rounded-xl p-4 flex flex-col justify-between">
@@ -1404,7 +1404,7 @@ async function showRequestDetail(id) {
   `;
 
   html += '</div>'; // close .detail-two-col
- 
+
   const content = document.getElementById('detailContent');
   if (content) {
     content.innerHTML = html;
@@ -1561,6 +1561,43 @@ function _resolveQcagStatus(q) {
 window._resolveQcagStatus = _resolveQcagStatus;
 
 /**
+ * Helper kiểm tra Báo giá hiện tại có phải là Báo giá cũ chưa được tính toán lại theo Maquette mới hay không.
+ * Xảy ra khi: Thiết kế QCAG vừa sửa MQ mới xong, nhưng Đội Báo giá ở App 1 chưa mở ra cập nhật/lưu lại giá mới.
+ */
+function _isQuoteOutdatedAfterMqRevision(req, q) {
+  if (!q) return false;
+  if (!req) {
+    if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest) req = currentDetailRequest;
+    else return false;
+  }
+  // 1. Cờ đánh dấu tường minh từ hệ thống
+  if (req.quotePendingRevision === true || req.quote_pending_revision === true || req.isQuotePendingRevision === true) {
+    return true;
+  }
+  // 2. Nhận diện theo lịch sử chỉnh sửa
+  const hasEditHistory = Boolean(
+    req.mqRevisedAt || req.mq_revised_at ||
+    req.lastEditCompletedAt || req.last_edit_completed_at ||
+    (Array.isArray(req.comments) && req.comments.some(c => c && (c.type === 'edit_request' || String(c.text || '').includes('chỉnh sửa') || String(c.text || '').includes('chinh sua')))) ||
+    (typeof req.comments === 'string' && (req.comments.includes('chỉnh sửa') || req.comments.includes('chinh sua')))
+  );
+
+  // 3. So sánh mốc thời gian sửa MQ và mốc lưu Báo giá
+  const mqTime = new Date(req.mqRevisedAt || req.mq_revised_at || req.lastEditCompletedAt || req.last_edit_completed_at || req.designUpdatedAt || req.design_updated_at || 0).getTime();
+  const quoteTime = new Date(q.updated_at || q.updatedAt || q.created_at || q.createdAt || 0).getTime();
+
+  if (hasEditHistory && mqTime > 0 && quoteTime > 0) {
+    // Nếu bản vẽ MQ được sửa sau thời điểm Báo giá được lưu ít nhất 15 giây
+    if (mqTime - quoteTime > 15000) {
+      return true;
+    }
+  }
+
+  return false;
+}
+window._isQuoteOutdatedAfterMqRevision = _isQuoteOutdatedAfterMqRevision;
+
+/**
  * _checkRequestLockState — Kiểm tra trạng thái khóa của yêu cầu khảo sát theo vòng đời đơn hàng / sản xuất.
  * Khi yêu cầu đã ra đơn hàng, đang sản xuất, hoặc hoàn thành thi công:
  * -> Khóa nút xóa yêu cầu (không cho hủy tự do khi vật tư đã xuất)
@@ -1688,7 +1725,7 @@ window._applyRequestLockUI = _applyRequestLockUI;
   // SWR: Tự động kích hoạt revalidate ngầm ngay khi app khởi động để kéo báo giá mới nhất
   setTimeout(() => {
     if (typeof _fetchApp1QuoteListWithCache === 'function') {
-      _fetchApp1QuoteListWithCache(true).catch(() => {});
+      _fetchApp1QuoteListWithCache(true).catch(() => { });
     }
   }, 500);
 })();
@@ -1740,13 +1777,13 @@ function _appendCommentToActiveChat(note, tkOrBid) {
     const safeName = String(note.authorName || 'Người gửi').replace(/</g, '&lt;');
     bubbleDiv.innerHTML =
       '<div class="qcag-chat-bubble">' +
-        '<div class="qcag-chat-bubble-top">' +
-          '<span class="qcag-chat-author-name">' + safeName + '</span>' +
-        '</div>' +
-        '<div class="qcag-chat-text">' + safeText + '</div>' +
-        '<div class="qcag-chat-bubble-footer">' +
-          '<span class="qcag-chat-bubble-time">Vừa xong</span>' +
-        '</div>' +
+      '<div class="qcag-chat-bubble-top">' +
+      '<span class="qcag-chat-author-name">' + safeName + '</span>' +
+      '</div>' +
+      '<div class="qcag-chat-text">' + safeText + '</div>' +
+      '<div class="qcag-chat-bubble-footer">' +
+      '<span class="qcag-chat-bubble-time">Vừa xong</span>' +
+      '</div>' +
       '</div>';
     mobileTimeline.appendChild(bubbleDiv);
     mobileTimeline.scrollTop = mobileTimeline.scrollHeight;
@@ -1799,7 +1836,7 @@ async function _ensureQuotationFullDetails(q, targetTk, targetQuoteCode) {
         q._fullDetailFetched = true;
         return q;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
 
   // 2. Tra cứu trong RAM cache xem đã có bản full chưa
@@ -1821,7 +1858,7 @@ async function _ensureQuotationFullDetails(q, targetTk, targetQuoteCode) {
     const app1Base = typeof _resolveApp1Base === 'function' ? _resolveApp1Base() : 'https://qcag-backend-493469512136.asia-southeast1.run.app';
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), 5000) : null;
-    
+
     // Ưu tiên /quotations/:id?by=code vì endpoint này luôn trả về bản ghi chi tiết với quotation_items chuẩn 3NF
     const fetchUrl = `${app1Base}/quotations/${encodeURIComponent(targetId)}?by=code${qCode ? '&quote_code=' + encodeURIComponent(qCode) : ''}${tk ? '&tk_code=' + encodeURIComponent(tk) : ''}`;
     const res = await fetch(fetchUrl, {
@@ -1912,7 +1949,7 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
   try {
     const localBase = (window.dataSdk && window.dataSdk._baseUrl) || '';
     const res = await fetch(`${localBase}/api/ks/quotations?${queryStr}`).catch(() => null)
-             || await fetch(`/quotations?${queryStr}`).catch(() => null);
+      || await fetch(`/quotations?${queryStr}`).catch(() => null);
     if (res && res.ok) {
       const data = await res.json().catch(() => null);
       if (Array.isArray(data) && data.length > 0) {
@@ -1921,7 +1958,7 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
         foundQuote = data;
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 
   // 3. Fallback sang App 1 backend qua B-Tree Index
   if (!foundQuote) {
@@ -1961,13 +1998,13 @@ async function _fetchTargetedQuoteByTk(tkCode, quoteCode, outletCode) {
             }
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
   }
 
   if (foundQuote) {
     if (typeof foundQuote.items === 'string') {
-      try { foundQuote.items = JSON.parse(foundQuote.items); } catch (_) {}
+      try { foundQuote.items = JSON.parse(foundQuote.items); } catch (_) { }
     }
     if (_isActualQuoteItems(foundQuote.items)) {
       foundQuote._fullDetailFetched = true;
@@ -2024,7 +2061,7 @@ async function _fetchApp1QuoteListWithCache(force = false) {
             sessionName = s.saleName || s.name || s.fullname || '';
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     try {
@@ -2220,7 +2257,7 @@ async function _loadBridgeStatus(backendId) {
 
     // Tự động kích hoạt nạp ngầm chi tiết vật tư đầy đủ về RAM nếu quoteData hiện tại là bản tóm tắt (Zero Lag khi click)
     if (!_isActualQuoteItems(quoteData.items)) {
-      _ensureQuotationFullDetails(quoteData, targetTk, targetQuoteCode).catch(() => {});
+      _ensureQuotationFullDetails(quoteData, targetTk, targetQuoteCode).catch(() => { });
     }
 
     const q = quoteData;
@@ -2230,6 +2267,15 @@ async function _loadBridgeStatus(backendId) {
     const totalStr = totalNum > 0 ? (totalNum.toLocaleString('vi-VN') + ' đ') : 'Chưa có tổng tiền';
     // Status badge determination (dùng hàm chung _resolveQcagStatus theo vòng đời quotation)
     const { label: statusLabel, cls: statusCls } = _resolveQcagStatus(q);
+
+    // Kiểm tra Báo giá có phải là bản cũ chưa cập nhật theo thiết kế Maquette mới nhất hay không
+    const isOutdated = _isQuoteOutdatedAfterMqRevision(req, q);
+    let displayStatusLabel = statusLabel;
+    let displayStatusCls = statusCls;
+    if (isOutdated) {
+      displayStatusLabel = 'Báo giá cũ (Chờ tính lại)';
+      displayStatusCls = 'hk-status-badge hk-status-amber bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/40 font-bold';
+    }
 
     // 1. Update Header Meta (Mã BG & Mã TK)
     if (headMetaEl) {
@@ -2267,12 +2313,24 @@ async function _loadBridgeStatus(backendId) {
       <div class="space-y-2 text-sm">
         <div class="quote-bridge-row flex items-center justify-between gap-3 min-w-0">
           <span class="quote-bridge-label text-xs font-semibold flex-shrink-0">Trạng thái QCAG:</span>
-          <span class="quote-bridge-status-badge inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-md border ${statusCls} text-center leading-snug whitespace-nowrap overflow-hidden truncate max-w-[65%]">${ksEscapeHtml(statusLabel)}</span>
+          <span class="quote-bridge-status-badge inline-flex items-center px-2 py-0.5 text-[11px] font-bold rounded-md border ${displayStatusCls} text-center leading-snug whitespace-nowrap overflow-hidden truncate max-w-[65%]">${ksEscapeHtml(displayStatusLabel)}</span>
         </div>
         <div class="quote-bridge-row flex items-center justify-between gap-3">
           <span class="quote-bridge-label text-xs font-semibold">Tổng tiền báo giá:</span>
-          <span class="quote-bridge-amount text-[15px] font-bold font-numeric">${ksEscapeHtml(totalStr)}</span>
+          <div class="text-right">
+            <span class="quote-bridge-amount text-[15px] font-bold font-numeric ${isOutdated ? 'opacity-60 line-through text-slate-500 dark:text-slate-400' : ''}">${ksEscapeHtml(totalStr)}</span>
+            ${isOutdated ? '<span class="text-[10.5px] font-semibold text-amber-600 dark:text-amber-400 block mt-0.5 leading-tight">Chưa tính lại cho MQ mới</span>' : ''}
+          </div>
         </div>
+        ${isOutdated ? `
+          <div class="mt-2 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/30 flex items-start gap-2 text-xs text-amber-900 dark:text-amber-200">
+            <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <div class="leading-snug">
+              <div class="font-bold">Báo giá trên là của bản thiết kế cũ</div>
+              <div class="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">QCAG đã cập nhật bản vẽ MQ mới và đang tính lại chi phí. Vui lòng chờ báo giá mới.</div>
+            </div>
+          </div>
+        ` : ''}
         ${q.spo_number ? `
           <div class="quote-bridge-spo-row flex items-center justify-between text-xs pt-2 border-t">
             <span class="quote-bridge-spo-label">SPO #: <strong class="quote-bridge-spo-val font-bold">${ksEscapeHtml(q.spo_number)}</strong></span>
@@ -2304,11 +2362,11 @@ window._quoteDataMap = window._quoteDataMap || {};
 async function openFullMobileQuoteModal(backendId, directQuoteData) {
   let req = (typeof allRequests !== 'undefined' && Array.isArray(allRequests))
     ? allRequests.find(r => r && (
-        (backendId && String(r.__backendId || '') === String(backendId)) ||
-        (backendId && String(r.id || '') === String(backendId)) ||
-        (backendId && r.tkCode && String(r.tkCode).toLowerCase() === String(backendId).toLowerCase()) ||
-        (backendId && r.tk_code && String(r.tk_code).toLowerCase() === String(backendId).toLowerCase())
-      ))
+      (backendId && String(r.__backendId || '') === String(backendId)) ||
+      (backendId && String(r.id || '') === String(backendId)) ||
+      (backendId && r.tkCode && String(r.tkCode).toLowerCase() === String(backendId).toLowerCase()) ||
+      (backendId && r.tk_code && String(r.tk_code).toLowerCase() === String(backendId).toLowerCase())
+    ))
     : (typeof currentDetailRequest !== 'undefined' ? currentDetailRequest : null);
   if (!req && window._dv_currentDesignReq) {
     req = window._dv_currentDesignReq;
@@ -2480,7 +2538,7 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
           if (fullQ.items) {
             if (Array.isArray(fullQ.items)) items = fullQ.items;
             else if (typeof fullQ.items === 'string') {
-              try { items = JSON.parse(fullQ.items); } catch (_) {}
+              try { items = JSON.parse(fullQ.items); } catch (_) { }
             }
           }
           if (fullQ.total_amount && !q.total_amount) q.total_amount = fullQ.total_amount;
@@ -2551,6 +2609,25 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
 
   // Status badge determination (dùng hàm chung _resolveQcagStatus theo vòng đời quotation)
   const { label: statusLabel, cls: statusCls } = _resolveQcagStatus(q);
+
+  // Kiểm tra Báo giá có phải là bản cũ chưa cập nhật theo thiết kế Maquette mới nhất hay không
+  const isOutdatedModal = _isQuoteOutdatedAfterMqRevision(req, q);
+  let modalDisplayStatusLabel = statusLabel;
+  let modalDisplayStatusCls = statusCls;
+  if (isOutdatedModal) {
+    modalDisplayStatusLabel = 'Báo giá cũ (Chờ tính lại)';
+    modalDisplayStatusCls = 'hk-status-badge hk-status-amber bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/40 font-bold';
+  }
+
+  const outdatedBannerHtml = isOutdatedModal ? `
+    <div class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-2.5 mb-3.5 shadow-sm">
+      <svg class="w-4 h-4 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      <div>
+        <div class="font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">LƯU Ý: ĐÂY LÀ BÁO GIÁ CỦA THIẾT KẾ CŨ</div>
+        <div class="text-[11.5px] text-slate-700 dark:text-slate-300 mt-0.5 leading-relaxed">Các hạng mục, kích thước và đơn giá dưới đây thuộc bản thiết kế cũ. QCAG đã cập nhật bản vẽ MQ mới và đang tiến hành tính toán lại chi phí.</div>
+      </div>
+    </div>
+  ` : '';
 
   const tableRowsHtml = items.map((it, idx) => {
     const codeStr = it.code ? `${it.code}` : `${idx + 1}`;
@@ -2780,18 +2857,18 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
         <!-- Sticky Bottom Bar Desktop (Chỉ còn 2 nút bấm thao tác góc phải) -->
         <div class="mobile-quote-bottom-bar flex items-center justify-end gap-3 px-5 lg:px-6 py-3 flex-shrink-0 border-t">
           ${(() => {
-            const lock = _checkRequestLockState(req || currentDetailRequest);
-            if (lock.isProduced) {
-              return `<button type="button" disabled class="py-2.5 px-5 rounded-xl full-mqm-edit-btn text-xs font-bold inline-flex items-center gap-2 shadow-sm w-auto flex-initial" title="${ksEscapeHtml(lock.reason)}">
+      const lock = _checkRequestLockState(req || currentDetailRequest);
+      if (lock.isProduced) {
+        return `<button type="button" disabled class="py-2.5 px-5 rounded-xl full-mqm-edit-btn text-xs font-bold inline-flex items-center gap-2 shadow-sm w-auto flex-initial" title="${ksEscapeHtml(lock.reason)}">
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                 <span>${ksEscapeHtml(lock.label || 'Đã ra đơn')}</span>
               </button>`;
-            }
-            return `<button onclick="window._editRequestOrigin='quote_modal'; openEditRequestSheet();" class="py-2.5 px-5 rounded-xl full-mqm-edit-btn text-xs font-bold active:scale-95 transition-all inline-flex items-center gap-2 shadow-md w-auto flex-initial">
+      }
+      return `<button onclick="window._editRequestOrigin='quote_modal'; openEditRequestSheet();" class="py-2.5 px-5 rounded-xl full-mqm-edit-btn text-xs font-bold active:scale-95 transition-all inline-flex items-center gap-2 shadow-md w-auto flex-initial">
               <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
               <span>Yêu cầu chỉnh sửa</span>
             </button>`;
-          })()}
+    })()}
           <button onclick="closeFullMobileQuoteModal()" class="py-2.5 px-6 rounded-xl full-mqm-close-btn text-xs font-bold active:scale-95 transition-all shadow-sm w-auto flex-initial">
             <span>Đóng</span>
           </button>
@@ -2866,20 +2943,20 @@ async function openFullMobileQuoteModal(backendId, directQuoteData) {
       <!-- Bottom Bar Mobile -->
       <div class="full-mqm-bottom-bar border-t flex items-center justify-center p-3 flex-shrink-0">
         ${(() => {
-          const lock = _checkRequestLockState(req || currentDetailRequest);
-          if (lock.isProduced) {
-            return `<button type="button" disabled class="full-mqm-edit-btn w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm" title="${ksEscapeHtml(lock.reason)}">
+    const lock = _checkRequestLockState(req || currentDetailRequest);
+    if (lock.isProduced) {
+      return `<button type="button" disabled class="full-mqm-edit-btn w-full py-3.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-sm" title="${ksEscapeHtml(lock.reason)}">
               <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
               <span>${ksEscapeHtml(lock.label || 'Đã ra đơn')}</span>
             </button>`;
-          }
-          return `<button onclick="window._editRequestOrigin='quote_modal'; openEditRequestSheet();" class="full-mqm-edit-btn w-full py-3.5 px-4 rounded-xl text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md">
+    }
+    return `<button onclick="window._editRequestOrigin='quote_modal'; openEditRequestSheet();" class="full-mqm-edit-btn w-full py-3.5 px-4 rounded-xl text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2 shadow-md">
             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
               <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
             </svg>
             <span>Yêu cầu chỉnh sửa</span>
           </button>`;
-        })()}
+  })()}
       </div>
     </div>
   `;
@@ -3552,19 +3629,19 @@ async function uploadDesign(input) {
             saleCode: requesterSaleCode,
           })
         })
-        .then(function (r) { return r && r.ok ? r.json() : null; })
-        .then(function (res) {
-          if (res && res.ok) {
-            const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
-            if (res.sent > 0) {
-              showToast(`Đã tải lên thiết kế • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
-            } else {
-              showToast('Đã tải lên thiết kế • Sale chưa kích hoạt nhận thông báo', 'done', 4000);
+          .then(function (r) { return r && r.ok ? r.json() : null; })
+          .then(function (res) {
+            if (res && res.ok) {
+              const devText = res.sent > 1 ? ` (${res.sent} thiết bị)` : '';
+              if (res.sent > 0) {
+                showToast(`Đã tải lên thiết kế • Đã gửi thông báo tới Sale${devText}`, 'done', 3500);
+              } else {
+                showToast('Đã tải lên thiết kế • Sale chưa kích hoạt nhận thông báo', 'done', 4000);
+              }
             }
-          }
-        })
-        .catch(function (e) { console.warn('[push/uploadDesign]', e); });
-      } catch (_) {}
+          })
+          .catch(function (e) { console.warn('[push/uploadDesign]', e); });
+      } catch (_) { }
     } else {
       hideLoadingOverlay();
       showToast('Không thể tải lên thiết kế', 'error');
@@ -3974,7 +4051,7 @@ function showImageFull(srcOrArray, showContent = true, startIndex = 0) {
   }
 
   const isQcag = (typeof isQCAGSession === 'function' && isQCAGSession()) ||
-                 (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag');
+    (typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'qcag');
   const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
   const isHeinekenRole = typeof currentSession !== 'undefined' && currentSession && String(currentSession.role || '').toLowerCase() === 'heineken';
 
@@ -4716,11 +4793,11 @@ async function handleEditRequestImagePick(input) {
           reader.readAsDataURL(file);
         });
         if (dataUrl) _editRequestPendingImages.push(dataUrl);
-      } catch (e) {}
+      } catch (e) { }
     }
   }
   _renderEditRequestImgPreview();
-  try { input.value = ''; } catch (_) {}
+  try { input.value = ''; } catch (_) { }
 }
 
 function attachEditRequestPaste() {
