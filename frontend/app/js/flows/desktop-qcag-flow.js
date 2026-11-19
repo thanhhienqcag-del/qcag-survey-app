@@ -1698,6 +1698,7 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     });
   }
 
+  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -1708,6 +1709,16 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     comments: JSON.stringify(comments),
     updatedAt: now
   };
+  if (isCurrentlyPendingEdit) {
+    updated.subStatus = 'pending_edit';
+    updated.sub_status = 'pending_edit';
+    updated.hasEditRequest = true;
+    updated.isEditPending = true;
+    updated.status = 'processing';
+    if (currentDetailRequest.editingRequestedAt) updated.editingRequestedAt = currentDetailRequest.editingRequestedAt;
+    if (currentDetailRequest.editing_requested_at) updated.editing_requested_at = currentDetailRequest.editing_requested_at;
+    updated._mqReplacedDuringEdit = Boolean(currentDetailRequest._mqReplacedDuringEdit);
+  }
   if (typeof assignStandardTags === 'function') updated.standardTags = assignStandardTags(updated);
 
   // Optimistic UI: Cập nhật RAM state, cache và làm tươi DOM bảng hạng mục ngay lập tức
@@ -2258,6 +2269,7 @@ async function qcagDesktopConfirmEditItemsModal() {
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${subType ? ' - ' + subType : ''}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now });
 
+  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -2268,6 +2280,16 @@ async function qcagDesktopConfirmEditItemsModal() {
     comments: JSON.stringify(comments),
     updatedAt: now
   };
+  if (isCurrentlyPendingEdit) {
+    updated.subStatus = 'pending_edit';
+    updated.sub_status = 'pending_edit';
+    updated.hasEditRequest = true;
+    updated.isEditPending = true;
+    updated.status = 'processing';
+    if (currentDetailRequest.editingRequestedAt) updated.editingRequestedAt = currentDetailRequest.editingRequestedAt;
+    if (currentDetailRequest.editing_requested_at) updated.editing_requested_at = currentDetailRequest.editing_requested_at;
+    updated._mqReplacedDuringEdit = Boolean(currentDetailRequest._mqReplacedDuringEdit);
+  }
   if (typeof assignStandardTags === 'function') updated.standardTags = assignStandardTags(updated);
 
   // Close modal and apply Optimistic UI immediately
@@ -2314,6 +2336,7 @@ async function qcagDesktopRemoveItem(index) {
   const now = new Date().toISOString();
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Đã xóa hạng mục số ${index + 1} (${itemLabel})`, createdAt: now });
 
+  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -2324,6 +2347,16 @@ async function qcagDesktopRemoveItem(index) {
     comments: JSON.stringify(comments),
     updatedAt: now
   };
+  if (isCurrentlyPendingEdit) {
+    updated.subStatus = 'pending_edit';
+    updated.sub_status = 'pending_edit';
+    updated.hasEditRequest = true;
+    updated.isEditPending = true;
+    updated.status = 'processing';
+    if (currentDetailRequest.editingRequestedAt) updated.editingRequestedAt = currentDetailRequest.editingRequestedAt;
+    if (currentDetailRequest.editing_requested_at) updated.editing_requested_at = currentDetailRequest.editing_requested_at;
+    updated._mqReplacedDuringEdit = Boolean(currentDetailRequest._mqReplacedDuringEdit);
+  }
   if (typeof assignStandardTags === 'function') updated.standardTags = assignStandardTags(updated);
 
   // Optimistic UI: Cập nhật RAM state, cache và làm tươi DOM bảng hạng mục ngay lập tức
@@ -3623,10 +3656,24 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
     // Chống chồng chéo luồng nghiệp vụ: Nếu thao tác không phải là bấm nút Hoàn thành / Đã chỉnh sửa (_isExplicitStatusConfirm),
     // loại bỏ các trường trạng thái/chỉnh sửa không thay đổi so với snapshot để không vô tình xóa cờ pending_edit hoặc sinh log edit-resolved
     if (patchToSend._isExplicitStatusConfirm !== true) {
-      const STATUS_GUARD_FIELDS = ['status', 'subStatus', 'sub_status', 'editingRequestedAt', 'editing_requested_at', 'hasEditRequest', 'isEditPending', 'processedAt', 'processed_at'];
-      for (const sf of STATUS_GUARD_FIELDS) {
-        if (sf in patchToSend && baseSnapshot && patchToSend[sf] === baseSnapshot[sf]) {
-          delete patchToSend[sf];
+      delete patchToSend.processedAt;
+      delete patchToSend.processed_at;
+      delete patchToSend._isExplicitStatusConfirm;
+
+      const isPending = (baseSnapshot && qcagDesktopIsPendingEditRequest(baseSnapshot)) || qcagDesktopIsPendingEditRequest(updated);
+      if (isPending) {
+        // Đang trong tiến trình chỉnh sửa: BẮT BUỘC giữ vững cờ pending_edit và status = 'processing'
+        patchToSend.status = 'processing';
+        patchToSend.subStatus = 'pending_edit';
+        patchToSend.sub_status = 'pending_edit';
+        patchToSend.hasEditRequest = true;
+        patchToSend.isEditPending = true;
+      } else {
+        const STATUS_GUARD_FIELDS = ['status', 'subStatus', 'sub_status', 'editingRequestedAt', 'editing_requested_at', 'hasEditRequest', 'isEditPending'];
+        for (const sf of STATUS_GUARD_FIELDS) {
+          if (sf in patchToSend && baseSnapshot && patchToSend[sf] === baseSnapshot[sf]) {
+            delete patchToSend[sf];
+          }
         }
       }
       // Nếu thao tác không thay đổi ảnh MQ thiết kế (designImages đã bị strip),

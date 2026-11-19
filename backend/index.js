@@ -3443,15 +3443,15 @@ const KS_REQUESTS_SELECT_SQL = `
         ELSE NULL::timestamptz
       END AS editing_requested_at,
       CASE
-        WHEN (d_lat.created_at IS NOT NULL OR dt.created_at IS NOT NULL OR dt.designer_id IS NOT NULL)
+        WHEN d_lat.created_at IS NOT NULL
         THEN true
         ELSE false
       END AS has_had_design,
       r.mq_folder,
       r.created_at,
       r.updated_at,
-      COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
-      COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
+      CASE WHEN d_lat.created_at IS NOT NULL THEN COALESCE(u_des_d.fullname, u_des.fullname, d_lat.created_by, '') ELSE '' END AS design_created_by,
+      d_lat.created_at AS design_created_at,
       COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
       CASE 
         WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
@@ -3546,6 +3546,7 @@ const KS_REQUESTS_SELECT_SQL = `
       WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+        AND (d_lat.created_at IS NULL OR n.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
@@ -3694,15 +3695,15 @@ const KS_REQUESTS_LITE_SQL = `
         ELSE NULL::timestamptz
       END AS editing_requested_at,
       CASE
-        WHEN (d_lat.created_at IS NOT NULL OR dt.created_at IS NOT NULL OR dt.designer_id IS NOT NULL)
+        WHEN d_lat.created_at IS NOT NULL
         THEN true
         ELSE false
       END AS has_had_design,
       r.mq_folder,
       r.created_at,
       r.updated_at,
-      COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
-      COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
+      CASE WHEN d_lat.created_at IS NOT NULL THEN COALESCE(u_des_d.fullname, u_des.fullname, d_lat.created_by, '') ELSE '' END AS design_created_by,
+      d_lat.created_at AS design_created_at,
       COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
       CASE 
         WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
@@ -3782,6 +3783,7 @@ const KS_REQUESTS_LITE_SQL = `
       WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
         AND n.note_type IN ('edit-request', 'edit_request')
         AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+        AND (d_lat.created_at IS NULL OR n.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
@@ -4634,7 +4636,6 @@ async function getRequestDetailDirect(idOrTkCode) {
                     AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
                   )
                 )
-                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN 'processing'::varchar(32)
               WHEN COALESCE(r.status, '') IN ('pending', 'processing') AND q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> '' 
               THEN 'quoted'::varchar(32) 
@@ -4655,7 +4656,6 @@ async function getRequestDetailDirect(idOrTkCode) {
                     AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
                   )
                 )
-                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN COALESCE(NULLIF(r.sub_status, ''), 'pending_edit')::varchar(32)
               WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
               THEN NULL::varchar(32)
@@ -4676,7 +4676,6 @@ async function getRequestDetailDirect(idOrTkCode) {
                     AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
                   )
                 )
-                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN COALESCE(NULLIF(r.sub_status, ''), 'pending_edit')::varchar(32)
               WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
               THEN NULL::varchar(32)
@@ -4697,7 +4696,6 @@ async function getRequestDetailDirect(idOrTkCode) {
                     AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
                   )
                 )
-                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.updated_at)
               ELSE NULL::timestamptz
             END AS editing_requested_at,
@@ -4819,6 +4817,7 @@ async function getRequestDetailDirect(idOrTkCode) {
           WHERE n.ref_id IN (r.tk_code, r.id, q_lat.quote_code)
             AND n.note_type IN ('edit-request', 'edit_request')
             AND (n_res.created_at IS NULL OR n.created_at > n_res.created_at)
+            AND (d_lat.created_at IS NULL OR n.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
           ORDER BY n.created_at ASC
           LIMIT 1
         ) n_edit_first ON true
@@ -4976,31 +4975,49 @@ async function getRequestDetailDirect(idOrTkCode) {
     row.comments = JSON.stringify(noteRows || []);
 
     // Accurately compute editing_requested_at and has_had_design
-    let editingRequestedAt = null;
-    if (Array.isArray(noteRows) && noteRows.length > 0) {
-        let lastEditIdx = -1;
-        let lastResIdx = -1;
-        for (let i = 0; i < noteRows.length; i++) {
-            const nt = String(noteRows[i].commentType || '').toLowerCase();
-            if (nt === 'edit-request' || nt === 'edit_request') lastEditIdx = i;
-            if (nt === 'edit-resolved' || nt === 'edit-done') lastResIdx = i;
-        }
-        if (lastEditIdx !== -1 && (lastResIdx === -1 || lastEditIdx > lastResIdx)) {
-            let firstEditAfterRes = noteRows[lastEditIdx];
-            for (let i = (lastResIdx === -1 ? 0 : lastResIdx + 1); i <= lastEditIdx; i++) {
-                const nt = String(noteRows[i].commentType || '').toLowerCase();
-                if (nt === 'edit-request' || nt === 'edit_request') {
-                    firstEditAfterRes = noteRows[i];
-                    break;
-                }
-            }
-            editingRequestedAt = firstEditAfterRes ? (firstEditAfterRes.createdAt || firstEditAfterRes.created_at) : null;
-        }
-    }
     const latestDesignTs = (designRows && designRows.length > 0 && (designRows[0].updated_at || designRows[0].created_at))
         ? (designRows[0].updated_at || designRows[0].created_at)
         : row.design_updated_at;
     if (latestDesignTs) row.design_updated_at = latestDesignTs;
+
+    let editingRequestedAt = null;
+    if (Array.isArray(noteRows) && noteRows.length > 0) {
+        // Tìm mốc giải quyết gần nhất: hoặc note edit-resolved, hoặc thiết kế mới nhất
+        let lastResTime = 0;
+        for (let i = 0; i < noteRows.length; i++) {
+            const nt = String(noteRows[i].commentType || noteRows[i].note_type || noteRows[i].type || '').toLowerCase();
+            if (nt === 'edit-resolved' || nt === 'edit-done') {
+                const t = new Date(noteRows[i].createdAt || noteRows[i].created_at).getTime();
+                if (t > lastResTime) lastResTime = t;
+            }
+        }
+        if (latestDesignTs) {
+            const dtTime = new Date(latestDesignTs).getTime();
+            if (dtTime > lastResTime) lastResTime = dtTime;
+        }
+
+        // Lấy tất cả các note yêu cầu sửa phát sinh SAU mốc giải quyết gần nhất
+        const editNotesAfterRes = [];
+        for (let i = 0; i < noteRows.length; i++) {
+            const nt = String(noteRows[i].commentType || noteRows[i].note_type || noteRows[i].type || '').toLowerCase();
+            if (nt === 'edit-request' || nt === 'edit_request') {
+                const t = new Date(noteRows[i].createdAt || noteRows[i].created_at).getTime();
+                if (t > lastResTime) {
+                    editNotesAfterRes.push(noteRows[i]);
+                }
+            }
+        }
+
+        // Luôn lấy tin nhắn sửa ĐẦU TIÊN của chu kỳ này
+        if (editNotesAfterRes.length > 0) {
+            editNotesAfterRes.sort((a, b) => {
+                const ta = new Date(a.createdAt || a.created_at).getTime();
+                const tb = new Date(b.createdAt || b.created_at).getTime();
+                return ta - tb;
+            });
+            editingRequestedAt = editNotesAfterRes[0].createdAt || editNotesAfterRes[0].created_at;
+        }
+    }
     // Chặn trường hợp đơn đã xong và đã cập nhật thiết kế / báo giá sau mốc yêu cầu sửa
     const finalEditAt = row.editing_requested_at || editingRequestedAt;
     if (finalEditAt) {
@@ -5021,7 +5038,7 @@ async function getRequestDetailDirect(idOrTkCode) {
     } else {
         row.editing_requested_at = null;
     }
-    row.has_had_design = Boolean((designRows && designRows.length > 0) || row.design_created_at || row.design_created_by);
+    row.has_had_design = Boolean(designRows && designRows.length > 0);
     row.has_pending_survey = (finalItems || []).some(it => {
         if (!it || it.type === 'Hạng mục khác') return false;
         const isOldSize = Boolean(it.useOldSize || it.use_old_size);
@@ -6148,9 +6165,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         }
         const isExplicitEditClear = Boolean(
             b._isExplicitStatusConfirm === true ||
-            b.subStatus === null ||
-            b.sub_status === null ||
-            (b.status === 'done' && ('processedAt' in b || 'processed_at' in b))
+            (b.subStatus === null && b.sub_status === null) ||
+            b.clearEditStatus === true
         );
         if (isExplicitEditClear) {
             fields.push('sub_status = NULL');
@@ -6309,10 +6325,9 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
         }
 
         // Tự động bảo vệ Zero-Trust cho luồng chỉnh sửa MQ:
-        // Chỉ tạo note edit-resolved khi user chủ động bấm nút Hoàn thành / Đã chỉnh sửa (_isExplicitStatusConfirm === true hoặc truyền processedAt + xóa cờ edit)
+        // Chỉ tạo note edit-resolved khi user chủ động bấm nút Hoàn thành / Đã chỉnh sửa (_isExplicitStatusConfirm === true)
         const isConfirmingEdit = Boolean(
-            b._isExplicitStatusConfirm === true ||
-            (b.status === 'done' && ('processedAt' in b || 'processed_at' in b) && (b.hasEditRequest === false || b.isEditPending === false || b.editingRequestedAt === null))
+            b._isExplicitStatusConfirm === true
         );
         if (isConfirmingEdit) {
             try {

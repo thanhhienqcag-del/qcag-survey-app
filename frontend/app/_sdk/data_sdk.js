@@ -1475,6 +1475,17 @@
             if (prevInStore.designImages) savedRecord.designImages = prevInStore.designImages;
             if (prevInStore.designFilename) savedRecord.designFilename = prevInStore.designFilename;
           }
+          // Preserve pending edit state if update was not explicit status confirmation
+          var wasPending = prevInStore.subStatus === 'pending_edit' || prevInStore.sub_status === 'pending_edit' || prevInStore.hasEditRequest || prevInStore.isEditPending;
+          if (wasPending) {
+            savedRecord.subStatus = 'pending_edit';
+            savedRecord.sub_status = 'pending_edit';
+            savedRecord.hasEditRequest = true;
+            savedRecord.isEditPending = true;
+            savedRecord.status = 'processing';
+            if (prevInStore.editingRequestedAt) savedRecord.editingRequestedAt = prevInStore.editingRequestedAt;
+            if (prevInStore.editing_requested_at) savedRecord.editing_requested_at = prevInStore.editing_requested_at;
+          }
         }
         if (idx !== -1) _store[idx] = savedRecord;
         else _store.push(savedRecord);

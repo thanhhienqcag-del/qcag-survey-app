@@ -670,6 +670,8 @@ function qcagGetWaitBadgeInfo(req) {
     : (() => {
         if (!req || req.hasEditRequest === false || req.isEditPending === false) return false;
         const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
+        const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
+        if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') return true;
         if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') return true;
         if (req.editingRequestedAt || req.editing_requested_at) return true;
         return false;
@@ -680,45 +682,67 @@ function qcagGetWaitBadgeInfo(req) {
   let editTime = null;
 
   try {
+    // 1. Xác định chính xác xem đã từng có ít nhất 1 lần thiết kế hoàn thành hay chưa (không dựa vào task phân công)
+    let designImgs = [];
+    try {
+      const rawImgs = req.designImages || req.design_images;
+      designImgs = Array.isArray(rawImgs) ? rawImgs : (typeof rawImgs === 'string' && rawImgs.trim() ? JSON.parse(rawImgs) : []);
+    } catch (_) {}
+    const hasValidDesignImgs = Array.isArray(designImgs) && designImgs.some(u => u && typeof u === 'string' && !u.startsWith('["') && !u.includes('placeholder'));
+    const hasOldDesigns = (Array.isArray(req.oldDesigns) && req.oldDesigns.length > 0) || (Array.isArray(req.old_designs) && req.old_designs.length > 0);
+
+    hasHadDesign = Boolean(
+      req.hasHadDesign || req.has_had_design ||
+      hasValidDesignImgs ||
+      hasOldDesigns
+    );
+
+    // 2. Tìm thời điểm yêu cầu sửa đầu tiên của đợt này (nếu có)
     if (isPendingEdit) {
-      let designImgs = [];
-      try {
-        const rawImgs = req.designImages || req.design_images;
-        designImgs = Array.isArray(rawImgs) ? rawImgs : (typeof rawImgs === 'string' && rawImgs.trim() ? JSON.parse(rawImgs) : []);
-      } catch (_) {}
-
-      hasHadDesign = Boolean(
-        req.hasHadDesign || req.has_had_design ||
-        req.designCreatedAt || req.design_created_at ||
-        req.designCreatedBy || req.design_created_by ||
-        (Array.isArray(designImgs) && designImgs.length > 0)
-      );
-
       editTime = req.editingRequestedAt || req.editing_requested_at;
       // Fallback: nếu chưa có editingRequestedAt nhưng trong comments có note sửa
       if (!editTime && req.comments) {
         try {
           const parsedComments = Array.isArray(req.comments) ? req.comments : JSON.parse(req.comments || '[]');
           if (Array.isArray(parsedComments) && parsedComments.length > 0) {
-            const editComments = parsedComments.filter(c => c && (
-              c.type === 'edit-request' || c.type === 'edit_request' ||
-              c.commentType === 'edit-request' || c.commentType === 'edit_request' ||
-              (c.content && String(c.content).includes('yêu cầu sửa'))
-            ));
+            // Mốc giải quyết gần nhất: note edit-resolved hoặc thời điểm thiết kế MQ gần nhất
+            let lastResTime = 0;
+            parsedComments.forEach(c => {
+              const nt = String(c.commentType || c.note_type || c.type || '').toLowerCase();
+              if (nt === 'edit-resolved' || nt === 'edit-done') {
+                const t = new Date(c.createdAt || c.created_at).getTime();
+                if (t > lastResTime) lastResTime = t;
+              }
+            });
+            const dTime = new Date(req.designUpdatedAt || req.design_updated_at || req.designCreatedAt || req.design_created_at || 0).getTime();
+            if (dTime > lastResTime) lastResTime = dTime;
+
+            const editComments = parsedComments.filter(c => {
+              if (!c) return false;
+              const nt = String(c.commentType || c.note_type || c.type || '').toLowerCase();
+              const isEditType = nt === 'edit-request' || nt === 'edit_request' || (c.content && String(c.content).includes('yêu cầu sửa'));
+              if (!isEditType) return false;
+              const t = new Date(c.createdAt || c.created_at).getTime();
+              return t > lastResTime;
+            });
+
             if (editComments.length > 0) {
-              editTime = editComments[editComments.length - 1].createdAt || editComments[editComments.length - 1].created_at;
+              // Sắp xếp tăng dần theo thời gian để LUÔN LẤY TIN NHẮN SỬA ĐẦU TIÊN CỦA CHU KỲ NÀY
+              editComments.sort((a, b) => new Date(a.createdAt || a.created_at).getTime() - new Date(b.createdAt || b.created_at).getTime());
+              editTime = editComments[0].createdAt || editComments[0].created_at;
             }
           }
         } catch (_) {}
       }
+    }
 
-      if (editTime) {
-        // Đang có yêu cầu sửa: tính từ ngày yêu cầu sửa của đợt này
-        dateRef = editTime;
-      } else {
-        // Chưa có mốc thời gian sửa: tính từ ngày tạo request ban đầu
-        dateRef = req.createdAt || req.created_at;
-      }
+    // 3. Quy chuẩn đếm ngày chuẩn xác:
+    // - Nếu ĐÃ CÓ ít nhất 1 lần thiết kế VÀ đang có yêu cầu sửa: tính từ ngày gửi yêu cầu sửa đầu tiên
+    // - Nếu CHƯA CÓ thiết kế nào: BẮT BUỘC tính từ ngày gửi yêu cầu ban đầu (req.createdAt), không tính từ ngày sửa
+    if (isPendingEdit && hasHadDesign && editTime) {
+      dateRef = editTime;
+    } else {
+      dateRef = req.createdAt || req.created_at;
     }
 
     if (!dateRef) return null;
@@ -739,10 +763,13 @@ function qcagGetWaitBadgeInfo(req) {
     const waitDays = calcDaysFn(dateRef);
     const waitColor = waitDays <= 1 ? 'wait-green' : (waitDays <= 3 ? 'wait-orange' : 'wait-red');
     const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : (waitDays + ' ngày'));
-    const editSepHtml = isPendingEdit ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
-    const waitTitle = isPendingEdit
-      ? (editTime ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên' : 'Chờ thiết kế từ ngày tạo yêu cầu')
-      : 'Thời gian chờ xử lý';
+
+    // Chỉ hiển thị tag | SỬA khi ĐÃ CÓ thiết kế trước đó và đang chờ sửa lại thiết kế
+    const showEditTag = Boolean(isPendingEdit && hasHadDesign);
+    const editSepHtml = showEditTag ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
+    const waitTitle = showEditTag
+      ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên'
+      : (isPendingEdit ? 'Chưa có thiết kế - Đếm ngày từ lúc gửi yêu cầu ban đầu' : 'Thời gian chờ xử lý');
 
     const escapeFn = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, ''));
 
