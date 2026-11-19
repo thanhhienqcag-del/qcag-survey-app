@@ -149,13 +149,75 @@ function showAccount() {
 
 // ── Form tab switching ────────────────────────────────────────────────
 
-function switchTab(tab) {
+async function switchTab(tab) {
+  // Chặn tuyệt đối nếu chuyển sang Tab 2 hoặc Tab 3 khi outlet ở Tab 1 đang bị trùng chưa ra đơn!
+  if (tab === 2 || tab === 3) {
+    if (typeof duplicateOutletState !== 'undefined' && duplicateOutletState && duplicateOutletState.mode === 'pending') {
+      if (typeof showDuplicateOutletModal === 'function') {
+        showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+      }
+      if (typeof showToast === 'function') {
+        showToast('Điểm bán đang có yêu cầu chưa ra đơn! Không thể chuyển bước.');
+      }
+      return;
+    }
+    if (typeof otherOutletState !== 'undefined' && otherOutletState && !window.userConfirmedTakeover) {
+      if (typeof showOtherOutletModal === 'function') {
+        showOtherOutletModal(otherOutletState.matches || []);
+      }
+      if (typeof showToast === 'function') {
+        showToast('Điểm bán thuộc Sale khác! Vui lòng xác nhận chuyển quyền.');
+      }
+      return;
+    }
+
+    // Nếu ô outletCode có 8 chữ số nhưng chưa kiểm tra khóa trùng: Bắt buộc await kiểm tra trước khi cho chuyển Tab
+    const ocEl = document.getElementById('outletCode');
+    const curCode = ocEl ? (ocEl.value || '').replace(/\D/g, '').slice(0, 8) : '';
+    if (curCode && curCode.length === 8 && typeof window._lastCheckedOutletCode !== 'undefined' && window._lastCheckedOutletCode !== curCode) {
+      if (typeof checkOutletDuplicate === 'function') {
+        try {
+          const lockRes = await checkOutletDuplicate();
+          if (lockRes && lockRes.mode === 'pending') {
+            if (typeof showDuplicateOutletModal === 'function') {
+              showDuplicateOutletModal(lockRes.allPending || lockRes.existingRequests);
+            }
+            if (typeof showToast === 'function') {
+              showToast('Điểm bán đang có yêu cầu chưa ra đơn! Không thể chuyển bước.');
+            }
+            return;
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
   // enforce sequential completion: tab2 requires Tab1 complete; tab3 requires Tab1+Tab2
   const allowTab2 = (typeof isTab1Complete === 'function') ? isTab1Complete() : true;
   const allowTab3 = (typeof isTab1Complete === 'function' && typeof isTab2Complete === 'function') ? (isTab1Complete() && isTab2Complete()) : true;
   // Prevent switching to locked tabs
-  if (tab === 2 && !allowTab2) { showToast('Hoàn thành Thông tin trước khi chuyển sang Hạng mục'); return; }
-  if (tab === 3 && !allowTab3) { showToast('Hoàn thành Hạng mục trước khi chuyển sang Nội dung'); return; }
+  if (tab === 2 && !allowTab2) {
+    if (typeof duplicateOutletState !== 'undefined' && duplicateOutletState && duplicateOutletState.mode === 'pending') {
+      if (typeof showDuplicateOutletModal === 'function') {
+        showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+      }
+      showToast('Điểm bán đang có yêu cầu chưa ra đơn! Không thể chuyển bước.');
+    } else {
+      showToast('Hoàn thành Thông tin trước khi chuyển sang Hạng mục');
+    }
+    return;
+  }
+  if (tab === 3 && !allowTab3) {
+    if (typeof duplicateOutletState !== 'undefined' && duplicateOutletState && duplicateOutletState.mode === 'pending') {
+      if (typeof showDuplicateOutletModal === 'function') {
+        showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+      }
+      showToast('Điểm bán đang có yêu cầu chưa ra đơn! Không thể chuyển bước.');
+    } else {
+      showToast('Hoàn thành Hạng mục trước khi chuyển sang Nội dung');
+    }
+    return;
+  }
   currentTab = tab;
   [1, 2, 3].forEach(t => {
     const btn = document.getElementById(`tab${t}Btn`);

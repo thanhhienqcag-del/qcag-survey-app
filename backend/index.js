@@ -1285,9 +1285,6 @@ async function checkOutletActiveState(conn, inOutletCode) {
             spoSt.includes('sales rep rejected') ||
             spoSt.includes('sales admin cancelled') ||
             spoSt.includes('asm cancelled') ||
-            spoSt.includes('spo không có') ||
-            spoSt.includes('spo bị mất') ||
-            spoSt.includes('spo bi mat') ||
             spoSt === 'cancelled' ||
             spoSt === 'cancel' ||
             spoSt === 'rejected'
@@ -5335,9 +5332,6 @@ app.post("/api/ks/requests", async (req, res) => {
                              OR q_rej.spo_status ILIKE '%sales rep rejected%'
                              OR q_rej.spo_status ILIKE '%sales admin cancelled%'
                              OR q_rej.spo_status ILIKE '%asm cancelled%'
-                             OR q_rej.spo_status ILIKE '%spo không có%'
-                             OR q_rej.spo_status ILIKE '%spo bị mất%'
-                             OR q_rej.spo_status ILIKE '%spo bi mat%'
                              OR q_rej.spo_status = 'cancelled'
                              OR q_rej.spo_status = 'cancel'
                              OR q_rej.spo_status = 'rejected'
@@ -5377,9 +5371,6 @@ app.post("/api/ks/requests", async (req, res) => {
                            q.spo_status ILIKE '%sales rep rejected%'
                            OR q.spo_status ILIKE '%sales admin cancelled%'
                            OR q.spo_status ILIKE '%asm cancelled%'
-                           OR q.spo_status ILIKE '%spo không có%'
-                           OR q.spo_status ILIKE '%spo bị mất%'
-                           OR q.spo_status ILIKE '%spo bi mat%'
                            OR q.spo_status = 'cancelled'
                            OR q.spo_status = 'cancel'
                            OR q.spo_status = 'rejected'

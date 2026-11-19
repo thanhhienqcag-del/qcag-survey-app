@@ -1021,15 +1021,34 @@ function attachValidationClearing() {
       el.addEventListener('input', saver);
       el.addEventListener('change', saver);
     });
-    // Gắn kiểm tra trùng Outlet realtime khi blur hoặc paste
+    // Gắn kiểm tra trùng Outlet realtime khi gõ đủ 8 chữ số (input), blur hoặc paste
     const ocEl = document.getElementById('outletCode');
     if (ocEl && !ocEl._boundRealtimeLock) {
       ocEl._boundRealtimeLock = true;
+      let _inputLockCheckTimer = null;
       const runRealtimeDuplicateCheck = () => {
+        if (_inputLockCheckTimer) clearTimeout(_inputLockCheckTimer);
         try { checkOutletDuplicate(); } catch (e) {}
       };
       ocEl.addEventListener('blur', runRealtimeDuplicateCheck);
-      ocEl.addEventListener('paste', () => setTimeout(runRealtimeDuplicateCheck, 0));
+      ocEl.addEventListener('paste', () => setTimeout(runRealtimeDuplicateCheck, 50));
+      ocEl.addEventListener('input', () => {
+        if (_inputLockCheckTimer) clearTimeout(_inputLockCheckTimer);
+        const raw = (ocEl.value || '').trim();
+        const code = raw.replace(/\D/g, '').slice(0, 8);
+        if (code.length === 8) {
+          // Gõ đủ 8 chữ số -> Kích hoạt kiểm tra khóa trùng ngay lập tức sau 200ms debounce
+          _inputLockCheckTimer = setTimeout(() => {
+            try { checkOutletDuplicate(); } catch (e) {}
+          }, 200);
+        } else if (code.length < 8) {
+          renderOutletCodeStatusBox('clear');
+          duplicateOutletState = null;
+          userConfirmedNewForOutlet = false;
+          otherOutletState = null;
+          window._lastCheckedOutletCode = '';
+        }
+      });
     }
   } catch (e) {}
 }
@@ -1098,6 +1117,16 @@ function isTab1Complete() {
     const phone = (document.getElementById('phone') || {}).value || '';
     if (!code || !name || !address || !phone) return false;
     if (code !== 'New Outlet' && !/^\d{8}$/.test(code)) return false;
+
+    // Chặn tuyệt đối nếu điểm bán đang có yêu cầu/báo giá chưa ra đơn!
+    if (typeof duplicateOutletState !== 'undefined' && duplicateOutletState && duplicateOutletState.mode === 'pending') {
+      return false;
+    }
+    // Chặn nếu điểm bán thuộc quyền Sale khác đang chờ xác nhận
+    if (typeof otherOutletState !== 'undefined' && otherOutletState && !window.userConfirmedTakeover) {
+      return false;
+    }
+
     // phone normalization
     const digits = (typeof normalizeVietnamPhone === 'function') ? normalizeVietnamPhone(phone) : String(phone || '').replace(/\D/g, '');
     if (digits.startsWith('02')) {
@@ -1561,7 +1590,30 @@ async function submitNewRequest() {
       return;
     } else {
       hideLoadingOverlay();
-      showToast((result && result.message) || 'Lỗi tạo yêu cầu');
+      const rawMsg = (result && result.message) || 'Lỗi tạo yêu cầu';
+      showToast(rawMsg);
+
+      // Nếu lỗi từ server là do trùng yêu cầu/báo giá chưa ra đơn: Bật Modal ngay và clear mã outlet!
+      const msgLower = String(rawMsg).toLowerCase();
+      if (msgLower.includes('đang có yêu cầu') || msgLower.includes('đang có báo giá') || msgLower.includes('chưa xuất đơn hàng') || msgLower.includes('chưa ra đơn')) {
+        try {
+          if (typeof checkOutletDuplicate === 'function') {
+            await checkOutletDuplicate();
+          }
+          if (typeof duplicateOutletState !== 'undefined' && duplicateOutletState && typeof showDuplicateOutletModal === 'function') {
+            showDuplicateOutletModal(duplicateOutletState.allPending || duplicateOutletState.existingRequests);
+          }
+          if (typeof switchTab === 'function') {
+            switchTab(1);
+          }
+          const ocEl = document.getElementById('outletCode');
+          if (ocEl) ocEl.value = '';
+          if (typeof renderOutletCodeStatusBox === 'function') renderOutletCodeStatusBox('clear');
+          duplicateOutletState = null;
+          userConfirmedNewForOutlet = false;
+          window._lastCheckedOutletCode = '';
+        } catch (e) {}
+      }
     }
   } else {
     request.__backendId = generateBackendId();
@@ -2306,14 +2358,46 @@ function closeDuplicateOutletModal() {
     if (modal) modal.classList.add('hidden');
     try { disableModalBackdrop(); } catch (e) {}
 
-    // Giữ nguyên trạng thái cảnh báo trên ô nhập liệu và khóa nút chuyển tab để chống bypass,
-    // nhưng không tự ý xóa trắng dữ liệu người dùng vừa nhập để tránh gây khó chịu
-    const isPending = duplicateOutletState && duplicateOutletState.mode === 'pending';
-    if (isPending && duplicateOutletState.backendLock) {
-      renderOutletCodeStatusBox('locked_pending', duplicateOutletState.backendLock);
-    }
-  } catch (e) {}
-  try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
+    // KỶ LUẬT CHẶN TRÙNG: Khi đóng modal thông báo điểm bán đã có yêu cầu/báo giá chưa ra đơn,
+    // BẮT BUỘC CLEAR số outlet code đã nhập và toàn bộ thông tin điểm bán,
+    // ngăn không cho sale tiếp tục thao tác tạo mới trên outlet trùng!
+    const codeEl = document.getElementById('outletCode');
+    if (codeEl) codeEl.value = '';
+    const nameEl = document.getElementById('outletName');
+    if (nameEl) nameEl.value = '';
+    const addrEl = document.getElementById('address');
+    if (addrEl) addrEl.value = '';
+    const phoneEl = document.getElementById('phone');
+    if (phoneEl) phoneEl.value = '';
+    const latEl = document.getElementById('outletLat');
+    if (latEl) latEl.value = '';
+    const lngEl = document.getElementById('outletLng');
+    if (lngEl) lngEl.value = '';
+    const lp = document.getElementById('locationPreview');
+    if (lp) lp.textContent = '';
+    window.isOutletLockedLocation = false;
+
+    // Reset toàn bộ cờ trùng để nếu nhập lại cùng mã đó sẽ tiếp tục kích hoạt kiểm tra và hiện lại Modal
+    duplicateOutletState = null;
+    userConfirmedNewForOutlet = false;
+    otherOutletState = null;
+    userConfirmedTakeover = false;
+    window._lastCheckedOutletCode = '';
+
+    renderOutletCodeStatusBox('clear');
+    clearNewRequestFieldErrors();
+    try { if (typeof updateNewRequestHeaderOutletName === 'function') updateNewRequestHeaderOutletName(); } catch (e) {}
+
+    // Focus lại vào ô outletCode để sale nhận biết ô đã được làm trống
+    setTimeout(() => {
+      try {
+        const el = document.getElementById('outletCode');
+        if (el) el.focus();
+      } catch (e) {}
+    }, 100);
+  } catch (e) {
+    console.error('[closeDuplicateOutletModal] error:', e);
+  }
 }
 
 
@@ -2449,10 +2533,16 @@ function cancelTakeoverOutlet() {
   duplicateOutletState = null;
   userConfirmedNewForOutlet = false;
   renderOutletCodeStatusBox('clear');
-  // Clear outlet code so user can try a different one
+  // Clear outlet code and pre-filled fields so user can try a different one
   try {
     const codeEl = document.getElementById('outletCode');
     if (codeEl && !codeEl.readOnly) codeEl.value = '';
+    const nameEl = document.getElementById('outletName'); if (nameEl) nameEl.value = '';
+    const addrEl = document.getElementById('address'); if (addrEl) addrEl.value = '';
+    const phoneEl = document.getElementById('phone'); if (phoneEl) phoneEl.value = '';
+    const latEl = document.getElementById('outletLat'); if (latEl) latEl.value = '';
+    const lngEl = document.getElementById('outletLng'); if (lngEl) lngEl.value = '';
+    const lp = document.getElementById('locationPreview'); if (lp) lp.textContent = '';
   } catch (e) {}
 }
 
