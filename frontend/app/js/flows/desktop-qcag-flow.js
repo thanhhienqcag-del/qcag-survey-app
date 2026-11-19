@@ -373,7 +373,7 @@ async function qcagDesktopTogglePush() {
     try {
       if (window.pushHelpers && window.pushHelpers.initPush) {
         const phone = currentSession && currentSession.phone || null;
-        const role = currentSession && currentSession.role || null;
+        const role = (currentSession && currentSession.role) || 'qcag';
         await window.pushHelpers.initPush(phone, role, null);
       }
     } catch (_) { }
@@ -387,7 +387,7 @@ async function qcagDesktopTogglePush() {
       showToast('Đã kích hoạt thông báo thành công', 'done');
       if (window.pushHelpers && window.pushHelpers.initPush) {
         const phone = currentSession && currentSession.phone || null;
-        const role = currentSession && currentSession.role || null;
+        const role = (currentSession && currentSession.role) || 'qcag';
         await window.pushHelpers.initPush(phone, role, null);
       }
     } else if (result === 'denied') {

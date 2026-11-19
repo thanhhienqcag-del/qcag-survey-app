@@ -796,42 +796,78 @@ async function initKsDB() {
 
 // ── Push notification helper ──────────────────────────────────────────
 async function sendKsPush({ title, body, data = {}, targetPhone = null, targetRole = null, targetSaleCode = null }) {
-    const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
-    const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+    const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BFcENKQEmf_xdumdXQkRzskdHFK9dMouJBC2kcNciQs6EEfnAvR9npTjgN9HofVz6YnOLu4xZgC_94BBbDl6QmI';
+    const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'QDJayzfniavMC4yAJkxufonfszbSSl9o9vQTq0zpooc';
     const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@qcag.vn';
-    if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) return { ok: false, sent: 0, error: 'vapid_not_configured' };
     const webpush = require('web-push');
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+
+    function normalizePhone(p) {
+        if (!p) return null;
+        let n = String(p).replace(/[\s\-\.]+/g, '');
+        if (n.startsWith('+84')) n = '0' + n.slice(3);
+        if (n.startsWith('84') && n.length >= 10) n = '0' + n.slice(2);
+        return n;
+    }
+
     try {
-        let query_str = 'SELECT subscription FROM push_subscriptions';
+        let query_str = 'SELECT id, subscription FROM push_subscriptions';
         let params = [];
-        if (targetSaleCode) {
-            query_str += ' WHERE sale_code = ?';
-            params.push(String(targetSaleCode).trim());
-        } else if (targetPhone) {
-            query_str += ' WHERE phone = ?';
-            params.push(targetPhone);
+        const normPhone = normalizePhone(targetPhone);
+
+        if (targetSaleCode && normPhone) {
+            query_str += ' WHERE sale_code = ? OR phone = ? OR phone = ? OR user_id = ?';
+            params.push(String(targetSaleCode).trim(), normPhone, String(targetPhone).trim(), 'USR_SALE_' + String(targetSaleCode).trim());
+        } else if (targetSaleCode) {
+            query_str += ' WHERE sale_code = ? OR user_id = ?';
+            params.push(String(targetSaleCode).trim(), 'USR_SALE_' + String(targetSaleCode).trim());
+        } else if (normPhone) {
+            query_str += ' WHERE phone = ? OR phone = ?';
+            params.push(normPhone, String(targetPhone).trim());
         } else if (targetRole) {
             query_str += ' WHERE role = ?';
             params.push(targetRole);
+        } else {
+            return { ok: false, sent: 0, error: 'missing_target' };
         }
+
         const [rows] = await pool.query(query_str, params);
-        if (!rows || rows.length === 0) return;
+        if (!rows || rows.length === 0) {
+            return { ok: true, sent: 0, total: 0, message: 'no_subscriptions' };
+        }
+
         const payload = JSON.stringify({ title, body, data });
-        await Promise.allSettled(rows.map(r => {
+        const pushOptions = { TTL: 86400 };
+
+        const results = await Promise.allSettled(rows.map(r => {
             try {
-                const sub = JSON.parse(r.subscription);
-                return webpush.sendNotification(sub, payload);
-            } catch (e) { return Promise.resolve(); }
+                const sub = typeof r.subscription === 'object' ? r.subscription : JSON.parse(r.subscription);
+                return webpush.sendNotification(sub, payload, pushOptions).catch(async (err) => {
+                    if (err && (err.statusCode === 410 || err.statusCode === 404)) {
+                        try {
+                            await pool.query('DELETE FROM push_subscriptions WHERE id = ?', [r.id]);
+                        } catch (_) {}
+                    }
+                    throw err;
+                });
+            } catch (e) {
+                return Promise.reject(e);
+            }
         }));
+
+        const sent = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+        return { ok: true, sent, failed, total: rows.length };
     } catch (e) {
         console.warn('[push] sendKsPush error:', e && e.message ? e.message : e);
+        return { ok: false, sent: 0, error: String(e && e.message || e) };
     }
 }
 
 // ── GET /api/push — return VAPID public key for client push registration ─
 app.get('/api/push', (req, res) => {
-    const publicKey = process.env.VAPID_PUBLIC_KEY || '';
+    const publicKey = process.env.VAPID_PUBLIC_KEY || 'BFcENKQEmf_xdumdXQkRzskdHFK9dMouJBC2kcNciQs6EEfnAvR9npTjgN9HofVz6YnOLu4xZgC_94BBbDl6QmI';
     if (!publicKey) return res.status(503).json({ ok: false, error: 'VAPID not configured' });
     return res.json({ ok: true, publicKey });
 });
@@ -842,21 +878,37 @@ app.post('/api/ks/push/subscribe', async (req, res) => {
         const { subscription, phone, role, saleCode } = req.body || {};
         if (!subscription) return res.status(400).json({ ok: false, error: 'missing_subscription' });
         const subStr = typeof subscription === 'string' ? subscription : JSON.stringify(subscription);
-        // Upsert by endpoint — each browser endpoint is unique
         const endpoint = typeof subscription === 'object' ? subscription.endpoint : JSON.parse(subStr).endpoint;
+
+        let normPhone = phone ? String(phone).replace(/[\s\-\.]+/g, '') : null;
+        if (normPhone && normPhone.startsWith('+84')) normPhone = '0' + normPhone.slice(3);
+        if (normPhone && normPhone.startsWith('84') && normPhone.length >= 10) normPhone = '0' + normPhone.slice(2);
+
+        let effectiveSaleCode = saleCode ? String(saleCode).trim() : null;
+        if (!effectiveSaleCode && normPhone) {
+            try {
+                const [uRows] = await pool.query('SELECT sale_code FROM users WHERE (phone = ? OR phone = ?) AND sale_code IS NOT NULL LIMIT 1', [normPhone, String(phone).trim()]);
+                if (uRows && uRows[0] && uRows[0].sale_code) {
+                    effectiveSaleCode = uRows[0].sale_code;
+                }
+            } catch (_) {}
+        }
+
+        const userId = effectiveSaleCode ? `USR_SALE_${effectiveSaleCode}` : (normPhone ? `USR_PHONE_${normPhone}` : null);
+
         const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpoint.slice(-40) + '%']);
         if (existing && existing.length > 0) {
             await pool.query(
-                'UPDATE push_subscriptions SET subscription = ?, phone = ?, role = ?, sale_code = COALESCE(?, sale_code), updated_at = NOW() WHERE id = ?',
-                [subStr, phone || null, role || null, saleCode || null, existing[0].id]
+                'UPDATE push_subscriptions SET subscription = ?, phone = COALESCE(?, phone), role = COALESCE(?, role), sale_code = COALESCE(?, sale_code), user_id = COALESCE(?, user_id), updated_at = NOW() WHERE id = ?',
+                [subStr, normPhone, role || null, effectiveSaleCode, userId, existing[0].id]
             );
         } else {
             await pool.query(
-                'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())',
-                [subStr, phone || null, role || null, saleCode || null]
+                'INSERT INTO push_subscriptions (subscription, phone, role, sale_code, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+                [subStr, normPhone, role || null, effectiveSaleCode, userId]
             );
         }
-        return res.json({ ok: true });
+        return res.json({ ok: true, sale_code: effectiveSaleCode });
     } catch (err) {
         console.error('[push] subscribe error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'subscribe_failed' });
@@ -870,7 +922,7 @@ app.post('/api/ks/push/send', async (req, res) => {
         if (!phone && !role && !saleCode) {
             return res.status(400).json({ ok: false, error: 'missing phone, saleCode or role' });
         }
-        await sendKsPush({
+        const pushResult = await sendKsPush({
             title: title || 'QCAG',
             body: msgBody || '',
             data,
@@ -878,7 +930,13 @@ app.post('/api/ks/push/send', async (req, res) => {
             targetRole: role || null,
             targetSaleCode: saleCode || null
         });
-        return res.json({ ok: true });
+        return res.json({
+            ok: true,
+            sent: pushResult.sent || 0,
+            failed: pushResult.failed || 0,
+            total: pushResult.total || 0,
+            message: pushResult.message || undefined
+        });
     } catch (err) {
         console.error('[push] send error:', err && err.message ? err.message : err);
         return res.status(500).json({ ok: false, error: 'send_failed' });
@@ -5731,6 +5789,12 @@ app.post("/api/ks/requests", async (req, res) => {
         };
         const appRow = ksRowToApp(row);
         wsInvalidate('ks_requests', { action: 'create', id: backendId, tkCode, data: appRow });
+        sendKsPush({
+            title: 'Yêu cầu khảo sát mới từ Heineken',
+            body: `Outlet "${b.outletName || cleanCode}" vừa gửi yêu cầu khảo sát mới (${tkCode}).`,
+            data: { tkCode, backendId, type: 'new_request' },
+            targetRole: 'qcag'
+        }).catch(err => console.warn('[push] new request push warning:', err && err.message ? err.message : err));
         return res.status(201).json({ ok: true, data: appRow });
     } catch (err) {
         console.error('POST /api/ks/requests error:', err && err.message ? err.message : err);
@@ -7284,6 +7348,12 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
         wsInvalidate('ks_requests', { action: 'update', id: targetCode });
         wsInvalidate('quotations');
         sseBroadcast({ type: 'production_approval', action: 'request_edit', quoteCode: targetCode, reason });
+        sendKsPush({
+            title: 'Yêu cầu chỉnh sửa MQ từ Sale',
+            body: `${requestedBy} yêu cầu sửa MQ đơn ${targetCode}: "${reason}".`,
+            data: { quoteCode: targetCode, type: 'edit_request' },
+            targetRole: 'qcag'
+        }).catch(err => console.warn('[push] request edit push warning:', err && err.message ? err.message : err));
 
         return res.json({ ok: true, status: 'rejected', quoteCode: targetCode, reason });
     } catch (err) {
