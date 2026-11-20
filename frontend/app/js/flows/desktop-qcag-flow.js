@@ -3997,11 +3997,9 @@ function qcagCheckCompletionConditions(req) {
     if (designImgs.length === 0) {
       missing.push('MQ thiết kế');
     } else if (isPendingEdit) {
-      // Yêu cầu đang chờ chỉnh sửa:
-      // - Với Menu Wall: Cho phép hoàn thành nếu đã có MQ (tạo từ App 1 hoặc vừa upload)
-      // - Với đơn khảo sát thông thường: Bắt buộc upload bản vẽ MQ mới thay thế (_mqReplacedDuringEdit)
+      // Yêu cầu đang chờ chỉnh sửa: Bắt buộc phải upload bản vẽ MQ mới thay thế (_mqReplacedDuringEdit === true) mới cho phép bấm "Đã chỉnh sửa"
       const hasNewMq = Boolean(req._mqReplacedDuringEdit);
-      if (!hasNewMq && !isMenuWall) {
+      if (!hasNewMq) {
         missing.push('bản vẽ MQ mới thay thế (vui lòng upload bản vẽ đã sửa)');
       }
     }
@@ -4073,8 +4071,7 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       // Vị trí MQ thiết kế QCAG: CHỈ XUẤT HIỆN DUY NHẤT 1 ẢNH!
       const singleMq = designImgs.length > 0 ? designImgs[designImgs.length - 1] : null;
       const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
-      const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(updatedRequest);
-      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit && !isMenuWall;
+      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit;
       const reqStatus = String(updatedRequest.status || '').toLowerCase();
       const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
       const canRemove = !isOldReferencedMq && !isDone;
@@ -5878,8 +5875,7 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         const singleMq = mqPreviewImgs.length > 0 ? mqPreviewImgs[mqPreviewImgs.length - 1] : null;
         if (!singleMq) return '<div class="qcag-detail-muted">Chưa có MQ</div>';
         const isPendingEdit = qcagDesktopIsPendingEditRequest(request);
-        const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(request);
-        const isOldReferencedMq = isPendingEdit && !request._mqReplacedDuringEdit && !isMenuWall;
+        const isOldReferencedMq = isPendingEdit && !request._mqReplacedDuringEdit;
         const reqStatus = String(request.status || '').toLowerCase();
         const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
         const canRemove = !isOldReferencedMq && !isDone;
@@ -6593,9 +6589,8 @@ async function qcagDesktopMarkProcessed() {
       return;
     }
     if (isPendingEdit) {
-      const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(currentDetailRequest);
       const hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit);
-      if (!hasNewMq && !isMenuWall) {
+      if (!hasNewMq) {
         showToast('Vui lòng upload bản vẽ MQ mới thay thế trước khi xác nhận đã chỉnh sửa');
         qcagDesktopRefreshMQInPlace(currentDetailRequest);
         return;
