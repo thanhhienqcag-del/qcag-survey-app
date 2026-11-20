@@ -815,16 +815,28 @@ async function sendKsPush({ title, body, data = {}, targetPhone = null, targetRo
         let query_str = 'SELECT id, subscription FROM push_subscriptions';
         let params = [];
         const normPhone = normalizePhone(targetPhone);
+        const saleVariants = [];
+        if (targetSaleCode) {
+            const sc = String(targetSaleCode).trim();
+            saleVariants.push(sc);
+            const scNoZero = sc.replace(/^0+/, '');
+            if (scNoZero && scNoZero !== sc) saleVariants.push(scNoZero);
+            if (sc.length === 7) saleVariants.push('0' + sc);
+        }
 
-        if (targetSaleCode && normPhone) {
-            query_str += ' WHERE sale_code = ? OR phone = ? OR phone = ? OR user_id = ?';
-            params.push(String(targetSaleCode).trim(), normPhone, String(targetPhone).trim(), 'USR_SALE_' + String(targetSaleCode).trim());
-        } else if (targetSaleCode) {
-            query_str += ' WHERE sale_code = ? OR user_id = ?';
-            params.push(String(targetSaleCode).trim(), 'USR_SALE_' + String(targetSaleCode).trim());
+        if (saleVariants.length > 0 && normPhone) {
+            const salePlaceholders = saleVariants.map(() => '?').join(', ');
+            const userPlaceholders = saleVariants.map(() => '?').join(', ');
+            query_str += ` WHERE sale_code IN (${salePlaceholders}) OR user_id IN (${userPlaceholders}) OR phone = ? OR phone = ? OR user_id = ?`;
+            params.push(...saleVariants, ...saleVariants.map(v => 'USR_SALE_' + v), normPhone, String(targetPhone).trim(), 'USR_PHONE_' + normPhone);
+        } else if (saleVariants.length > 0) {
+            const salePlaceholders = saleVariants.map(() => '?').join(', ');
+            const userPlaceholders = saleVariants.map(() => '?').join(', ');
+            query_str += ` WHERE sale_code IN (${salePlaceholders}) OR user_id IN (${userPlaceholders})`;
+            params.push(...saleVariants, ...saleVariants.map(v => 'USR_SALE_' + v));
         } else if (normPhone) {
-            query_str += ' WHERE phone = ? OR phone = ?';
-            params.push(normPhone, String(targetPhone).trim());
+            query_str += ' WHERE phone = ? OR phone = ? OR user_id = ?';
+            params.push(normPhone, String(targetPhone).trim(), 'USR_PHONE_' + normPhone);
         } else if (targetRole) {
             query_str += ' WHERE role = ?';
             params.push(targetRole);
@@ -921,6 +933,18 @@ app.post('/api/ks/push/send', async (req, res) => {
         const { title, body: msgBody, data = {}, phone, role, saleCode } = req.body || {};
         if (!phone && !role && !saleCode) {
             return res.status(400).json({ ok: false, error: 'missing phone, saleCode or role' });
+        }
+
+        // Chặn triệt để push kép từ các client/thiết bị cũ còn sót code gửi new_request:
+        // Thông báo tạo yêu cầu mới đã được Backend POST /api/ks/requests gửi chính thống duy nhất 1 lần kèm khu vực.
+        const isClientNewReqPush = (role === 'qcag' || !phone) && (
+            (data && data.type === 'new_request') ||
+            /yêu\s+cầu\s+mới/i.test(title || '') ||
+            /vừa\s+gửi\s+yêu\s+cầu\s+mới/i.test(msgBody || '')
+        );
+        if (isClientNewReqPush) {
+            console.log('[push/send] Ignored redundant client new_request push:', msgBody);
+            return res.json({ ok: true, sent: 0, ignored: true, reason: 'handled_by_backend' });
         }
         const pushResult = await sendKsPush({
             title: title || 'QCAG',

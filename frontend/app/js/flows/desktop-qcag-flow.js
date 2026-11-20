@@ -368,12 +368,28 @@ function qcagDesktopUpdateBellUI() {
     dot.className = 'qcag-push-bell-dot off';  // gray — not supported
     return;
   }
-  if (Notification.permission === 'granted') {
+  const isStoredEnabled = (function () {
+    try { return localStorage.getItem('ks_push_enabled') === 'true'; } catch (_) { return false; }
+  })();
+  if (Notification.permission === 'granted' || isStoredEnabled) {
     dot.className = 'qcag-push-bell-dot on';   // green
   } else if (Notification.permission === 'denied') {
     dot.className = 'qcag-push-bell-dot denied'; // red
   } else {
     dot.className = 'qcag-push-bell-dot off';    // gray — not yet asked
+  }
+
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(function (reg) {
+      if (reg && reg.pushManager) {
+        reg.pushManager.getSubscription().then(function (sub) {
+          if (sub && dot) {
+            dot.className = 'qcag-push-bell-dot on';
+            try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
+          }
+        }).catch(function () {});
+      }
+    }).catch(function () {});
   }
 }
 
@@ -388,6 +404,7 @@ async function qcagDesktopTogglePush() {
   }
   if (Notification.permission === 'granted') {
     showToast('Thông báo đã được kích hoạt. Bạn sẽ nhận push khi có yêu cầu mới từ Heineken.', 'done');
+    try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
     // Re-subscribe silently (refreshes endpoint + keeps subscription fresh)
     try {
       if (window.pushHelpers && window.pushHelpers.initPush) {
@@ -403,6 +420,7 @@ async function qcagDesktopTogglePush() {
   try {
     const result = await Notification.requestPermission();
     if (result === 'granted') {
+      try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
       showToast('Đã kích hoạt thông báo thành công', 'done');
       if (window.pushHelpers && window.pushHelpers.initPush) {
         const phone = currentSession && currentSession.phone || null;
@@ -756,6 +774,7 @@ function qcagIsMenuWallRequest(req) {
   }
   return false;
 }
+if (typeof window !== 'undefined') window.qcagIsMenuWallRequest = qcagIsMenuWallRequest;
 
 // Assign standardized tags for UI-independent classification (100% synchronized with qcagDesktopStatusBadge).
 function assignStandardTags(req) {
@@ -3959,9 +3978,11 @@ function qcagIsCreatedFromApp1(req) {
 
 // ── Check All Completion Conditions ──────────────────────────────────
 function qcagCheckCompletionConditions(req) {
-  if (!req) return { canComplete: false, missing: [], isApp1: false };
+  if (!req) return { canComplete: false, missing: [], isApp1: false, isMenuWall: false, isSurveySizeIncomplete: false };
 
   const isApp1 = qcagIsCreatedFromApp1(req);
+  const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(req);
+  const isPendingEdit = typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req);
   const isWarranty = qcagDesktopGetRequestType(req) === 'warranty';
   const missing = [];
 
@@ -3975,17 +3996,21 @@ function qcagCheckCompletionConditions(req) {
     const designImgs = qcagDesktopPrepareRenderImageList(qcagDesktopParseJson(req.designImages, []));
     if (designImgs.length === 0) {
       missing.push('MQ thiết kế');
-    } else if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
-      // Yêu cầu đang chờ chỉnh sửa: bắt buộc phải upload bản vẽ MQ mới thay thế trong phiên chỉnh sửa (_mqReplacedDuringEdit === true)
+    } else if (isPendingEdit) {
+      // Yêu cầu đang chờ chỉnh sửa:
+      // - Với Menu Wall: Cho phép hoàn thành nếu đã có MQ (tạo từ App 1 hoặc vừa upload)
+      // - Với đơn khảo sát thông thường: Bắt buộc upload bản vẽ MQ mới thay thế (_mqReplacedDuringEdit)
       const hasNewMq = Boolean(req._mqReplacedDuringEdit);
-      if (!hasNewMq) {
+      if (!hasNewMq && !isMenuWall) {
         missing.push('bản vẽ MQ mới thay thế (vui lòng upload bản vẽ đã sửa)');
       }
     }
   }
 
   // 2. Với request tạo từ App 1: Bắt buộc chọn định vị GPS và upload hiện trạng
-  if (isApp1) {
+  // ĐẶC BIỆT LƯU Ý: Dự án Menu Wall (tạo trực tiếp từ Báo giá App 1) hoặc khi đơn đang ở luồng chỉnh sửa (isPendingEdit)
+  // TUYỆT ĐỐI KHÔNG bắt buộc ảnh hiện trạng Outlet và định vị GPS!
+  if (isApp1 && !isMenuWall && !isPendingEdit) {
     const lat = parseFloat(req.outletLat);
     const lng = parseFloat(req.outletLng);
     const hasGps = !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
@@ -3999,8 +4024,9 @@ function qcagCheckCompletionConditions(req) {
     }
   }
 
-  // 3. Kích thước khảo sát
-  if (typeof qcagDesktopIsSurveySizeIncomplete === 'function' && qcagDesktopIsSurveySizeIncomplete(req)) {
+  // 3. Kích thước khảo sát (Menu Wall không có khảo sát thực địa)
+  const isSurveySizeIncomplete = !isMenuWall && typeof qcagDesktopIsSurveySizeIncomplete === 'function' && qcagDesktopIsSurveySizeIncomplete(req);
+  if (isSurveySizeIncomplete) {
     missing.push('Kích thước khảo sát của hạng mục');
   }
 
@@ -4008,7 +4034,8 @@ function qcagCheckCompletionConditions(req) {
     canComplete: missing.length === 0,
     missing,
     isApp1,
-    isSurveySizeIncomplete: typeof qcagDesktopIsSurveySizeIncomplete === 'function' && qcagDesktopIsSurveySizeIncomplete(req)
+    isMenuWall,
+    isSurveySizeIncomplete
   };
 }
 
@@ -4046,7 +4073,8 @@ function qcagDesktopRefreshMQInPlace(updatedRequest) {
       // Vị trí MQ thiết kế QCAG: CHỈ XUẤT HIỆN DUY NHẤT 1 ẢNH!
       const singleMq = designImgs.length > 0 ? designImgs[designImgs.length - 1] : null;
       const isPendingEdit = qcagDesktopIsPendingEditRequest(updatedRequest);
-      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit;
+      const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(updatedRequest);
+      const isOldReferencedMq = isPendingEdit && !updatedRequest._mqReplacedDuringEdit && !isMenuWall;
       const reqStatus = String(updatedRequest.status || '').toLowerCase();
       const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
       const canRemove = !isOldReferencedMq && !isDone;
@@ -5850,7 +5878,8 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
         const singleMq = mqPreviewImgs.length > 0 ? mqPreviewImgs[mqPreviewImgs.length - 1] : null;
         if (!singleMq) return '<div class="qcag-detail-muted">Chưa có MQ</div>';
         const isPendingEdit = qcagDesktopIsPendingEditRequest(request);
-        const isOldReferencedMq = isPendingEdit && !request._mqReplacedDuringEdit;
+        const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(request);
+        const isOldReferencedMq = isPendingEdit && !request._mqReplacedDuringEdit && !isMenuWall;
         const reqStatus = String(request.status || '').toLowerCase();
         const isDone = (reqStatus === 'done' || reqStatus === 'processed' || reqStatus === 'quoted' || reqStatus === 'completed') && !isPendingEdit;
         const canRemove = !isOldReferencedMq && !isDone;
@@ -6564,14 +6593,16 @@ async function qcagDesktopMarkProcessed() {
       return;
     }
     if (isPendingEdit) {
+      const isMenuWall = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(currentDetailRequest);
       const hasNewMq = Boolean(currentDetailRequest._mqReplacedDuringEdit);
-      if (!hasNewMq) {
+      if (!hasNewMq && !isMenuWall) {
         showToast('Vui lòng upload bản vẽ MQ mới thay thế trước khi xác nhận đã chỉnh sửa');
         qcagDesktopRefreshMQInPlace(currentDetailRequest);
         return;
       }
     }
-    const isSurveySizeIncomplete = qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
+    const isMenuWallReq = typeof qcagIsMenuWallRequest === 'function' && qcagIsMenuWallRequest(currentDetailRequest);
+    const isSurveySizeIncomplete = !isMenuWallReq && qcagDesktopIsSurveySizeIncomplete(currentDetailRequest);
     if (isSurveySizeIncomplete) {
       showToast('Vui lòng xác nhận kích thước khảo sát trước khi hoàn thành');
       qcagDesktopRefreshMQInPlace(currentDetailRequest);

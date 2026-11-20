@@ -505,21 +505,56 @@ function updateHomePushBtn() {
   btn.style.display = '';
 
   const perm = Notification.permission;
+  const isStoredEnabled = (function () {
+    try { return localStorage.getItem('ks_push_enabled') === 'true'; } catch (_) { return false; }
+  })();
+  const isGranted = perm === 'granted' || isStoredEnabled;
+
   if (dot) {
-    dot.className = 'mobile-push-bell-dot' + (perm === 'granted' ? ' on' : perm === 'denied' ? ' denied' : '');
+    dot.className = 'mobile-push-bell-dot' + (isGranted ? ' on' : perm === 'denied' ? ' denied' : '');
   }
-  btn.title = perm === 'granted' ? 'Thông báo đang bật'
+  btn.title = isGranted ? 'Thông báo đang bật'
     : perm === 'denied' ? 'Thông báo bị chặn'
       : 'Bật thông báo';
   btn.disabled = false;
+
+  // Asynchronously verify with ServiceWorker PushManager subscription
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(function (reg) {
+      if (reg && reg.pushManager) {
+        reg.pushManager.getSubscription().then(function (sub) {
+          if (sub && dot) {
+            dot.className = 'mobile-push-bell-dot on';
+            btn.title = 'Thông báo đang bật';
+            try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
+          }
+        }).catch(function () {});
+      }
+    }).catch(function () {});
+  }
 }
 
 async function homePushBtnClick() {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+    || (window.navigator && window.navigator.standalone === true);
+
   if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
     showToast('Thông báo đang bị chặn. Vào Cài đặt > Trình duyệt > Cho phép thông báo.');
     return;
   }
-  if (!window.pushHelpers) { showToast('Trình duyệt không hỗ trợ thông báo đẩy'); return; }
+  if (!window.pushHelpers) {
+    if (isIos && !isStandalone) {
+      showToast('Trên iPhone, bạn cần bấm Chia sẻ (biểu tượng mũi tên lên) > Thêm vào MH chính và mở từ màn hình chính để nhận thông báo đẩy.', 'warning', 6000);
+      return;
+    }
+    showToast('Trình duyệt không hỗ trợ thông báo đẩy');
+    return;
+  }
+
+  if (isIos && !isStandalone) {
+    showToast('Lưu ý trên iPhone: Hãy Thêm vào Màn hình chính để nhận thông báo đẩy ngay cả khi đã tắt app.', 'info', 5000);
+  }
 
   const phone = currentSession && currentSession.phone || null;
   const role = currentSession && currentSession.role || null;
@@ -527,6 +562,7 @@ async function homePushBtnClick() {
   try {
     const res = await window.pushHelpers.initPush(phone, role, saleCode);
     if (res && res.ok) {
+      try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
       showToast('Thông báo đã được kích hoạt thành công', 'done');
     } else {
       const e = res && res.error || 'Không thể bật thông báo';

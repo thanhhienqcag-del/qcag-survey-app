@@ -60,8 +60,20 @@ module.exports = async function handler(req, res) {
       ? req.body
       : (req.body ? JSON.parse(req.body) : {});
 
-    const { title, body: msgBody, data, phone, role, saleCode } = body;
+    const { title, body: msgBody, data = {}, phone, role, saleCode } = body;
     if (!phone && !role && !saleCode) return res.status(400).end(JSON.stringify({ ok: false, error: 'missing phone, saleCode or role' }));
+
+    // Chặn triệt để push kép từ các client/thiết bị cũ còn sót code gửi new_request:
+    // Thông báo tạo yêu cầu mới đã được Backend POST /api/ks/requests gửi chính thống duy nhất 1 lần kèm khu vực.
+    const isClientNewReqPush = (role === 'qcag' || !phone) && (
+      (data && data.type === 'new_request') ||
+      /yêu\s+cầu\s+mới/i.test(title || '') ||
+      /vừa\s+gửi\s+yêu\s+cầu\s+mới/i.test(msgBody || '')
+    );
+    if (isClientNewReqPush) {
+      console.log('[push/send] Ignored redundant client new_request push:', msgBody);
+      return res.status(200).end(JSON.stringify({ ok: true, sent: 0, ignored: true, reason: 'handled_by_backend' }));
+    }
 
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 

@@ -106,6 +106,7 @@ async function initPush(phone, role, saleCode) {
     const sub = await subscribeForPush();
     // Save subscription to backend so server can push to this device
     await saveSubscriptionToServer(sub, phone, role, saleCode);
+    try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
     return { ok: true, subscription: sub };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -218,11 +219,14 @@ if ('serviceWorker' in navigator) {
 (function autoInitPushOnLoad() {
   if (!('PushManager' in window) || !('serviceWorker' in navigator)) return;
   if (typeof Notification === 'undefined') return;
-  // Only auto re-subscribe if permission was already granted.
+  // Only auto re-subscribe if permission was already granted or user previously enabled it.
   // Do NOT show the browser permission prompt automatically — browsers block
   // prompts that aren't triggered by a user gesture and silently fail.
   // The prompt is shown explicitly via launchApp() or the QCAG desktop bell button.
-  if (Notification.permission !== 'granted') return;
+  const isStoredPush = (function () {
+    try { return localStorage.getItem('ks_push_enabled') === 'true'; } catch (_) { return false; }
+  })();
+  if (Notification.permission !== 'granted' && !isStoredPush) return;
 
   function updateAllBellUIs() {
     try { if (typeof updateHomePushBtn === 'function') updateHomePushBtn(); } catch (_) {}
