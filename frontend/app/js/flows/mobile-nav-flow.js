@@ -350,6 +350,41 @@ function saveAccountProfile() {
 	showToast('Đã cập nhật thông tin tài khoản');
 }
 
+async function manualSyncSaleRequests() {
+	const btn = document.getElementById('accountManualSyncBtn');
+	const origText = btn ? btn.textContent : '';
+	if (btn) {
+		btn.disabled = true;
+		btn.textContent = 'Đang đồng bộ dữ liệu...';
+	}
+	try {
+		if (window.dataSdk && typeof window.dataSdk.clearUserCache === 'function') {
+			await window.dataSdk.clearUserCache();
+		}
+		if (typeof allRequests !== 'undefined') allRequests = [];
+		if (window.dataSdk && typeof window.dataSdk.init === 'function') {
+			await window.dataSdk.init({
+				onDataChanged: (data) => {
+					if (typeof _ksDedupeRequests === 'function' && typeof _isKsRequestActive === 'function') {
+						allRequests = _ksDedupeRequests(data).filter(_isKsRequestActive);
+					}
+					if (typeof updateRequestCount === 'function') updateRequestCount();
+					if (typeof renderRequestList === 'function') renderRequestList();
+				}
+			});
+		}
+		showToast('Đã đồng bộ đầy đủ dữ liệu mới nhất từ máy chủ!');
+	} catch (err) {
+		console.error('manualSyncSaleRequests error:', err);
+		showToast('Lỗi khi đồng bộ dữ liệu: ' + ((err && err.message) || 'Mạng không ổn định'));
+	} finally {
+		if (btn) {
+			btn.disabled = false;
+			btn.textContent = origText || 'Đồng bộ lại toàn bộ dữ liệu';
+		}
+	}
+}
+
 window.addEventListener('resize', () => {
 	const active = Object.keys(MAIN_TAB_BY_SCREEN).find(id => {
 		const el = document.getElementById(id);

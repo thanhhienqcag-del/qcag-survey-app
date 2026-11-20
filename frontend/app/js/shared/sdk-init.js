@@ -30,9 +30,15 @@ function saveAllRequestsToStorage() {
           id: r.id,
           __backendId: r.__backendId,
           tkCode: r.tkCode,
+          type: r.type || 'new',
           status: r.status,
           outletName: r.outletName,
           outletCode: r.outletCode,
+          requester: r.requester,
+          phone: r.phone || (r.requester && r.requester.phone) || '',
+          saleCode: r.saleCode || (r.requester && r.requester.saleCode) || '',
+          designImages: r.designImages,
+          acceptanceImages: r.acceptanceImages,
           createdAt: r.createdAt,
           updatedAt: r.updatedAt
         });

@@ -4308,6 +4308,28 @@ app.get('/api/ks/requests', async (req, res) => {
                 }
             }
 
+            let totalSaleActive = mapped.length;
+            if (updatedSince) {
+                try {
+                    const baseParams = params.slice(0, conds.length === 1 ? (salePhoneRaw ? 5 : 4) : 9);
+                    const [cntRows] = await pool.query(
+                        `SELECT COUNT(*) AS total FROM requests r
+                         LEFT JOIN users u ON r.requester_id = u.id
+                         LEFT JOIN outlets o ON r.outlet_id = o.id
+                         WHERE (${conds.join(' OR ')})
+                           AND COALESCE(r.is_deleted, false) = false
+                           AND COALESCE(r.delete_status, '') <> 'approved'
+                           AND COALESCE(r.status, '') NOT IN ('cancelled', 'deleted')`,
+                        baseParams
+                    );
+                    if (cntRows && cntRows[0] && cntRows[0].total != null) {
+                        totalSaleActive = Number(cntRows[0].total);
+                    }
+                } catch (cntErr) {
+                    console.warn('[Sale Requests] Count total failed:', cntErr && cntErr.message);
+                }
+            }
+
             const saleEtag = '"' + crypto.createHash('md5').update(JSON.stringify(mapped)).digest('hex') + '"';
             res.setHeader('ETag', saleEtag);
             res.setHeader('Cache-Control', 'no-cache');
@@ -4319,7 +4341,8 @@ app.get('/api/ks/requests', async (req, res) => {
             return res.json({
                 ok: true,
                 data: mapped,
-                paging: { total: mapped.length, limit: mapped.length, hasMore: false, nextCursor: null }
+                total_active: totalSaleActive,
+                paging: { total: totalSaleActive, limit: mapped.length, hasMore: false, nextCursor: null }
             });
         }
 

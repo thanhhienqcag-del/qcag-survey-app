@@ -1051,11 +1051,37 @@
   }
 
   async function _reconcileWithServerMeta(meta) {
-    if (!meta || _getSaleQueryParams()) return false;
+    if (!meta) return false;
     var changed = false;
 
     if (Array.isArray(meta.tombstones) && meta.tombstones.length > 0) {
       if (_purgeStoreByKeys(meta.tombstones)) changed = true;
+    }
+
+    var isSale = Boolean(_getSaleQueryParams());
+    if (isSale) {
+      // Sale reconciliation: Nếu server báo tổng số request active lớn hơn số request hiện có trong store, tự động kéo full catalog về
+      if (typeof meta.totalActive === 'number' && meta.totalActive > 0) {
+        var localActiveCount = 0;
+        for (var si = 0; si < _store.length; si++) {
+          var sItem = _store[si];
+          if (sItem && !sItem.isDeleted && !sItem.is_deleted && sItem.status !== 'cancelled' && sItem.status !== 'deleted') {
+            localActiveCount++;
+          }
+        }
+        if (localActiveCount < meta.totalActive) {
+          console.log('[dataSdk] Sale detected missing historical requests (local=' + localActiveCount + ', server=' + meta.totalActive + '). Backfilling full catalog...');
+          try {
+            var fullSaleRows = await _fetchStore(true);
+            if (Array.isArray(fullSaleRows) && fullSaleRows.length) {
+              if (_pruneStoreWithAuthoritativeCatalog(fullSaleRows)) changed = true;
+            }
+          } catch (saleHealErr) {
+            console.warn('[dataSdk] Sale backfill failed:', saleHealErr);
+          }
+        }
+      }
+      return changed;
     }
 
     if (!Array.isArray(meta.activeProcessingIds)) {
@@ -1231,22 +1257,43 @@
 
         // Step 2: Background incremental revalidation when IndexedDB cache is warm (avoids full 7,300-row re-download)
         if (_store.length) {
-          var hasSyncCursor = Boolean(_lastSyncIso || _latestStoreTimestampIso());
-          if (hasSyncCursor) {
-            await this.refresh(true);
-          } else {
+          var isSaleUser = Boolean(_getSaleQueryParams());
+          if (isSaleUser) {
+            // SALE HEINEKEN: Dữ liệu cá nhân chỉ vài chục request (<10KB).
+            // Dùng _fetchStore(false) với ETag: nếu không đổi server trả 304 Not Modified (0 bytes, 30ms).
+            // Nếu có thay đổi hoặc thiếu bản ghi lịch sử trong cache, nạp đủ 100% bản ghi cho Sale!
             try {
-              var fetchResult = await _fetchStore(false);
-              if (fetchResult && fetchResult.notModified) {
-                console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
-              } else if (Array.isArray(fetchResult) && fetchResult.length) {
-                if (_pruneStoreWithAuthoritativeCatalog(fetchResult)) {
+              var saleFetchResult = await _fetchStore(false);
+              if (saleFetchResult && saleFetchResult.notModified) {
+                console.log('[dataSdk] Sale revalidation complete: Cache is 100% up to date (HTTP 304).');
+              } else if (Array.isArray(saleFetchResult) && saleFetchResult.length) {
+                if (_pruneStoreWithAuthoritativeCatalog(saleFetchResult)) {
                   _triggerStoreUpdated(_lastServerTs);
                 }
               }
-            } catch (fetchErr) {
-              console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
+            } catch (saleErr) {
+              console.warn('[dataSdk] Sale revalidation fetch failed, checking incremental:', saleErr);
               await this.refresh(true);
+            }
+          } else {
+            // QCAG / ADMIN (Internal 7,300 rows)
+            var hasSyncCursor = Boolean(_lastSyncIso || _latestStoreTimestampIso());
+            if (hasSyncCursor) {
+              await this.refresh(true);
+            } else {
+              try {
+                var fetchResult = await _fetchStore(false);
+                if (fetchResult && fetchResult.notModified) {
+                  console.log('[dataSdk] Revalidation complete: Cache is 100% up to date (HTTP 304).');
+                } else if (Array.isArray(fetchResult) && fetchResult.length) {
+                  if (_pruneStoreWithAuthoritativeCatalog(fetchResult)) {
+                    _triggerStoreUpdated(_lastServerTs);
+                  }
+                }
+              } catch (fetchErr) {
+                console.warn('[dataSdk] Revalidation fetch failed, checking incremental:', fetchErr);
+                await this.refresh(true);
+              }
             }
           }
         } else {
@@ -1286,6 +1333,24 @@
 
       _refreshInFlight = (async function () {
       try {
+        var isSaleUser = Boolean(_getSaleQueryParams());
+        if (isSaleUser && force) {
+          try {
+            var saleCatalog = await _fetchStore(false);
+            if (saleCatalog && saleCatalog.notModified) {
+              return { isOk: true };
+            }
+            if (Array.isArray(saleCatalog) && saleCatalog.length) {
+              if (_pruneStoreWithAuthoritativeCatalog(saleCatalog)) {
+                _triggerStoreUpdated(_lastServerTs);
+              }
+              return { isOk: true };
+            }
+          } catch (saleErr) {
+            console.warn('[dataSdk] Sale force refresh fallback to incremental:', saleErr);
+          }
+        }
+
         var incResult = null;
         try {
           incResult = await _fetchIncrementalStore();

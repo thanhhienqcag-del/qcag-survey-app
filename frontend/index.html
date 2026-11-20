@@ -1005,6 +1005,26 @@
       background-color: #ffffff !important;
     }
 
+    /* Sync Button */
+    .account-sync-btn {
+      background-color: #0284c7 !important;
+      color: #ffffff !important;
+      border: 1px solid #0284c7 !important;
+    }
+    .account-sync-btn:hover {
+      background-color: #0369a1 !important;
+    }
+    .theme-dark .account-sync-btn,
+    [data-theme="dark"] .account-sync-btn {
+      background-color: #0369a1 !important;
+      color: #ffffff !important;
+      border: 1px solid #38bdf8 !important;
+    }
+    .theme-dark .account-sync-btn:hover,
+    [data-theme="dark"] .account-sync-btn:hover {
+      background-color: #0284c7 !important;
+    }
+
     /* Logout Button */
     .account-logout-btn {
       background-color: #ffffff !important;
@@ -3311,10 +3331,14 @@
             <input id="accountRegion" type="text" class="w-full px-4 py-3 rounded-xl transition-all"
               placeholder="Nhập khu vực">
           </div>
-          <div class="pt-2">
+          <div class="pt-2 space-y-2.5">
             <button onclick="saveAccountProfile()" type="button"
               class="account-save-btn w-full py-3.5 font-semibold rounded-xl active:scale-[0.98] transition-all shadow-sm">Lưu
               thông tin</button>
+            <button id="accountManualSyncBtn" onclick="manualSyncSaleRequests()" type="button"
+              class="account-sync-btn w-full py-3.5 font-semibold rounded-xl active:scale-[0.98] transition-all shadow-sm flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              Đồng bộ lại toàn bộ dữ liệu</button>
           </div>
           <div>
             <button onclick="logout()" type="button"
