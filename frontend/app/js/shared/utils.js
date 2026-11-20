@@ -737,9 +737,14 @@ function qcagGetWaitBadgeInfo(req) {
     }
 
     // 3. Quy chuẩn đếm ngày chuẩn xác:
-    // - Nếu ĐÃ CÓ ít nhất 1 lần thiết kế VÀ đang có yêu cầu sửa: tính từ ngày gửi yêu cầu sửa đầu tiên
+    // - Chờ khảo sát là trạng thái cao nhất: nếu đang thiếu khảo sát thì luôn tính từ ngày tạo yêu cầu ban đầu
+    // - Nếu ĐÃ CÓ ít nhất 1 lần thiết kế VÀ đang có yêu cầu sửa (và không chờ khảo sát): tính từ ngày gửi yêu cầu sửa đầu tiên
     // - Nếu CHƯA CÓ thiết kế nào: BẮT BUỘC tính từ ngày gửi yêu cầu ban đầu (req.createdAt), không tính từ ngày sửa
-    if (isPendingEdit && hasHadDesign && editTime) {
+    const isWaitingSurvey = (typeof qcagRequestNeedsSurvey === 'function')
+      ? qcagRequestNeedsSurvey(req)
+      : false;
+
+    if (!isWaitingSurvey && isPendingEdit && hasHadDesign && editTime) {
       dateRef = editTime;
     } else {
       dateRef = req.createdAt || req.created_at;
@@ -764,12 +769,14 @@ function qcagGetWaitBadgeInfo(req) {
     const waitColor = waitDays <= 1 ? 'wait-green' : (waitDays <= 3 ? 'wait-orange' : 'wait-red');
     const waitLabel = waitDays === 0 ? 'Hôm nay' : (waitDays === 1 ? '1 ngày' : (waitDays + ' ngày'));
 
-    // Chỉ hiển thị tag | SỬA khi ĐÃ CÓ thiết kế trước đó và đang chờ sửa lại thiết kế
-    const showEditTag = Boolean(isPendingEdit && hasHadDesign);
+    // Chỉ hiển thị tag | SỬA khi ĐÃ CÓ thiết kế trước đó, đang chờ sửa lại thiết kế và KHÔNG ở trạng thái Chờ khảo sát
+    const showEditTag = Boolean(!isWaitingSurvey && isPendingEdit && hasHadDesign);
     const editSepHtml = showEditTag ? '<span class="qcag-wait-sep">|</span><span class="qcag-wait-edit-tag">Sửa</span>' : '';
-    const waitTitle = showEditTag
-      ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên'
-      : (isPendingEdit ? 'Chưa có thiết kế - Đếm ngày từ lúc gửi yêu cầu ban đầu' : 'Thời gian chờ xử lý');
+    const waitTitle = isWaitingSurvey
+      ? 'Chờ khảo sát kích thước từ ngày tạo yêu cầu'
+      : (showEditTag
+        ? 'Chờ từ yêu cầu chỉnh sửa đầu tiên'
+        : (isPendingEdit ? 'Chưa có thiết kế - Đếm ngày từ lúc gửi yêu cầu ban đầu' : 'Thời gian chờ xử lý'));
 
     const escapeFn = typeof escapeHtml === 'function' ? escapeHtml : (str => String(str || '').replace(/[&<>"']/g, ''));
 

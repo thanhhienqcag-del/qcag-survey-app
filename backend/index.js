@@ -5797,10 +5797,17 @@ app.post("/api/ks/requests", async (req, res) => {
         };
         const appRow = ksRowToApp(row);
         wsInvalidate('ks_requests', { action: 'create', id: backendId, tkCode, data: appRow });
+
+        // Gửi DUY NHẤT 1 thông báo chuẩn hóa đến QCAG: [Tên Sale] vừa gửi yêu cầu mới cho Outlet [Tên Outlet] - [Khu vực]
+        const senderDisplayName = saleName || (b.saleName || 'Sale Heineken');
+        const targetOutletName = toNullableString(b.outletName) || cleanCode || 'Outlet';
+        const targetRegion = outletArea || userRegion || region || '';
+        const regionSuffix = targetRegion ? ` - ${targetRegion}` : '';
+
         sendKsPush({
-            title: 'Yêu cầu khảo sát mới từ Heineken',
-            body: `Outlet "${b.outletName || cleanCode}" vừa gửi yêu cầu khảo sát mới (${tkCode}).`,
-            data: { tkCode, backendId, type: 'new_request' },
+            title: 'QCAG — Yêu cầu mới từ Heineken',
+            body: `${senderDisplayName} vừa gửi yêu cầu mới cho Outlet ${targetOutletName}${regionSuffix}.`,
+            data: { tkCode, backendId, type: 'new_request', region: targetRegion, outletName: targetOutletName, saleName: senderDisplayName },
             targetRole: 'qcag'
         }).catch(err => console.warn('[push] new request push warning:', err && err.message ? err.message : err));
         return res.status(201).json({ ok: true, data: appRow });
@@ -5975,7 +5982,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
 
         // 1. Check primary V12 table: requests
         let [reqRows] = await pool.query(
-            `SELECT r.*, o.code AS outlet_code, o.name AS outlet_name, o.address, o.phone AS outlet_phone, o.area AS outlet_area, u.phone AS requester_phone, u.region AS sale_region 
+            `SELECT r.*, o.code AS outlet_code, o.name AS outlet_name, o.address, o.phone AS outlet_phone, o.area AS outlet_area, u.phone AS requester_phone, u.region AS sale_region, u.sale_code AS requester_sale_code 
              FROM requests r 
              LEFT JOIN outlets o ON r.outlet_id = o.id 
              LEFT JOIN users u ON r.requester_id = u.id 
@@ -6465,12 +6472,14 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                 }
 
                 // Gửi push notification cho Mobile Sale (fire-and-forget, không block HTTP response)
+                const saleCodeToPush = currentReq.requester_sale_code || currentReq.sale_code || null;
                 if (isFirstMQ) {
                     sendKsPush({
                         title: 'QCAG — Đã có mẫu quảng cáo (MQ)',
                         body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã có MQ. Vui lòng truy cập quản lý yêu cầu để xem MQ.`,
                         data: { backendId: currentReq.id },
                         targetPhone: requesterPhone,
+                        targetSaleCode: saleCodeToPush
                     }).catch(pushErr => console.warn('[push] firstMQ push warning:', pushErr && pushErr.message ? pushErr.message : pushErr));
                 } else if (isEditConfirm) {
                     sendKsPush({
@@ -6478,6 +6487,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                         body: `Yêu cầu ${tkCode} Outlet ${outletLabel} đã được chỉnh sửa. Vui lòng truy cập quản lý yêu cầu để xem chỉnh sửa.`,
                         data: { backendId: currentReq.id },
                         targetPhone: requesterPhone,
+                        targetSaleCode: saleCodeToPush
                     }).catch(pushErr => console.warn('[push] editConfirm push warning:', pushErr && pushErr.message ? pushErr.message : pushErr));
                 }
             }

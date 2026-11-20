@@ -92,11 +92,14 @@
   }
 
   function _statusBadge(req) {
-    if (_hasPendingEdit(req)) {
-      return { label: 'Cần sửa Maquette', cls: 'pending-edit' };
-    }
     if (typeof qcagDesktopStatusBadge === 'function') {
       return qcagDesktopStatusBadge(req);
+    }
+    if (typeof qcagRequestNeedsSurvey === 'function' && qcagRequestNeedsSurvey(req)) {
+      return { label: 'Chờ khảo sát', cls: 'pending-survey' };
+    }
+    if (_hasPendingEdit(req)) {
+      return { label: 'Cần sửa Maquette', cls: 'pending-edit' };
     }
     var type = String(req && req.type || '').toLowerCase();
     var status = String(req && req.status || 'pending').toLowerCase();

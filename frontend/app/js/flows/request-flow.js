@@ -1528,50 +1528,8 @@ async function submitNewRequest() {
         }
       } catch (verifyErr) { console.warn('[submit] image verify parse error:', verifyErr); }
 
-      // Fire push notification to QCAG team (best-effort, never blocks UI)
-      // Uses the same-origin Vercel function /api/ks/push/send — this guarantees
-      // the same VAPID keys that were used when QCAG subscribed, avoiding key-mismatch.
-      try {
-        const outletLabel = request.outletName || request.outletCode || 'Outlet';
-        const createdBid = (result.data && result.data.__backendId) || request.__backendId || '';
-        const createdTk = (result.data && result.data.tkCode) || request.tkCode || '';
-        const senderName = (typeof currentSession !== 'undefined' && currentSession && (currentSession.saleName || currentSession.name || currentSession.phone)) || 'Sale Heineken';
-        const senderPhone = (typeof currentSession !== 'undefined' && currentSession && currentSession.phone) || '';
-        const reqRegion = request.region || (typeof currentSession !== 'undefined' && currentSession && currentSession.region) || '';
-        const app2Base = (typeof window !== 'undefined' && window.API_BASE_URL)
-          ? window.API_BASE_URL.replace(/\/+$/, '')
-          : 'https://ks-backend-493469512136.asia-southeast1.run.app';
-        var pushUrl = app2Base + '/api/ks/push/send';
-        fetch(pushUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: 'QCAG — Yêu cầu mới từ Heineken',
-            body: senderName + ' vừa gửi yêu cầu mới cho Outlet ' + outletLabel + '.',
-            data: {
-              backendId: createdBid,
-              tk_code: createdTk,
-              tkCode: createdTk,
-              outlet_code: request.outletCode || '',
-              outletCode: request.outletCode || '',
-              outlet_name: outletLabel,
-              outletName: outletLabel,
-              region: reqRegion,
-              status: 'pending',
-              type: request.type || 'new',
-              saleName: senderName,
-              requester: JSON.stringify({
-                saleName: senderName,
-                phone: senderPhone,
-                region: reqRegion
-              })
-            },
-            role: 'qcag',
-          }),
-        }).catch(function (e) { console.warn('[push/new-req]', e); });
-      } catch (e) {
-        console.warn('[push] new request notify error (non-fatal):', e);
-      }
+      // Ghi chú: Thông báo đẩy gửi đến QCAG đã được Backend index.js xử lý duy nhất 1 lần (POST /api/ks/requests)
+      // kèm đầy đủ Tên Sale, Tên Outlet và Khu vực. Không gửi push kép từ Frontend.
 
       // Reset form immediately so that if the user dismisses the modal via the
       // OS back gesture (instead of the official modal buttons) they land on a

@@ -224,7 +224,16 @@ if ('serviceWorker' in navigator) {
   // The prompt is shown explicitly via launchApp() or the QCAG desktop bell button.
   if (Notification.permission !== 'granted') return;
 
+  function updateAllBellUIs() {
+    try { if (typeof updateHomePushBtn === 'function') updateHomePushBtn(); } catch (_) {}
+    try { if (typeof qcagDesktopUpdateBellUI === 'function') qcagDesktopUpdateBellUI(); } catch (_) {}
+  }
+
+  // Update UI immediately on script load if permission is already known
+  updateAllBellUIs();
+
   function tryAutoSubscribe() {
+    updateAllBellUIs();
     let session = null;
     try { session = JSON.parse(localStorage.getItem('ks_session') || 'null'); } catch (_) {}
     if (!session) return; // not logged in yet
@@ -239,8 +248,10 @@ if ('serviceWorker' in navigator) {
       } else {
         console.warn('[push] auto re-subscribe failed:', res && res.error);
       }
+      updateAllBellUIs();
     }).catch(function (err) {
       console.warn('[push] auto re-subscribe exception:', err);
+      updateAllBellUIs();
     });
   }
 

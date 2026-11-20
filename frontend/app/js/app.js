@@ -182,11 +182,19 @@ window.addEventListener('resize', () => {
         showScreen('homeScreen');
       }
       try {
+        if (typeof updateHomePushBtn === 'function') updateHomePushBtn();
+        if (typeof qcagDesktopUpdateBellUI === 'function') qcagDesktopUpdateBellUI();
+      } catch (_) {}
+      try {
         await initApp();
       } finally {
         if (typeof hideLoadingOverlay === 'function') {
           hideLoadingOverlay();
         }
+        try {
+          if (typeof updateHomePushBtn === 'function') updateHomePushBtn();
+          if (typeof qcagDesktopUpdateBellUI === 'function') qcagDesktopUpdateBellUI();
+        } catch (_) {}
         try { document.documentElement.removeAttribute('data-boot-target'); } catch (_) {}
       }
       if (typeof fetchProductionApprovalBadgeCount === 'function') {

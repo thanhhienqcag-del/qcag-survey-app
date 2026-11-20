@@ -302,6 +302,25 @@ function qcagDesktopMergePreserveImageFields(nextReq, prevReq) {
   if (prevReq._originalFilenameBeforeEdit) {
     merged._originalFilenameBeforeEdit = prevReq._originalFilenameBeforeEdit;
   }
+
+  // Bảo toàn tuyệt đối cờ pending_edit nếu record trước đó đang trong luồng chỉnh sửa (tránh bị list lite ghi đè subStatus='pending')
+  const prevWasPending = (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(prevReq))
+    || prevReq.subStatus === 'pending_edit'
+    || prevReq.sub_status === 'pending_edit'
+    || prevReq.hasEditRequest === true
+    || prevReq.isEditPending === true
+    || Boolean(prevReq.editingRequestedAt || prevReq.editing_requested_at);
+
+  if (prevWasPending && nextReq._isExplicitStatusConfirm !== true && String(nextReq.status || '').toLowerCase() !== 'done') {
+    merged.subStatus = 'pending_edit';
+    merged.sub_status = 'pending_edit';
+    merged.hasEditRequest = true;
+    merged.isEditPending = true;
+    merged.status = 'processing';
+    if (prevReq.editingRequestedAt) merged.editingRequestedAt = prevReq.editingRequestedAt;
+    if (prevReq.editing_requested_at) merged.editing_requested_at = prevReq.editing_requested_at;
+  }
+
   const isMergedPendingEdit = typeof qcagDesktopIsPendingEditRequest === 'function'
     ? qcagDesktopIsPendingEditRequest(merged)
     : Boolean(merged.editingRequestedAt || merged.editing_requested_at || String(merged.subStatus || merged.sub_status || '').toLowerCase() === 'pending_edit');
@@ -711,17 +730,14 @@ function qcagHasIncompleteSurveyItems(req) {
 function qcagRequestNeedsSurvey(req) {
   if (!req || typeof req !== 'object') return false;
 
-  // 1. Đang có yêu cầu chỉnh sửa từ Sale Heineken / QCAG -> BẮT BUỘC hiển thị badge Chờ chỉnh sửa
-  if (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req)) {
-    return false;
-  }
-
-  // 2. Đơn đã xong hoặc đã có báo giá -> Không chờ khảo sát
+  // 1. Đơn đã xong và KHÔNG có yêu cầu chỉnh sửa/sửa hạng mục -> Không chờ khảo sát
   const s = String(req.status || 'pending').toLowerCase();
+  const isPendingEdit = typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(req);
   const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
-  const isDone = (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote);
+  const isDone = !isPendingEdit && (s === 'done' || s === 'processed' || s === 'quoted' || s === 'completed' || hasQuote);
   if (isDone) return false;
 
+  // 2. Chờ khảo sát là trạng thái cao nhất: nếu có hạng mục chưa hoàn thành khảo sát (thiếu số đo) -> Bắt buộc Chờ khảo sát
   return qcagHasIncompleteSurveyItems(req);
 }
 
@@ -756,10 +772,10 @@ function assignStandardTags(req) {
     const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
     const isDone = !isPendingEdit && (status === 'done' || status === 'processed' || status === 'quoted' || status === 'completed' || hasQuote);
 
-    if (isPendingEdit) {
-      tags.push('Chờ chỉnh sửa');
-    } else if (!isDone && qcagRequestNeedsSurvey(req)) {
+    if (qcagRequestNeedsSurvey(req)) {
       tags.push('Chờ khảo sát');
+    } else if (isPendingEdit) {
+      tags.push('Chờ chỉnh sửa');
     } else if (!isDone && Array.isArray(designImgs) && designImgs.length > 0) {
       tags.push('Chờ xác nhận');
     } else if (!isDone) {
@@ -797,34 +813,48 @@ function qcagDesktopHasHeinekenEditRequest(req) {
   const comments = qcagDesktopParseJson(req && req.comments, []);
   if (!Array.isArray(comments) || comments.length === 0) return false;
 
-  const latestEditReqIdx = (() => {
-    for (let i = comments.length - 1; i >= 0; i -= 1) {
-      const c = comments[i] || {};
-      const ct = String(c.commentType || c.type || '').toLowerCase();
-      if (ct === 'edit-request' || ct === 'edit_request') return i;
+  // Tìm thời điểm yêu cầu chỉnh sửa gần nhất dựa trên timestamp thực tế (chống lỗi do thứ tự mảng)
+  let latestEditReqTime = 0;
+  for (let i = 0; i < comments.length; i++) {
+    const c = comments[i] || {};
+    const ct = String(c.commentType || c.type || '').toLowerCase();
+    const txt = String(c.text || c.content || '');
+    const isEditReq = ct === 'edit-request' || ct === 'edit_request' || /^yêu\s+cầu\s+chỉnh\s+sửa/i.test(txt);
+    if (isEditReq) {
+      const t = new Date(c.createdAt || c.created_at || 0).getTime();
+      if (t > latestEditReqTime) latestEditReqTime = t;
     }
-    return -1;
-  })();
+  }
 
-  if (latestEditReqIdx === -1) return false;
+  if (latestEditReqTime === 0) return false;
 
-  const hasResolvedAfter = comments.some((c, idx) =>
-    idx > latestEditReqIdx && (
-      String((c && (c.commentType || c.type)) || '').toLowerCase() === 'edit-resolved' ||
-      /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(String((c && (c.text || c.content)) || ''))
-    )
-  );
+  // Kiểm tra xem ĐÃ CÓ tin nhắn giải quyết (edit-resolved / QCAG đã chỉnh sửa xong) SAU thời điểm yêu cầu sửa gần nhất chưa
+  const hasResolvedAfter = comments.some((c) => {
+    if (!c) return false;
+    const ct = String(c.commentType || c.type || '').toLowerCase();
+    const txt = String(c.text || c.content || '');
+    const isResolved = ct === 'edit-resolved' || ct === 'edit_resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(txt);
+    if (!isResolved) return false;
+    const t = new Date(c.createdAt || c.created_at || 0).getTime();
+    return t > latestEditReqTime;
+  });
 
   return !hasResolvedAfter;
 }
 
 function qcagDesktopHasLaterEditResolvedComment(comments, index) {
-  if (!Array.isArray(comments) || comments.length === 0) return false;
-  return comments.some((c, idx) => {
-    if (idx <= index || !c) return false;
-    const cType = String(c.commentType || '').toLowerCase();
-    const text = String(c.text || '');
-    return cType === 'edit-resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(text);
+  if (!Array.isArray(comments) || comments.length === 0 || index < 0 || index >= comments.length) return false;
+  const targetC = comments[index];
+  if (!targetC) return false;
+  const targetTime = new Date(targetC.createdAt || targetC.created_at || 0).getTime();
+  return comments.some((c) => {
+    if (!c) return false;
+    const cType = String(c.commentType || c.type || '').toLowerCase();
+    const text = String(c.text || c.content || '');
+    const isResolved = cType === 'edit-resolved' || cType === 'edit_resolved' || /QCAG\s+(đã\s+)?chỉnh\s+sửa\s+xong/i.test(text);
+    if (!isResolved) return false;
+    const t = new Date(c.createdAt || c.created_at || 0).getTime();
+    return targetTime > 0 ? (t > targetTime) : false;
   });
 }
 
@@ -833,20 +863,20 @@ function qcagDesktopIsPendingEditRequest(req) {
   const s = String(req.status || req.productionApprovalStatus || req.production_approval_status || '').toLowerCase();
   const sub = String(req.subStatus || req.sub_status || req.design_status || '').toLowerCase();
   const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
-  const isQuotedOrDone = (s === 'done' || s === 'completed' || s === 'processed' || (s === 'quoted' && sub !== 'pending_edit') || (hasQuote && s !== 'processing' && s !== 'pending'));
+  const isExplicitDone = (s === 'done' || s === 'completed');
   const hasActiveEditTime = Boolean(req.editingRequestedAt || req.editing_requested_at);
 
   // 1. Ưu tiên tuyệt đối: sub_status từ DB hoặc status chính là yêu cầu chỉnh sửa
   // CHÚ Ý: Nếu đơn đã explicitly hoàn thành (done/completed) mà KHÔNG có editingRequestedAt
   // thì sub_status 'pending_edit' là vết cũ của đợt sửa trước đã hoàn tất -> Không được xem là pending edit!
   if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
-    if ((s === 'done' || s === 'completed') && !hasActiveEditTime) {
+    if (isExplicitDone && !hasActiveEditTime) {
       return false;
     }
     return true;
   }
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
-    if ((s === 'done' || s === 'completed') && !hasActiveEditTime) {
+    if (isExplicitDone && !hasActiveEditTime) {
       return false;
     }
     return true;
@@ -857,7 +887,7 @@ function qcagDesktopIsPendingEditRequest(req) {
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at) {
-    if (s === 'done' || s === 'completed') {
+    if (isExplicitDone) {
       return false;
     }
     return true;
@@ -870,10 +900,14 @@ function qcagDesktopIsPendingEditRequest(req) {
     return true;
   }
   // 4. Nếu status đã hoàn thành/done/quoted mà không có cờ chỉnh sửa thì không xem là pending edit
-  if (s === 'done' || s === 'completed' || ((s === 'quoted' || hasQuote) && sub !== 'pending_edit' && sub !== 'pending-edit' && !hasActiveEditTime)) {
+  if (isExplicitDone || ((s === 'quoted' || hasQuote) && sub !== 'pending_edit' && sub !== 'pending-edit' && !hasActiveEditTime)) {
     return false;
   }
   return Boolean(qcagDesktopHasHeinekenEditRequest(req));
+}
+if (typeof window !== 'undefined') {
+  window.qcagDesktopIsPendingEditRequest = qcagDesktopIsPendingEditRequest;
+  window.qcagDesktopHasHeinekenEditRequest = qcagDesktopHasHeinekenEditRequest;
 }
 
 function qcagDesktopCanEditItems(req) {
@@ -1698,7 +1732,12 @@ async function qcagDesktopConfirmEditSingleItemModal() {
     });
   }
 
-  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+  const isCurrentlyPendingEdit = (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(currentDetailRequest))
+    || currentDetailRequest.subStatus === 'pending_edit'
+    || currentDetailRequest.sub_status === 'pending_edit'
+    || currentDetailRequest.hasEditRequest === true
+    || currentDetailRequest.isEditPending === true
+    || Boolean(currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -2269,7 +2308,12 @@ async function qcagDesktopConfirmEditItemsModal() {
   const comments = qcagDesktopParseJson(currentDetailRequest.comments, []);
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Thêm hạng mục: ${type}${subType ? ' - ' + subType : ''}${brand ? ' - ' + brand : ''}${action ? ' - ' + action : ''}`, createdAt: now });
 
-  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+  const isCurrentlyPendingEdit = (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(currentDetailRequest))
+    || currentDetailRequest.subStatus === 'pending_edit'
+    || currentDetailRequest.sub_status === 'pending_edit'
+    || currentDetailRequest.hasEditRequest === true
+    || currentDetailRequest.isEditPending === true
+    || Boolean(currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -2336,7 +2380,12 @@ async function qcagDesktopRemoveItem(index) {
   const now = new Date().toISOString();
   comments.push({ authorRole: 'system', authorName: 'Hệ thống', text: `Đã xóa hạng mục số ${index + 1} (${itemLabel})`, createdAt: now });
 
-  const isCurrentlyPendingEdit = qcagDesktopIsPendingEditRequest(currentDetailRequest);
+  const isCurrentlyPendingEdit = (typeof qcagDesktopIsPendingEditRequest === 'function' && qcagDesktopIsPendingEditRequest(currentDetailRequest))
+    || currentDetailRequest.subStatus === 'pending_edit'
+    || currentDetailRequest.sub_status === 'pending_edit'
+    || currentDetailRequest.hasEditRequest === true
+    || currentDetailRequest.isEditPending === true
+    || Boolean(currentDetailRequest.editingRequestedAt || currentDetailRequest.editing_requested_at);
   const stillNeedsSurvey = items.some(it => qcagItemNeedsSurvey(it, currentDetailRequest));
   const rollbackRequest = { ...currentDetailRequest };
   const updated = {
@@ -2451,25 +2500,24 @@ function qcagDesktopStatusBadge(req) {
     return { label: 'Chờ kiểm tra', cls: 'processing' };
   }
 
-  // 1. ƯU TIÊN SỐ 1 CAO NHẤT: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG
-  // (Khi đơn đang có yêu cầu chỉnh sửa, BẮT BUỘC hiển thị Chờ chỉnh sửa, TUYỆT ĐỐI không bị đè bởi Chờ khảo sát)
+  // 1. ƯU TIÊN SỐ 1 CAO NHẤT: Chờ khảo sát (Trạng thái cao nhất theo quy chuẩn: chưa có số đo khảo sát thì bắt buộc hiển thị Chờ khảo sát)
+  const isWaitingSurvey = qcagRequestNeedsSurvey(req);
+  if (isWaitingSurvey) {
+    return { label: 'Chờ khảo sát', cls: 'pending-survey' };
+  }
+
+  // 2. ƯU TIÊN SỐ 2: Yêu cầu chỉnh sửa từ Sale Heineken hoặc QCAG
   if (qcagDesktopIsPendingEditRequest(req)) {
     return { label: 'Chờ chỉnh sửa', cls: 'pending-edit' };
   }
 
-  // 2. ƯU TIÊN SỐ 2: Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
+  // 3. ƯU TIÊN SỐ 3: Đã hoàn thành (nghiệm thu/sản xuất khi user đã bấm Hoàn thành hoặc App 1 đã ra báo giá)
   const s = String(req && req.status || 'pending').toLowerCase();
   const sub = String(req && (req.subStatus || req.sub_status || req.design_status) || '').toLowerCase();
   const hasQuote = Boolean(req && (req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode))));
   const isDone = (s === 'done' || s === 'processed' || s === 'completed' || (s === 'quoted' && sub !== 'pending_edit' && sub !== 'pending-edit') || (hasQuote && s !== 'processing' && s !== 'pending' && sub !== 'pending_edit' && sub !== 'pending-edit'));
   if (isDone) {
     return { label: 'Hoàn thành', cls: 'done' };
-  }
-
-  // 3. ƯU TIÊN SỐ 3: Chờ khảo sát (Nếu đơn chưa hoàn thành và có hạng mục cần số đo khảo sát mà chưa có số đo)
-  const isWaitingSurvey = qcagRequestNeedsSurvey(req);
-  if (isWaitingSurvey) {
-    return { label: 'Chờ khảo sát', cls: 'pending-survey' };
   }
 
   // 4. Kiểm tra ảnh MQ thiết kế
