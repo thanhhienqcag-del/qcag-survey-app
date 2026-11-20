@@ -1357,6 +1357,14 @@ function validateTab2() {
 async function submitNewRequest() {
   // Guard: prevent concurrent/double submissions (e.g. impatient double-tap)
   if (_isNewRequestSubmitting) return;
+
+  // Bắt buộc phải có ít nhất 1 hạng mục hợp lệ ở Bước 2
+  if (!Array.isArray(currentRequestItems) || currentRequestItems.length === 0 || !currentRequestItems.some(i => i && i.type)) {
+    showToast('Yêu cầu bắt buộc phải có ít nhất một hạng mục. Vui lòng kiểm tra lại Bước 2');
+    switchTab(2);
+    return;
+  }
+
   clearNewRequestFieldErrors();
   const content = document.getElementById('signContent').value.trim();
   let hasError = false;

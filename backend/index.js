@@ -5465,6 +5465,7 @@ app.post("/api/ks/requests", async (req, res) => {
 
         let requesterId = null;
         let userRegion = region;
+        let outletArea = userRegion || toNullableString(b.region) || null;
         // Uu tiên 1: Tìm theo salePhone (định danh chuẩn của cá nhân Sale)
         if (salePhone) {
             const phoneRes = await pool.query(
@@ -5555,12 +5556,13 @@ app.post("/api/ks/requests", async (req, res) => {
         let outletId = null;
         if (outletCode && !isPlaceholderOutlet) {
             const outletSearchRes = await pool.query(
-                "SELECT id, code, name FROM outlets WHERE id = ? OR code = ? OR id = ('OUT_' || ?) LIMIT 1",
+                "SELECT id, code, name, area FROM outlets WHERE id = ? OR code = ? OR id = ('OUT_' || ?) LIMIT 1",
                 [outletCode, outletCode, outletCode]
             );
             const foundOutlets = outletSearchRes ? outletSearchRes[0] : null;
             if (foundOutlets && foundOutlets.length > 0) {
                 outletId = foundOutlets[0].id;
+                if (foundOutlets[0].area) outletArea = foundOutlets[0].area;
                 // Nếu Sale gửi định vị mới cho điểm bán có sẵn, luôn cập nhật tọa độ vào bảng outlets (chỉ khi tọa độ hợp lệ, không lưu 0 hoặc 0.0)
                 const rawLat = b.outletLat != null ? b.outletLat : b.latitude;
                 const rawLng = b.outletLng != null ? b.outletLng : b.longitude;
@@ -5608,7 +5610,7 @@ app.post("/api/ks/requests", async (req, res) => {
             const lng = b.outletLng && !isNaN(Number(b.outletLng)) ? Number(b.outletLng) : null;
             const isNewOutlet = true;
             // Bảo vệ khu vực: Ưu tiên tuyệt đối khu vực thật của Sale (userRegion)
-            const outletArea = userRegion || toNullableString(b.region) || null;
+            outletArea = userRegion || toNullableString(b.region) || null;
 
             const [insRes] = await pool.query(`
                 INSERT INTO outlets (id, code, name, phone, address, street, latitude, longitude, area, is_new_outlet, is_deleted, created_at, updated_at)
@@ -5823,8 +5825,8 @@ app.post("/api/ks/requests", async (req, res) => {
 
         // Gửi DUY NHẤT 1 thông báo chuẩn hóa đến QCAG: [Tên Sale] vừa gửi yêu cầu mới cho Outlet [Tên Outlet] - [Khu vực]
         const senderDisplayName = saleName || (b.saleName || 'Sale Heineken');
-        const targetOutletName = toNullableString(b.outletName) || cleanCode || 'Outlet';
-        const targetRegion = outletArea || userRegion || region || '';
+        const targetOutletName = toNullableString(b.outletName) || toNullableString(b.outletCode) || 'Outlet';
+        const targetRegion = outletArea || userRegion || region || (b && b.region) || '';
         const regionSuffix = targetRegion ? ` - ${targetRegion}` : '';
 
         sendKsPush({
