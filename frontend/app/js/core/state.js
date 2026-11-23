@@ -48,6 +48,7 @@ const signTypes = [
   'Rèm Mái Che',
   'Logo indoor',
   'Logo Outdoor',
+  'Menu Wall',
   'Hạng mục khác'
 ];
 

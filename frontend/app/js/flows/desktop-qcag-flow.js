@@ -385,11 +385,11 @@ function qcagDesktopUpdateBellUI() {
         reg.pushManager.getSubscription().then(function (sub) {
           if (sub && dot) {
             dot.className = 'qcag-push-bell-dot on';
-            try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
+            try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) { }
           }
-        }).catch(function () {});
+        }).catch(function () { });
       }
-    }).catch(function () {});
+    }).catch(function () { });
   }
 }
 
@@ -404,7 +404,7 @@ async function qcagDesktopTogglePush() {
   }
   if (Notification.permission === 'granted') {
     showToast('Thông báo đã được kích hoạt. Bạn sẽ nhận push khi có yêu cầu mới từ Heineken.', 'done');
-    try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
+    try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) { }
     // Re-subscribe silently (refreshes endpoint + keeps subscription fresh)
     try {
       if (window.pushHelpers && window.pushHelpers.initPush) {
@@ -420,7 +420,7 @@ async function qcagDesktopTogglePush() {
   try {
     const result = await Notification.requestPermission();
     if (result === 'granted') {
-      try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) {}
+      try { localStorage.setItem('ks_push_enabled', 'true'); } catch (_) { }
       showToast('Đã kích hoạt thông báo thành công', 'done');
       if (window.pushHelpers && window.pushHelpers.initPush) {
         const phone = currentSession && currentSession.phone || null;

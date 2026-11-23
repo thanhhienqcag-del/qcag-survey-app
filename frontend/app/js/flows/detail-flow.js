@@ -5135,12 +5135,14 @@ async function submitEditRequest() {
             data: { backendId: backendId }
           });
         } else {
-          const reqObj = (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
+          const reqObj = typeof request.requester === 'object' && request.requester !== null
+            ? request.requester
+            : (() => { try { return JSON.parse(request.requester || '{}'); } catch (_) { return {}; } })();
           sendPushNotification({
             title: 'Yêu cầu chỉnh sửa từ QCAG',
             body: `${authorName} vừa gửi yêu cầu chỉnh sửa cho ${outletLabel}: ${text.slice(0, 100)}`,
-            phone: reqObj.phone,
-            saleCode: reqObj.saleCode,
+            phone: reqObj.phone || request.phone || request.salePhone,
+            saleCode: reqObj.saleCode || request.saleCode,
             data: { backendId: backendId }
           });
         }

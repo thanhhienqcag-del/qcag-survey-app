@@ -906,7 +906,14 @@ app.post('/api/ks/push/subscribe', async (req, res) => {
             } catch (_) {}
         }
 
-        const userId = effectiveSaleCode ? `USR_SALE_${effectiveSaleCode}` : (normPhone ? `USR_PHONE_${normPhone}` : null);
+        const rawUserId = effectiveSaleCode ? `USR_SALE_${effectiveSaleCode}` : (normPhone ? `USR_PHONE_${normPhone}` : null);
+        let userId = null;
+        if (rawUserId) {
+            try {
+                const [chk] = await pool.query('SELECT id FROM users WHERE id = ? LIMIT 1', [rawUserId]);
+                if (chk && chk.length > 0) userId = rawUserId;
+            } catch (_) {}
+        }
 
         const [existing] = await pool.query('SELECT id FROM push_subscriptions WHERE subscription LIKE ?', ['%' + endpoint.slice(-40) + '%']);
         if (existing && existing.length > 0) {
@@ -1140,7 +1147,7 @@ app.get('/db-health', async (req, res) => {
 });
 
 // ==== KIỂM TRA TRẠNG THÁI KHÓA TRÙNG OUTLET (SSoT NEON DATABASE) ====
-async function checkOutletActiveState(conn, inOutletCode) {
+async function checkOutletActiveState(conn, inOutletCode, opts = {}) {
     const raw = String(inOutletCode || '').trim();
     const cleanCode = raw.replace(/^OUT_/i, '').trim();
     if (!cleanCode || /^(new\s*outlet|ch[uư]a\s*c[oó]\s*code|temp_.*|none|unknown)$/i.test(cleanCode)) {
@@ -1156,6 +1163,11 @@ async function checkOutletActiveState(conn, inOutletCode) {
             r.id::text AS backend_id,
             COALESCE(r.tk_code, '') AS tk_code,
             COALESCE(r.status, '') AS status,
+            COALESCE(r.content, '') AS content,
+            CASE 
+                WHEN LOWER(COALESCE(r.content, '')) LIKE '%menu wall%' OR LOWER(COALESCE(r.content, '')) LIKE '%menuwall%' THEN true 
+                ELSE false 
+            END AS is_menu_wall,
             r.created_at,
             COALESCE(o.code, '') AS outlet_code,
             COALESCE(o.name, '') AS outlet_name,
@@ -1209,6 +1221,30 @@ async function checkOutletActiveState(conn, inOutletCode) {
             q2.id::text AS backend_id,
             COALESCE(q2.tk_code, q2.request_tk_code, '') AS tk_code,
             COALESCE(q2.status, '') AS status,
+            '' AS content,
+            CASE 
+                WHEN EXISTS (
+                    SELECT 1 FROM quotation_items qi 
+                    WHERE qi.quotation_code = q2.quote_code 
+                      AND (
+                          qi.item_code LIKE 'MW%' 
+                          OR LOWER(COALESCE(qi.product_name, '')) LIKE '%menu wall%' 
+                          OR LOWER(COALESCE(qi.product_name, '')) LIKE '%menuwall%' 
+                          OR LOWER(COALESCE(qi.product_name, '')) LIKE '%blacklist film%' 
+                          OR LOWER(COALESCE(qi.product_name, '')) LIKE '%backlit film%'
+                      )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM requests r_mw 
+                    WHERE (r_mw.tk_code = q2.tk_code OR r_mw.tk_code = q2.request_tk_code) 
+                      AND (
+                          LOWER(COALESCE(r_mw.content, '')) LIKE '%menu wall%' 
+                          OR LOWER(COALESCE(r_mw.content, '')) LIKE '%menuwall%'
+                      )
+                )
+                THEN true 
+                ELSE false 
+            END AS is_menu_wall,
             q2.created_at,
             COALESCE(o2.code, REGEXP_REPLACE(q2.outlet_id::text, '^out_', '')) AS outlet_code,
             COALESCE(o2.name, q2.outlet_name, '') AS outlet_name,
@@ -1255,7 +1291,19 @@ async function checkOutletActiveState(conn, inOutletCode) {
         ORDER BY created_at DESC
     `, [cleanCode, targetOutletId, cleanCode, cleanCode, cleanCode, targetOutletId, cleanCode, cleanCode]);
 
-    if (!rows || rows.length === 0) {
+    // Helper kiểm tra hồ sơ Menu Wall (thuộc luồng riêng độc lập)
+    function isRecordMenuWall(r) {
+        if (!r) return false;
+        if (r.is_menu_wall === true || r.is_menu_wall === 1 || r.is_menu_wall === 'true') return true;
+        const c = String(r.content || '').toLowerCase();
+        if (c.includes('menu wall') || c.includes('menuwall')) return true;
+        return false;
+    }
+
+    const isMenuWallCheck = Boolean(opts && (opts.isMenuWall || opts.is_menu_wall));
+    const evalRows = (rows || []).filter(r => isMenuWallCheck ? isRecordMenuWall(r) : !isRecordMenuWall(r));
+
+    if (!evalRows || evalRows.length === 0) {
         try {
             const [[outRec]] = await conn.query(`
                 SELECT code, name, 
@@ -1269,6 +1317,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
                 return {
                     state: 'unlocked',
                     reason: 'known_outlet_clean',
+                    hasMenuWallOnly: rows && rows.some(r => isRecordMenuWall(r)),
                     outletCode: outRec.code || cleanCode,
                     outletName: outRec.name || '',
                     address: outRec.address || '',
@@ -1281,6 +1330,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
         } catch (e) {}
         return { state: 'unlocked', reason: 'clean_outlet' };
     }
+
 
     // Helper kiểm tra hồ sơ đã KẾT THÚC / HỦY VĨNH VIỄN (Permanently Terminated)
     // Lưu ý: TẠM HỦY (qcag_tam_huy = true / tam_huy) TUYỆT ĐỐI KHÔNG COI LÀ ĐÃ HỦY VĨ NHIỄN, BẮT BUỘC PHẢI GIỮ Ở NHÓM 3 (ĐANG TREO/DỞ DANG)
@@ -1319,7 +1369,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
     }
 
     // Ca 5: Đã duyệt sản xuất nhưng chưa có số đơn hàng (chỉ tính nếu chưa bị hủy/từ chối vĩnh viễn)
-    const approvedNoPo = rows.find(r => {
+    const approvedNoPo = evalRows.find(r => {
         const isApproved = r.production_approval_status === 'approved';
         const hasOrder = Boolean(r.order_number && String(r.order_number).trim() !== '' && String(r.order_number).trim() !== '---');
         const isTerminated = isRecordPermanentlyTerminated(r);
@@ -1353,7 +1403,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
 
     // Ca 2: Chưa ra đơn hàng (Bất kỳ request hoặc quotation nào ĐANG THỰC SỰ ACTIVE chưa ra đơn)
     // Loại trừ các hồ sơ đã bị từ chối duyệt hoặc SPO đã hủy vĩnh viễn (nhưng vẫn giữ lại hồ sơ tạm hủy)
-    const pendingActive = rows.find(r => {
+    const pendingActive = evalRows.find(r => {
         const hasOrder = Boolean(r.order_number && String(r.order_number).trim() !== '' && String(r.order_number).trim() !== '---');
         const isCompleted = String(r.status || '').toLowerCase() === 'completed';
         const isTerminated = isRecordPermanentlyTerminated(r);
@@ -1386,7 +1436,7 @@ async function checkOutletActiveState(conn, inOutletCode) {
     }
 
     // Ca 3: Tất cả đã ra đơn / đã hoàn tất
-    const producedItem = rows.find(r => {
+    const producedItem = evalRows.find(r => {
         const hasOrder = Boolean(r.order_number && String(r.order_number).trim() !== '' && String(r.order_number).trim() !== '---');
         const isCompleted = String(r.status || '').toLowerCase() === 'completed';
         return hasOrder || isCompleted;
@@ -1449,7 +1499,8 @@ app.get('/api/outlets/:code/lock-state', async (req, res) => {
         res.setHeader('Expires', '0');
         const code = req.params.code ? String(req.params.code).trim() : '';
         if (!code) return res.json({ ok: true, success: true, state: 'unlocked', reason: 'empty_code' });
-        const result = await checkOutletActiveState(pool, code);
+        const isMenuWall = req.query.is_menu_wall === 'true' || req.query.is_menu_wall === '1';
+        const result = await checkOutletActiveState(pool, code, { isMenuWall });
         return res.json({ ok: true, success: true, ...result });
     } catch (err) {
         console.error('GET /api/outlets/:code/lock-state error:', err && err.message ? err.message : err);
@@ -5378,6 +5429,11 @@ app.post("/api/ks/requests", async (req, res) => {
                  WHERE (r.outlet_id = ? OR r.outlet_id = ('OUT_' || ?) OR REGEXP_REPLACE(LOWER(r.outlet_id::text), '^out_', '') = LOWER(?))
                    AND (r.is_deleted = false OR r.is_deleted IS NULL)
                    AND r.status NOT IN ('cancelled', 'rejected', 'bao_huy')
+                   -- Luồng riêng Menu Wall: Không chặn tạo yêu cầu khảo sát thông thường
+                   AND NOT (
+                       LOWER(COALESCE(r.content, '')) LIKE '%menu wall%'
+                       OR LOWER(COALESCE(r.content, '')) LIKE '%menuwall%'
+                   )
                    AND NOT EXISTS (
                        SELECT 1 FROM quotations q
                        JOIN order_quotes oq ON oq.quotation_code = q.quote_code
@@ -5423,6 +5479,26 @@ app.post("/api/ks/requests", async (req, res) => {
                    AND (q.is_deleted = false OR q.is_deleted IS NULL)
                    AND (q.status IS NULL OR q.status NOT IN ('cancelled', 'rejected', 'bao_huy', 'completed', 'done'))
                    AND (q.spo_status IS NULL OR q.spo_status NOT IN ('Sales Admin Finish', 'Sign Maker Installed Signage'))
+                   -- Luồng riêng Menu Wall: Không chặn tạo yêu cầu khảo sát thông thường
+                   AND NOT EXISTS (
+                       SELECT 1 FROM quotation_items qi 
+                       WHERE qi.quotation_code = q.quote_code 
+                         AND (
+                             qi.item_code LIKE 'MW%' 
+                             OR LOWER(COALESCE(qi.product_name, '')) LIKE '%menu wall%' 
+                             OR LOWER(COALESCE(qi.product_name, '')) LIKE '%menuwall%' 
+                             OR LOWER(COALESCE(qi.product_name, '')) LIKE '%blacklist film%' 
+                             OR LOWER(COALESCE(qi.product_name, '')) LIKE '%backlit film%'
+                         )
+                   )
+                   AND NOT EXISTS (
+                       SELECT 1 FROM requests r_mw
+                       WHERE (r_mw.tk_code = q.tk_code OR r_mw.tk_code = q.request_tk_code)
+                         AND (
+                             LOWER(COALESCE(r_mw.content, '')) LIKE '%menu wall%'
+                             OR LOWER(COALESCE(r_mw.content, '')) LIKE '%menuwall%'
+                         )
+                   )
                    AND NOT EXISTS (
                        SELECT 1 FROM order_quotes oq 
                        JOIN orders ord ON ord.id = oq.order_id AND (ord.is_deleted = false OR ord.is_deleted IS NULL)
