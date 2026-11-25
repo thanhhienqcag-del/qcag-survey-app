@@ -459,7 +459,9 @@
       var aEdit = _hasPendingEdit(a) ? 1 : 0;
       var bEdit = _hasPendingEdit(b) ? 1 : 0;
       if (aEdit !== bEdit) return bEdit - aEdit;
-      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+      var timeA = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(a) : new Date(a.createdAt || 0).getTime();
+      var timeB = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(b) : new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
     });
 
     return list;

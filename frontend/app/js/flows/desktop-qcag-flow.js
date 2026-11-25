@@ -2695,19 +2695,23 @@ function getQCAGDesktopVisibleRequests() {
     wrapped.sort((wa, wb) => {
       const a = wa.sortKey;
       const b = wb.sortKey;
-      const badgeA = qcagDesktopGetDisplayBadge(a);
-      const badgeB = qcagDesktopGetDisplayBadge(b);
-      const ta = (badgeA && badgeA.label) || '';
-      const tb = (badgeB && badgeB.label) || '';
-      if (ta !== tb) return ta.localeCompare(tb, 'vi');
-      const timeA = new Date(a.createdAt || 0).getTime();
-      const timeB = new Date(b.createdAt || 0).getTime();
+      const waitA = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(a) : null;
+      const waitB = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(b) : null;
+      const daysA = (waitA && typeof waitA.waitDays === 'number') ? waitA.waitDays : -1;
+      const daysB = (waitB && typeof waitB.waitDays === 'number') ? waitB.waitDays : -1;
+      if (daysA !== daysB) return daysB - daysA;
+      const timeA = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(a) : new Date(a.createdAt || 0).getTime();
+      const timeB = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(b) : new Date(b.createdAt || 0).getTime();
       return timeB - timeA;
     });
   } else {
+    // Sắp xếp theo Thời gian: Đếm thời gian và sắp xếp dựa trên mốc thời gian của tag (dateRef) thay vì cố định createdAt
     wrapped.sort((wa, wb) => {
       const a = wa.sortKey;
       const b = wb.sortKey;
+      const timeA = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(a) : new Date(a.createdAt || 0).getTime();
+      const timeB = typeof qcagGetItemSortTime === 'function' ? qcagGetItemSortTime(b) : new Date(b.createdAt || 0).getTime();
+      if (timeA !== timeB) return timeB - timeA;
       return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     });
   }
@@ -3180,7 +3184,6 @@ function renderQCAGDesktopList(forceRebuild = false) {
       const statusBadge = qcagDesktopStatusBadge(req);
       const reqId = req.__backendId || req.id || req.tkCode || '';
       const activeCls = (reqId && (reqId === _qcagDesktopCurrentId || req.__backendId === _qcagDesktopCurrentId || req.id === _qcagDesktopCurrentId || req.tkCode === _qcagDesktopCurrentId)) ? 'active' : '';
-      const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('vi-VN') : '';
       const requester = qcagDesktopParseJson(req.requester, {});
       const saleName = (requester.saleName || requester.phone || '-').toUpperCase();
       const isNppCard = qcagIsNppRequest(req);
@@ -3220,8 +3223,9 @@ function renderQCAGDesktopList(forceRebuild = false) {
       const isDoneItem = (statusBadge.cls === 'done');
       let waitingBadgeHtml = '';
       let deleteBtnHtml = '';
+      let waitInfo = null;
       if (!isDoneItem && !isTaskMode) {
-        const waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
+        waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(req) : null;
         if (waitInfo) {
           waitingBadgeHtml = waitInfo.badgeHtml;
         }
@@ -3230,6 +3234,10 @@ function renderQCAGDesktopList(forceRebuild = false) {
       if (!isDoneItem && !isTaskMode) {
         deleteBtnHtml = `<button class="qcag-delete-btn" onclick="(event.stopPropagation(), qcagDesktopDeleteRequest('${escapeHtml(reqId)}'))" title="Xóa yêu cầu"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`;
       }
+
+      const displayDateRef = (waitInfo && waitInfo.dateRef) ? waitInfo.dateRef : req.createdAt;
+      const dateStr = displayDateRef ? new Date(displayDateRef).toLocaleString('vi-VN') : '';
+      const dateTitle = (waitInfo && waitInfo.isPendingEdit && waitInfo.hasHadDesign && waitInfo.dateRef && waitInfo.dateRef !== req.createdAt) ? 'Thời gian yêu cầu chỉnh sửa gần nhất' : 'Thời gian tạo yêu cầu';
       return `
         <div role="button" tabindex="0" data-req-id="${escapeHtml(reqId)}" class="qcag-request-item ${activeCls} ${isTaskDone ? 'is-task-complete qcag-task-card-done' : ''}" onclick="openQCAGDesktopRequest('${escapeHtml(reqId)}')">
           <div class="qcag-request-item-top">
@@ -3254,7 +3262,7 @@ function renderQCAGDesktopList(forceRebuild = false) {
         })()}</div>
           <div class="qcag-request-footer">
             <div class="qcag-request-footer-left">
-              <div class="qcag-request-design">Thời gian: ${escapeHtml(dateStr)}</div>
+              <div class="qcag-request-design" title="${escapeHtml(dateTitle)}">Thời gian: ${escapeHtml(dateStr)}</div>
               <div class="qcag-request-date">Mã: ${escapeHtml(requestCode)}</div>
             </div>
             ${waitingBadgeHtml}${deleteBtnHtml}

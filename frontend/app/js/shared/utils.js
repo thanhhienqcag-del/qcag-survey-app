@@ -787,6 +787,7 @@ function qcagGetWaitBadgeInfo(req) {
     '</span>';
 
     return {
+      dateRef,
       waitDays,
       waitColor,
       waitLabel,
@@ -801,5 +802,19 @@ function qcagGetWaitBadgeInfo(req) {
   }
 }
 window.qcagGetWaitBadgeInfo = qcagGetWaitBadgeInfo;
+
+function qcagGetItemSortTime(r) {
+  if (!r) return 0;
+  try {
+    const waitInfo = typeof qcagGetWaitBadgeInfo === 'function' ? qcagGetWaitBadgeInfo(r) : null;
+    if (waitInfo && waitInfo.dateRef) {
+      const t = new Date(waitInfo.dateRef).getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+  } catch (_) {}
+  const tCreated = new Date(r.createdAt || r.created_at || 0).getTime();
+  return isNaN(tCreated) ? 0 : tCreated;
+}
+window.qcagGetItemSortTime = qcagGetItemSortTime;
 
 
