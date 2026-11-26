@@ -1615,11 +1615,17 @@
                   <label class="block text-sm font-medium text-gray-700">Họ và Tên SS/SE <span class="text-red-500">*</span></label>
                   <span id="hkSSBadge" class="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full hidden">Chuẩn hệ thống</span>
                 </div>
-                <div class="relative">
+                <div class="relative" id="hkSSComboboxWrapper">
                   <input id="hkSSName" type="text" placeholder="Chọn hoặc nhập tên SS/SE" list="hkSSDataList"
                     autocomplete="off"
-                    class="w-full px-4 py-2.5 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium">
+                    class="w-full px-4 py-2.5 pr-10 border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium">
                   <datalist id="hkSSDataList"></datalist>
+                  <button type="button" id="hkSSToggleBtn" tabindex="-1" class="absolute right-0 top-0 bottom-0 px-3 flex items-center justify-center text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors" title="Bấm để mở danh sách SS/SE">
+                    <svg class="w-4 h-4 transition-transform duration-200" id="hkSSArrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                  </button>
+                  <!-- Custom Dropdown Menu cho Mobile & Desktop -->
+                  <div id="hkSSDropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-gray-100 py-1 transition-all">
+                  </div>
                 </div>
                 <div id="hkSSHint" class="text-xs text-gray-500 mt-1 flex items-center justify-between">
                   <span>💡 Chọn từ danh sách chuẩn hoặc thêm người mới</span>
@@ -3333,8 +3339,15 @@
           </div>
           <div>
             <label class="block text-sm font-semibold mb-1.5">Tên SS/SE</label>
-            <input id="accountSSName" type="text" list="hkSSDataList" class="w-full px-4 py-3 rounded-xl transition-all"
-              placeholder="Chọn hoặc nhập tên SS/SE">
+            <div class="relative" id="accountSSComboboxWrapper">
+              <input id="accountSSName" type="text" list="hkSSDataList" class="w-full px-4 py-3 pr-10 rounded-xl transition-all"
+                placeholder="Chọn hoặc nhập tên SS/SE" autocomplete="off">
+              <button type="button" id="accountSSToggleBtn" tabindex="-1" class="absolute right-0 top-0 bottom-0 px-3 flex items-center justify-center text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors" title="Bấm để mở danh sách SS/SE">
+                <svg class="w-4 h-4 transition-transform duration-200" id="accountSSArrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+              </button>
+              <div id="accountSSDropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 max-h-52 overflow-y-auto divide-y divide-gray-100 dark:divide-slate-700/50 py-1 transition-all">
+              </div>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-semibold mb-1.5">Khu vực</label>

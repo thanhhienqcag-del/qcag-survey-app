@@ -247,13 +247,130 @@ async function updateSSSuggestions(rawRegion) {
   }
 }
 
-// Bind auto-format & badge listener to SS inputs
+function normalizeSSLookup(str) {
+  if (!str) return '';
+  try {
+    return String(str).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+  } catch (_) {
+    return String(str).trim().toLowerCase();
+  }
+}
+
+function openSSDropdown(inputId = 'hkSSName') {
+  const isAccount = (inputId === 'accountSSName');
+  const inputEl = document.getElementById(inputId);
+  const dropdownEl = document.getElementById(isAccount ? 'accountSSDropdown' : 'hkSSDropdown');
+  const arrowEl = document.getElementById(isAccount ? 'accountSSArrow' : 'hkSSArrow');
+  if (!inputEl || !dropdownEl) return;
+
+  const currentVal = (inputEl.value || '').trim();
+  const normQuery = normalizeSSLookup(currentVal);
+  const list = _currentSupervisorsList || [];
+
+  let matches = list;
+  if (normQuery) {
+    const filtered = list.filter(name => normalizeSSLookup(name).includes(normQuery));
+    if (filtered.length > 0) {
+      matches = filtered;
+    }
+  }
+
+  const safeEscape = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  let html = '';
+  if (matches.length > 0) {
+    matches.forEach(name => {
+      const isSelected = (normalizeSSLookup(name) === normQuery);
+      html += `
+        <div class="ss-dropdown-item px-3.5 py-2.5 flex items-center justify-between cursor-pointer transition-colors ${isSelected ? 'bg-emerald-50 text-emerald-800 font-semibold' : 'hover:bg-emerald-50/70 text-gray-800'}" data-name="${safeEscape(name)}">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isSelected ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'}">
+              ${safeEscape(name.charAt(0).toUpperCase())}
+            </span>
+            <span class="text-sm truncate">${safeEscape(name)}</span>
+          </div>
+          <span class="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">Chuẩn</span>
+        </div>
+      `;
+    });
+  }
+
+  // Nếu người dùng nhập tên mới không có trong danh sách, gợi ý thêm người mới
+  if (currentVal && !list.some(s => normalizeSSLookup(s) === normQuery)) {
+    const titleCased = normalizeSSTitleCase(currentVal);
+    html += `
+      <div class="ss-dropdown-item px-3.5 py-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-50 text-amber-900 border-t border-amber-100/60 bg-amber-50/30" data-name="${safeEscape(titleCased)}">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-amber-500 text-white">+</span>
+          <span class="text-sm font-medium truncate">Thêm mới: "${safeEscape(titleCased)}"</span>
+        </div>
+        <span class="text-[11px] font-medium text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-full">✨ Mới</span>
+      </div>
+    `;
+  }
+
+  if (!html) {
+    html = `<div class="px-3.5 py-3 text-center text-xs text-gray-400">Chưa có danh sách SS cho khu vực này</div>`;
+  }
+
+  dropdownEl.innerHTML = html;
+  dropdownEl.classList.remove('hidden');
+  if (arrowEl) arrowEl.classList.add('rotate-180');
+
+  dropdownEl.querySelectorAll('.ss-dropdown-item').forEach(item => {
+    item.addEventListener('mousedown', (e) => {
+      e.preventDefault(); // Giữ focus không bị blur trước khi gán giá trị
+    });
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const pickedName = item.getAttribute('data-name');
+      if (pickedName) {
+        inputEl.value = pickedName;
+        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      closeSSDropdown(inputId);
+    });
+  });
+}
+
+function closeSSDropdown(inputId = 'hkSSName') {
+  const isAccount = (inputId === 'accountSSName');
+  const dropdownEl = document.getElementById(isAccount ? 'accountSSDropdown' : 'hkSSDropdown');
+  const arrowEl = document.getElementById(isAccount ? 'accountSSArrow' : 'hkSSArrow');
+  if (dropdownEl) dropdownEl.classList.add('hidden');
+  if (arrowEl) arrowEl.classList.remove('rotate-180');
+}
+
+// Bind custom combobox events & auto-format to SS inputs
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
     ['hkSSName', 'accountSSName'].forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
+      const isAccount = (id === 'accountSSName');
+      const toggleBtn = document.getElementById(isAccount ? 'accountSSToggleBtn' : 'hkSSToggleBtn');
+      const dropdown = document.getElementById(isAccount ? 'accountSSDropdown' : 'hkSSDropdown');
+
+      // Khi focus hoặc click vào ô input -> MỞ DROPDOWN GỢI Ý NGAY LẬP TỨC
+      el.addEventListener('focus', () => openSSDropdown(id));
+      el.addEventListener('click', () => openSSDropdown(id));
+
+      // Nút mũi tên mở / đóng dropdown
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (dropdown && !dropdown.classList.contains('hidden')) {
+            closeSSDropdown(id);
+          } else {
+            el.focus();
+            openSSDropdown(id);
+          }
+        });
+      }
+
       el.addEventListener('input', () => {
+        openSSDropdown(id);
         const badgeEl = document.getElementById('hkSSBadge');
         if (!badgeEl) return;
         const v = normalizeSSTitleCase(el.value);
@@ -271,11 +388,25 @@ if (typeof document !== 'undefined') {
           badgeEl.className = 'text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full';
         }
       });
+
       el.addEventListener('blur', () => {
+        setTimeout(() => closeSSDropdown(id), 180);
         if (el.value) {
           el.value = normalizeSSTitleCase(el.value);
         }
       });
+    });
+
+    // Đóng dropdown khi click ra ngoài
+    document.addEventListener('click', (e) => {
+      const hkWrapper = document.getElementById('hkSSComboboxWrapper');
+      if (hkWrapper && !hkWrapper.contains(e.target)) {
+        closeSSDropdown('hkSSName');
+      }
+      const accWrapper = document.getElementById('accountSSComboboxWrapper');
+      if (accWrapper && !accWrapper.contains(e.target)) {
+        closeSSDropdown('accountSSName');
+      }
     });
   });
 }
