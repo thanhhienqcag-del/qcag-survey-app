@@ -3527,9 +3527,9 @@ const KS_REQUESTS_SELECT_SQL = `
       r.updated_at,
       CASE WHEN d_lat.created_at IS NOT NULL THEN COALESCE(u_des_d.fullname, u_des.fullname, d_lat.created_by, '') ELSE '' END AS design_created_by,
       d_lat.created_at AS design_created_at,
-      COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+      COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') AS design_last_edited_by,
       CASE 
-        WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+        WHEN COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') <> '' 
         THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
         ELSE NULL::timestamptz
       END AS design_last_edited_at,
@@ -3625,8 +3625,8 @@ const KS_REQUESTS_SELECT_SQL = `
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
-    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
-    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
+    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by OR u_des_d.fullname = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by OR u_des_up.fullname = d_lat.updated_by
 `;
 
 const KS_REQUESTS_LITE_SQL = `
@@ -3779,9 +3779,9 @@ const KS_REQUESTS_LITE_SQL = `
       r.updated_at,
       CASE WHEN d_lat.created_at IS NOT NULL THEN COALESCE(u_des_d.fullname, u_des.fullname, d_lat.created_by, '') ELSE '' END AS design_created_by,
       d_lat.created_at AS design_created_at,
-      COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+      COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') AS design_last_edited_by,
       CASE 
-        WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+        WHEN COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') <> '' 
         THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
         ELSE NULL::timestamptz
       END AS design_last_edited_at,
@@ -3862,8 +3862,8 @@ const KS_REQUESTS_LITE_SQL = `
       ORDER BY n.created_at ASC
       LIMIT 1
     ) n_edit_first ON true
-    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
-    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
+    LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by OR u_des_d.fullname = d_lat.created_by
+    LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by OR u_des_up.fullname = d_lat.updated_by
     WHERE COALESCE(r.is_deleted, false) = false
     ORDER BY r.created_at DESC
 `;
@@ -4857,9 +4857,9 @@ async function getRequestDetailDirect(idOrTkCode) {
             r.mq_folder,
             COALESCE(u_des.fullname, u_des_d.fullname, NULLIF(dt.designer_id, ''), NULLIF(d_lat.created_by, ''), '') AS design_created_by,
             COALESCE(dt.created_at, d_lat.created_at) AS design_created_at,
-            COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') AS design_last_edited_by,
+            COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') AS design_last_edited_by,
             CASE 
-              WHEN COALESCE(u_des_up.fullname, n_res.author_name, NULLIF(d_lat.updated_by, ''), '') <> '' 
+              WHEN COALESCE(u_des_up.fullname, NULLIF(d_lat.updated_by, ''), n_res.author_name, '') <> '' 
               THEN COALESCE(d_lat.updated_at, n_res.created_at, dt.updated_at)
               ELSE NULL::timestamptz
             END AS design_last_edited_at,
@@ -4876,8 +4876,8 @@ async function getRequestDetailDirect(idOrTkCode) {
           WHERE d.request_tk_code = r.tk_code 
           ORDER BY COALESCE(d.updated_at, d.created_at) DESC, d.id DESC LIMIT 1
         ) d_lat ON true
-        LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by
-        LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by
+        LEFT JOIN users u_des_d ON u_des_d.id = d_lat.created_by OR u_des_d.username = d_lat.created_by OR u_des_d.phone = d_lat.created_by OR u_des_d.fullname = d_lat.created_by
+        LEFT JOIN users u_des_up ON u_des_up.id = d_lat.updated_by OR u_des_up.username = d_lat.updated_by OR u_des_up.phone = d_lat.updated_by OR u_des_up.fullname = d_lat.updated_by
         LEFT JOIN LATERAL (
           SELECT 
               q_sub.quote_code, 
@@ -6381,7 +6381,8 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
                     processedIds.push(itemId);
                     const seq = Number(it.seq) || (i + 1);
                     const itemType = toNullableString(it.type) || 'Hạng mục khảo sát';
-                    const action = toNullableString(it.action) || 'Làm mới';
+                    const isOtherType = itemType === 'Hạng mục khác' || itemType.toLowerCase().includes('khác');
+                    const action = isOtherType ? null : (toNullableString(it.action) || 'Làm mới');
                     const brand = toNullableString(it.brand) || null;
                     const rawW = it.width && !isNaN(Number(it.width)) ? Number(it.width) : null;
                     const rawH = it.height && !isNaN(Number(it.height)) ? Number(it.height) : null;
@@ -6500,7 +6501,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             }
         }
 
-        if (b.status === 'done' && !isAlreadyQuoted) {
+        if (b.status === 'done' || isConfirmingEdit || b.quotePendingRevision === true) {
             try {
                 const desId = resolveDesignerIdHelper(b.designCreatedBy || b.designLastEditedBy || b.designerId, currentReq.outlet_area, currentReq.sale_region);
                 await pool.query(`

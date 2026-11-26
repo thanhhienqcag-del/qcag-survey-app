@@ -4704,7 +4704,7 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
 
     const isSignageItem = (typeof qcagIsSignageProductionItem === 'function') ? qcagIsSignageProductionItem(item) : true;
 
-    if (isTaskMode && reqId && isSignageItem) {
+    if (isTaskMode && reqId && isSignageItem && !isOther) {
       const matchedQ = (matchMap && matchMap.has(idx))
         ? matchMap.get(idx)
         : ((typeof qcagFindMatchingQuoteItem === 'function') ? qcagFindMatchingQuoteItem(item, quoteItems) : null);
@@ -4758,8 +4758,8 @@ function qcagDesktopBuildItemsHtml(items, canManageItems = false, request = null
     return `<div class="qcag-items-row">
           <div class="qcag-stt-cell"><div class="qcag-stt-num">${idx + 1}</div><div class="qcag-stt-badges">${badgesHtml}</div></div>
           <div class="qcag-item-type ${typeClass}"><div class="qcag-cell-val">${escapeHtml(getItemDisplayName(item))}</div>${typeSubnote}</div>
-          <div class="qcag-col-action"><div class="qcag-cell-val">${escapeHtml(item.action || '-')}</div>${actionSubnote}</div>
-          <div class="qcag-col-brand"><div class="qcag-cell-val"><span class="qcag-brand-badge ${brandClass}">${escapeHtml(item.brand || '-')}</span></div>${brandSubnote}</div>
+          <div class="qcag-col-action"><div class="qcag-cell-val">${escapeHtml(!isOther ? (item.action || '-') : '-')}</div>${actionSubnote}</div>
+          <div class="qcag-col-brand"><div class="qcag-cell-val"><span class="qcag-brand-badge ${isOther ? 'brand-default' : brandClass}">${escapeHtml(!isOther ? (item.brand || '-') : '-')}</span></div>${brandSubnote}</div>
           <div class="qcag-col-size"><div class="qcag-cell-val"><span class="qcag-size-val">${sizeHtml}${sizeExtraNote}</span></div>${sizeSubnote}</div>
           <div class="qcag-col-poles"><div class="qcag-cell-val">${escapeHtml(poles)}</div></div>
           <div class="qcag-col-req"><div class="qcag-cell-val qcag-cell-val--wrap" title="${escapeHtml(requestText)}"><span>${escapeHtml(requestText)}</span></div></div>
@@ -6664,9 +6664,12 @@ async function qcagDesktopMarkProcessed() {
       const lastC = comments.length > 0 ? comments[comments.length - 1] : null;
       const isAlreadyResolvedLast = lastC && (lastC.commentType === 'edit-resolved' || String(lastC.text || '').includes('đã chỉnh sửa xong'));
       if (!isAlreadyResolvedLast) {
+        const activeDesigner = (currentSession && (currentSession.name || currentSession.fullname || currentSession.username)) 
+          || (currentDetailRequest && (currentDetailRequest.designLastEditedBy || currentDetailRequest.design_last_edited_by || currentDetailRequest.designerName)) 
+          || 'QCAG';
         comments.push({
           authorRole: 'qcag',
-          authorName: (currentSession && (currentSession.name || currentSession.phone)) || 'QCAG',
+          authorName: activeDesigner,
           commentType: 'edit-resolved',
           text: 'QCAG đã chỉnh sửa xong theo yêu cầu của Sale Heineken.',
           readBy: [],
