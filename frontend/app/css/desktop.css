@@ -1380,8 +1380,93 @@
   .qcag-old-images img { width: 120px; height: auto; border-radius: 8px; display: block; cursor: zoom-in; }
   .qcag-content-extra { padding: 6px; }
 
-  .qcag-supplement { margin-top: 10px; }
-  .qcag-supplement-title { color: rgba(255,255,255,0.72); font-weight: 600; font-size: 12px; font-style: italic; margin-bottom: 6px; }
+  /* Callout nổi bật cho Yêu Cầu Thêm từ Sale (oldExtra) */
+  .qcag-supplement-box {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-left: 4px solid #f59e0b;
+    box-shadow: 0 0 12px rgba(245, 158, 11, 0.12);
+    transition: all 0.2s ease;
+  }
+  .qcag-supplement-box:hover {
+    border-color: rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
+  }
+  .qcag-supplement-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .qcag-supplement-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #fbbf24;
+  }
+  .qcag-supplement-badge svg {
+    flex-shrink: 0;
+    color: #f59e0b;
+  }
+  .qcag-supplement-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(251, 191, 36, 0.85);
+    background: rgba(245, 158, 11, 0.15);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .qcag-supplement-body {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: #fef3c7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  :root:not(.dark) .qcag-supplement-box,
+  body:not(.dark) .qcag-supplement-box,
+  .theme-light .qcag-supplement-box,
+  [data-theme="light"] .qcag-supplement-box {
+    background: #fffbeb !important;
+    border: 1px solid #fcd34d !important;
+    border-left: 4px solid #d97706 !important;
+    box-shadow: 0 1px 3px rgba(217, 119, 6, 0.1) !important;
+  }
+  :root:not(.dark) .qcag-supplement-badge,
+  body:not(.dark) .qcag-supplement-badge,
+  .theme-light .qcag-supplement-badge,
+  [data-theme="light"] .qcag-supplement-badge {
+    color: #b45309 !important;
+  }
+  :root:not(.dark) .qcag-supplement-badge svg,
+  body:not(.dark) .qcag-supplement-badge svg,
+  .theme-light .qcag-supplement-badge svg,
+  [data-theme="light"] .qcag-supplement-badge svg {
+    color: #d97706 !important;
+  }
+  :root:not(.dark) .qcag-supplement-sub,
+  body:not(.dark) .qcag-supplement-sub,
+  .theme-light .qcag-supplement-sub,
+  [data-theme="light"] .qcag-supplement-sub {
+    color: #92400e !important;
+    background: #fef3c7 !important;
+  }
+  :root:not(.dark) .qcag-supplement-body,
+  body:not(.dark) .qcag-supplement-body,
+  .theme-light .qcag-supplement-body,
+  [data-theme="light"] .qcag-supplement-body {
+    color: #78350f !important;
+  }
 
   /* Representative image with +N badge and gallery overlay */
   .qcag-gallery-rep { position: relative; display: inline-block; cursor: pointer; }

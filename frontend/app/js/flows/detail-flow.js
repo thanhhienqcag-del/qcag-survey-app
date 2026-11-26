@@ -720,7 +720,20 @@ async function showRequestDetail(id) {
                       <span>Nội dung cũ</span>
                     </div>`;
               if (scInfo.oldExtra) {
-                inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
+                inner += `
+                  <div class="qcag-supplement-box mb-2">
+                    <div class="qcag-supplement-header">
+                      <div class="qcag-supplement-badge">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                          <line x1="12" y1="9" x2="12" y2="13"/>
+                          <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        <span>Yêu cầu thêm từ Sale</span>
+                      </div>
+                    </div>
+                    <div class="qcag-supplement-body text-xs">${escapeHtml(scInfo.oldExtra)}</div>
+                  </div>`;
               }
               if (scInfo.rawContent) {
                 inner += `<p class="text-sm whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</p>`;
@@ -966,7 +979,20 @@ async function showRequestDetail(id) {
                       <span>Nội dung cũ</span>
                     </div>`;
             if (scInfo.oldExtra) {
-              inner += `<div class="text-xs text-amber-600 dark:text-amber-300 font-medium mb-1.5">Yêu cầu thêm: ${escapeHtml(scInfo.oldExtra)}</div>`;
+              inner += `
+                <div class="qcag-supplement-box mb-2">
+                  <div class="qcag-supplement-header">
+                    <div class="qcag-supplement-badge">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                        <line x1="12" y1="9" x2="12" y2="13"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                      <span>Yêu cầu thêm từ Sale</span>
+                    </div>
+                  </div>
+                  <div class="qcag-supplement-body text-xs">${escapeHtml(scInfo.oldExtra)}</div>
+                </div>`;
             }
             if (scInfo.rawContent) {
               inner += `<div class="text-sm leading-relaxed whitespace-pre-wrap font-medium text-gray-800 dark:text-gray-100 mb-2">${escapeHtml(scInfo.rawContent)}</div>`;
