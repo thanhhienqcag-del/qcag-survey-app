@@ -53,10 +53,11 @@ function loginPrefillHK2() {
       }
       b.classList.toggle('selected', isMatch);
     });
+    updateSSSuggestions(savedWork.region);
   }
   if (savedWork.ssName) {
     const ssEl = document.getElementById('hkSSName');
-    if (ssEl) ssEl.value = savedWork.ssName;
+    if (ssEl) ssEl.value = normalizeSSTitleCase(savedWork.ssName);
   }
 }
 window.loginPrefillHK2 = loginPrefillHK2;
@@ -166,10 +167,124 @@ function loginToggleTBA() {
   loginSelectSaleType(_loginTBAOn ? 'dsm_sr' : 'tba');
 }
 
+const _DEFAULT_SUPERVISORS = {
+  'S16': ['Hồ Văn Búp', 'Nguyễn Thành Hiếu', 'Nguyễn Văn Chí Hiếu', 'Phạm Hữu Thạnh', 'Tạ Kim Khọn', 'Võ Hoàng Y', 'Đoàn Văn Quẩn'],
+  'S17': ['Huỳnh Thành An', 'Khưu Chí Tuấn', 'Lê Phát Quang Vinh', 'Lê Tuấn Đạt', 'Nguyễn Văn Chí Hiếu', 'Nguyễn Vũ Đức Thịnh', 'Nguyễn Xuân Bách', 'Phạm Minh Nhật Tân', 'Phạm Ngọc Phú', 'Quách Hồng Thái', 'Trần Hoàng Hải', 'Võ Đình Phú', 'Đoàn Văn Quẩn', 'Đặng Long Vân'],
+  'S19': ['Lê Hữu Nghĩa', 'Nguyễn Chí Linh', 'Nguyễn Thái Di', 'Quách Hồng Thái', 'Đặng Long Vân'],
+  'S24': ['La Hoàng Tâm', 'Lê Tuấn Đạt', 'Trương Hữu Duyên', 'Võ Đình Phú', 'Đào Hoàng Thống'],
+  'S4': ['Huỳnh Lê Anh Duy', 'Khưu Chí Tuấn', 'Kim Phước Tài', 'Nguyễn Chí Nguyện', 'Nguyễn Thanh Vinh', 'Nguyễn Thành Vinh', 'Nguyễn Đức Thắng', 'Phạm Hữu Thạnh', 'Phạm Ngọc Phú'],
+  'S5': ['Cao Hữu Vẹn', 'Huỳnh Duy Phương', 'Hồ Tuấn Kiệt', 'Lê Hữu Nghĩa', 'Lê Quốc An', 'Nguyễn Minh Tuấn'],
+  'MOT8': ['Nguyễn Chí Linh', 'Nguyễn Thanh Bình']
+};
+
+let _currentSupervisorsList = [];
+
+function normalizeSSTitleCase(str) {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+function normalizeRegionToken(reg) {
+  if (!reg) return '';
+  return String(reg)
+    .trim()
+    .toUpperCase()
+    .replace(/^SOUTH\s*/i, 'S')
+    .replace(/^MODERN\s*ON\s*TEAM\s*/i, 'MOT')
+    .replace(/\s+/g, '');
+}
+
+async function updateSSSuggestions(rawRegion) {
+  const normReg = normalizeRegionToken(rawRegion);
+  const dataList = document.getElementById('hkSSDataList');
+  const countEl = document.getElementById('hkSSCount');
+  const badgeEl = document.getElementById('hkSSBadge');
+  const ssInput = document.getElementById('hkSSName');
+
+  let list = (_DEFAULT_SUPERVISORS[normReg] || []).slice();
+
+  try {
+    const base = (window.dataSdk && window.dataSdk.getBase && window.dataSdk.getBase()) || '';
+    const res = await fetch(`${base}/api/ks/supervisors?region=${encodeURIComponent(normReg)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.ok && Array.isArray(json.data) && json.data.length > 0) {
+        list = json.data.map(d => d.name);
+      }
+    }
+  } catch (_) {}
+
+  _currentSupervisorsList = list;
+
+  if (dataList) {
+    dataList.innerHTML = list.map(name => `<option value="${name}">${name}</option>`).join('');
+  }
+  if (countEl) {
+    countEl.textContent = list.length > 0 ? `${list.length} SS khu vực ${normReg}` : '';
+  }
+
+  // Update badge if input already has value
+  if (ssInput && badgeEl) {
+    const curVal = normalizeSSTitleCase(ssInput.value);
+    if (curVal) {
+      const isKnown = list.some(s => s.toLowerCase() === curVal.toLowerCase());
+      badgeEl.classList.remove('hidden');
+      if (isKnown) {
+        badgeEl.textContent = 'Chuẩn hệ thống';
+        badgeEl.className = 'text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full';
+      } else {
+        badgeEl.textContent = '✨ SS mới';
+        badgeEl.className = 'text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full';
+      }
+    } else {
+      badgeEl.classList.add('hidden');
+    }
+  }
+}
+
+// Bind auto-format & badge listener to SS inputs
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    ['hkSSName', 'accountSSName'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', () => {
+        const badgeEl = document.getElementById('hkSSBadge');
+        if (!badgeEl) return;
+        const v = normalizeSSTitleCase(el.value);
+        if (!v) {
+          badgeEl.classList.add('hidden');
+          return;
+        }
+        badgeEl.classList.remove('hidden');
+        const isKnown = _currentSupervisorsList.some(s => s.toLowerCase() === v.toLowerCase());
+        if (isKnown) {
+          badgeEl.textContent = 'Chuẩn hệ thống';
+          badgeEl.className = 'text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full';
+        } else {
+          badgeEl.textContent = '✨ SS mới';
+          badgeEl.className = 'text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full';
+        }
+      });
+      el.addEventListener('blur', () => {
+        if (el.value) {
+          el.value = normalizeSSTitleCase(el.value);
+        }
+      });
+    });
+  });
+}
+
 function loginSelectRegion(btn, region) {
   _loginSelectedRegion = region;
   document.querySelectorAll('.region-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
+  updateSSSuggestions(region);
 }
 
 function loginHK2Submit() {
@@ -209,8 +324,25 @@ function loginHK2Submit() {
 
   if (saleType === 'dsm_sr') {
     if (!_loginSelectedRegion) { showToast('Vui lòng chọn khu vực'); return; }
-    const ssName = document.getElementById('hkSSName').value.trim();
-    if (!ssName) { showToast('Vui lòng điền tên SS/SE'); return; }
+    const rawSS = (document.getElementById('hkSSName') && document.getElementById('hkSSName').value.trim()) || '';
+    if (!rawSS) { showToast('Vui lòng điền tên SS/SE'); return; }
+    const ssName = normalizeSSTitleCase(rawSS);
+    if (document.getElementById('hkSSName')) document.getElementById('hkSSName').value = ssName;
+
+    // Check if new SS, register asynchronously in supervisors catalog
+    const normReg = normalizeRegionToken(_loginSelectedRegion);
+    const isKnown = _currentSupervisorsList.some(s => s.toLowerCase() === ssName.toLowerCase());
+    if (!isKnown && ssName) {
+      try {
+        const base = (window.dataSdk && window.dataSdk.getBase && window.dataSdk.getBase()) || '';
+        fetch(`${base}/api/ks/supervisors`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: ssName, region: normReg })
+        }).catch(() => {});
+      } catch (_) {}
+    }
+
     currentSession = {
       role: 'heineken',
       ...saved,

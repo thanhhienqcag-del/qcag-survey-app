@@ -1741,6 +1741,59 @@ app.get('/users/approved', async (req, res) => {
     }
 });
 
+// ============ SUPERVISORS API (Standardized SS/SE list for App 1 & App 2) ============
+app.get(['/api/ks/supervisors', '/api/supervisors'], async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const rawReg = req.query.region ? String(req.query.region).toUpperCase().trim() : '';
+        const normReg = rawReg.replace(/^SOUTH\s*/i, 'S').replace(/^MODERN\s*ON\s*TEAM\s*/i, 'MOT');
+        let sql = `SELECT id, name, region, is_active FROM supervisors WHERE is_active = true`;
+        const params = [];
+        if (normReg && normReg !== 'ALL') {
+            sql += ` AND UPPER(region) = ?`;
+            params.push(normReg);
+        }
+        sql += ` ORDER BY region ASC, name ASC`;
+        const [rows] = await pool.query(sql, params);
+        res.json({ ok: true, data: rows || [] });
+    } catch (err) {
+        console.error('[GET /api/supervisors] Error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
+app.post(['/api/ks/supervisors', '/api/supervisors'], async (req, res) => {
+    try {
+        await ensureDbInitStarted();
+        const rawName = String(req.body && (req.body.name || req.body.ss_name) || '').trim();
+        let region = String(req.body && req.body.region || 'S17').toUpperCase().trim();
+        region = region.replace(/^SOUTH\s*/i, 'S').replace(/^MODERN\s*ON\s*TEAM\s*/i, 'MOT');
+        if (!rawName) {
+            return res.status(400).json({ ok: false, error: 'missing_name' });
+        }
+        // Auto Title Case
+        const titleName = rawName
+            .toLowerCase()
+            .split(/\s+/)
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+        const norm = titleName.toLowerCase();
+
+        const [insRows] = await pool.query(`
+            INSERT INTO supervisors (name, normalized_name, region, is_active, updated_at)
+            VALUES (?, ?, ?, true, NOW())
+            ON CONFLICT (normalized_name, region) DO UPDATE SET name = EXCLUDED.name, is_active = true, updated_at = NOW()
+            RETURNING id, name, region
+        `, [titleName, norm, region]);
+
+        const saved = insRows && insRows[0] ? insRows[0] : { name: titleName, region };
+        res.json({ ok: true, data: saved });
+    } catch (err) {
+        console.error('[POST /api/supervisors] Error:', err);
+        res.status(500).json({ ok: false, error: 'db_error' });
+    }
+});
+
 app.post('/auth/admin/update', requireAuth('admin'), async (req, res) => {
     await ensureDbInitStarted();
     const username = req.body && (req.body.username != null || req.body.phone != null) ?
