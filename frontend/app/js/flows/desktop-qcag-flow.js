@@ -886,18 +886,10 @@ function qcagDesktopIsPendingEditRequest(req) {
   const hasActiveEditTime = Boolean(req.editingRequestedAt || req.editing_requested_at);
 
   // 1. Ưu tiên tuyệt đối: sub_status từ DB hoặc status chính là yêu cầu chỉnh sửa
-  // CHÚ Ý: Nếu đơn đã explicitly hoàn thành (done/completed) mà KHÔNG có editingRequestedAt
-  // thì sub_status 'pending_edit' là vết cũ của đợt sửa trước đã hoàn tất -> Không được xem là pending edit!
   if (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit') {
-    if (isExplicitDone && !hasActiveEditTime) {
-      return false;
-    }
     return true;
   }
   if (s === 'pending-edit' || s === 'edit_requested' || s === 'request-edit') {
-    if (isExplicitDone && !hasActiveEditTime) {
-      return false;
-    }
     return true;
   }
   // 2. Chặn cờ phủ quyết nếu client/server đã xác nhận không còn pending edit
@@ -906,9 +898,6 @@ function qcagDesktopIsPendingEditRequest(req) {
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at) {
-    if (isExplicitDone) {
-      return false;
-    }
     return true;
   }
   if (req.hasEditRequest || req.isEditPending) {
@@ -6691,8 +6680,8 @@ async function qcagDesktopMarkProcessed() {
       const lastC = comments.length > 0 ? comments[comments.length - 1] : null;
       const isAlreadyResolvedLast = lastC && (lastC.commentType === 'edit-resolved' || String(lastC.text || '').includes('đã chỉnh sửa xong'));
       if (!isAlreadyResolvedLast) {
-        const activeDesigner = (currentSession && (currentSession.name || currentSession.fullname || currentSession.username)) 
-          || (currentDetailRequest && (currentDetailRequest.designLastEditedBy || currentDetailRequest.design_last_edited_by || currentDetailRequest.designerName)) 
+        const activeDesigner = (currentSession && (currentSession.name || currentSession.fullname || currentSession.username))
+          || (currentDetailRequest && (currentDetailRequest.designLastEditedBy || currentDetailRequest.design_last_edited_by || currentDetailRequest.designerName))
           || 'QCAG';
         comments.push({
           authorRole: 'qcag',

@@ -759,6 +759,7 @@ async function initKsDB() {
             ALTER TABLE request_items DROP CONSTRAINT IF EXISTS request_items_added_by_qcag_by_fkey;
             ALTER TABLE request_items DROP CONSTRAINT IF EXISTS request_items_brand_changed_by_fkey;
         `);
+        await ensureColumn(`ALTER TABLE requests ADD COLUMN IF NOT EXISTS editing_requested_at TIMESTAMPTZ NULL`);
     } catch (err) {
         console.warn('[initKsDB] Views cleanup warning (non-fatal):', err && err.message ? err.message : err);
     }
@@ -5272,7 +5273,27 @@ async function handleCreateRequestNote(req, res) {
             INSERT INTO notes (id, ref_type, ref_id, note_type, content, author_name, image_url, created_at)
             VALUES (?, 'request', ?, ?, ?, ?, ?, NOW())
         `, [noteId, tkCode, noteType, safeContent, authorName, imageUrl]);
-        await pool.query('UPDATE requests SET updated_at = NOW() WHERE tk_code = ?', [tkCode]).catch(() => {});
+
+        if (noteType === 'edit-request' || noteType === 'edit_request') {
+            await pool.query(`
+                UPDATE requests 
+                SET status = 'processing',
+                    sub_status = 'pending_edit',
+                    editing_requested_at = NOW(),
+                    updated_at = NOW() 
+                WHERE tk_code = ? OR id = ?
+            `, [tkCode, tkCode]).catch(() => {});
+
+            await pool.query(`
+                UPDATE design_tasks 
+                SET status = 'in_progress', updated_at = NOW() 
+                WHERE tk_code = ?
+            `, [tkCode]).catch(() => {});
+
+            wsInvalidate('design_tasks', { action: 'update', code: tkCode });
+        } else {
+            await pool.query('UPDATE requests SET updated_at = NOW() WHERE tk_code = ?', [tkCode]).catch(() => {});
+        }
 
         const isQcagAuthor = (
             String(b.authorRole || '').toLowerCase() === 'qcag' ||
@@ -7303,11 +7324,11 @@ app.post('/api/ks/requests/:id/reject-production', async (req, res) => {
             console.warn('[reject-production] sync requests warning:', reqSyncErr && reqSyncErr.message);
         }
 
-        // 4. MỞ LẠI TASK THIẾT KẾ CHO DESIGNER QCAG KHI TỪ CHỐI SẢN XUẤT
+        // 4. MỞ LẠI TASK THIẾT KẾ CHO DESIGNER QCAG KHI TỪ CHỐI SẢN XUẤT (in_progress, chờ Designer sửa MQ)
         try {
             await pool.query(`
                 UPDATE design_tasks 
-                SET status = 'pending', updated_at = NOW() 
+                SET status = 'in_progress', updated_at = NOW() 
                 WHERE tk_code = ? OR tk_code = (SELECT request_tk_code FROM quotations WHERE quote_code = ? LIMIT 1)
             `, [targetCode, targetCode]);
             wsInvalidate('design_tasks', { action: 'update', code: targetCode });
@@ -7450,11 +7471,11 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
             console.warn('[request-edit-production] record note warning:', noteErr && noteErr.message);
         }
 
-        // 4. MỞ LẠI TASK THIẾT KẾ CHO DESIGNER QCAG
+        // 4. MỞ LẠI TASK THIẾT KẾ CHO DESIGNER QCAG (in_progress, chờ Designer sửa MQ)
         try {
             await pool.query(`
                 UPDATE design_tasks 
-                SET status = 'pending', updated_at = NOW() 
+                SET status = 'in_progress', updated_at = NOW() 
                 WHERE tk_code = ? OR tk_code = (SELECT request_tk_code FROM quotations WHERE quote_code = ? LIMIT 1)
             `, [targetCode, targetCode]);
             wsInvalidate('design_tasks', { action: 'update', code: targetCode });
@@ -7474,6 +7495,15 @@ app.post('/api/ks/requests/:id/request-edit-production', async (req, res) => {
                     tkCode = qRows[0].request_tk_code;
                 }
             } catch (_) {}
+
+            await pool.query(`
+                UPDATE requests 
+                SET status = 'processing',
+                    sub_status = 'pending_edit',
+                    editing_requested_at = NOW(),
+                    updated_at = NOW()
+                WHERE tk_code = ? OR id = ?
+            `, [tkCode, tkCode]);
 
             if (tkCode && tkCode !== targetCode) {
                 const noteTkId = `nt_edit_tk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
