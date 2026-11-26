@@ -3425,16 +3425,12 @@ const KS_REQUESTS_SELECT_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
@@ -3446,16 +3442,12 @@ const KS_REQUESTS_SELECT_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
@@ -3502,20 +3494,16 @@ const KS_REQUESTS_SELECT_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
-        ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.updated_at)
+        ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.editing_requested_at, r.updated_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
       CASE
@@ -3691,16 +3679,12 @@ const KS_REQUESTS_LITE_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
@@ -3712,16 +3696,12 @@ const KS_REQUESTS_LITE_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
@@ -3754,20 +3734,16 @@ const KS_REQUESTS_LITE_SQL = `
       CASE 
         WHEN (
           (
-            (
+            COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+            OR (
               n_edit.created_at IS NOT NULL 
               AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
               AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-              AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-            )
-            OR (
-              COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-              AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-              AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+              AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
             )
           )
           AND COALESCE(r.status, '') NOT IN ('done', 'completed')
-        ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.updated_at)
+        ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.editing_requested_at, r.updated_at)
         ELSE NULL::timestamptz
       END AS editing_requested_at,
       CASE
@@ -4622,9 +4598,11 @@ app.get('/api/ks/requests', async (req, res) => {
                     const ar = _ksRequestsCache.rows[ai];
                     if (!ar) continue;
                     const st = String(ar.status || 'pending').trim().toLowerCase();
+                    const sub = String(ar.subStatus || ar.sub_status || ar.design_status || '').trim().toLowerCase();
                     const hasQuote = Boolean(ar.quoteCode || ar.quote_code || (ar.bridge && (ar.bridge.quote_code || ar.bridge.quoteCode)));
                     const isDoneStatus = (st === 'done' || st === 'processed' || st === 'quoted' || st === 'completed' || st === 'cancelled' || hasQuote);
-                    if (!isDoneStatus || ar.editingRequestedAt) {
+                    const isPendingEdit = (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit' || Boolean(ar.editingRequestedAt));
+                    if (!isDoneStatus || isPendingEdit) {
                         const key = ar.tkCode || ar.id || ar.__backendId;
                         if (key) activeProcessingIds.push(String(key));
                     }
@@ -4723,18 +4701,15 @@ async function getRequestDetailDirect(idOrTkCode) {
             CASE 
               WHEN (
                 (
-                  (
+                  COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+                  OR (
                     n_edit.created_at IS NOT NULL 
                     AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
                     AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-                    AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-                  )
-                  OR (
-                    COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-                    AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-                    AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+                    AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
                   )
                 )
+                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN 'processing'::varchar(32)
               WHEN COALESCE(r.status, '') IN ('pending', 'processing') AND q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> '' 
               THEN 'quoted'::varchar(32) 
@@ -4743,18 +4718,15 @@ async function getRequestDetailDirect(idOrTkCode) {
             CASE 
               WHEN (
                 (
-                  (
+                  COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+                  OR (
                     n_edit.created_at IS NOT NULL 
                     AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
                     AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-                    AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-                  )
-                  OR (
-                    COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-                    AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-                    AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+                    AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
                   )
                 )
+                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN COALESCE(NULLIF(r.sub_status, ''), 'pending_edit')::varchar(32)
               WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
               THEN NULL::varchar(32)
@@ -4763,18 +4735,15 @@ async function getRequestDetailDirect(idOrTkCode) {
             CASE 
               WHEN (
                 (
-                  (
+                  COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+                  OR (
                     n_edit.created_at IS NOT NULL 
                     AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
                     AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-                    AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-                  )
-                  OR (
-                    COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-                    AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-                    AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+                    AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
                   )
                 )
+                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
               ) THEN COALESCE(NULLIF(r.sub_status, ''), 'pending_edit')::varchar(32)
               WHEN (COALESCE(r.status, '') IN ('done', 'completed', 'quoted', 'processed') OR (q_lat.quote_code IS NOT NULL AND q_lat.quote_code <> ''))
               THEN NULL::varchar(32)
@@ -4783,19 +4752,16 @@ async function getRequestDetailDirect(idOrTkCode) {
             CASE 
               WHEN (
                 (
-                  (
+                  COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
+                  OR (
                     n_edit.created_at IS NOT NULL 
                     AND (n_res.created_at IS NULL OR n_edit.created_at > n_res.created_at)
                     AND (d_lat.created_at IS NULL OR n_edit.created_at > COALESCE(d_lat.updated_at, d_lat.created_at))
-                    AND (q_lat.quote_code IS NULL OR n_edit.created_at > q_lat.updated_at)
-                  )
-                  OR (
-                    COALESCE(r.sub_status, '') IN ('pending_edit', 'pending-edit', 'edit_requested', 'request-edit')
-                    AND (d_lat.created_at IS NULL OR COALESCE(d_lat.updated_at, d_lat.created_at) < r.updated_at)
-                    AND (q_lat.quote_code IS NULL OR q_lat.updated_at < r.updated_at)
+                    AND COALESCE(r.status, '') NOT IN ('done', 'completed', 'quoted', 'processed')
                   )
                 )
-              ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.updated_at)
+                AND COALESCE(r.status, '') NOT IN ('done', 'completed')
+              ) THEN COALESCE(n_edit_first.created_at, n_edit.created_at, r.editing_requested_at, r.updated_at)
               ELSE NULL::timestamptz
             END AS editing_requested_at,
             COALESCE(q_lat.quote_code, '') AS quote_code,

@@ -223,6 +223,26 @@
                 _lastEtag = null;
                 _triggerStoreUpdated();
               }
+            } else if ((action === 'update' || action === 'quoted' || action === 'edit-request') && (payload.tk_code || payload.tkCode || payload.id)) {
+              var targetTk = String(payload.tk_code || payload.tkCode || payload.id || '');
+              for (var ui2 = 0; ui2 < _store.length; ui2++) {
+                var uRow = _store[ui2];
+                if (uRow && (String(uRow.tkCode || '') === targetTk || String(uRow.__backendId || '') === targetTk || String(uRow.id || '') === targetTk)) {
+                  if (payload.status) uRow.status = payload.status;
+                  if (payload.quote_code || payload.quoteCode) {
+                    uRow.quoteCode = payload.quote_code || payload.quoteCode;
+                    uRow.quote_code = uRow.quoteCode;
+                  }
+                  if (payload.sub_status) uRow.subStatus = payload.sub_status;
+                  if (payload.editing_requested_at) uRow.editingRequestedAt = payload.editing_requested_at;
+                  patched = true;
+                  break;
+                }
+              }
+              if (patched) {
+                _lastEtag = null;
+                _triggerStoreUpdated();
+              }
             }
 
             _scheduleRefresh(150, true);
@@ -843,10 +863,10 @@
     if (!r) return false;
     var st = String(r.status || 'pending').trim().toLowerCase();
     var sub = String(r.subStatus || r.sub_status || r.design_status || '').trim().toLowerCase();
+    var isPendingEdit = (sub === 'pending_edit' || sub === 'pending-edit' || sub === 'edit_requested' || sub === 'request-edit' || Boolean(r.editingRequestedAt || r.editing_requested_at));
+    if (isPendingEdit && st !== 'done' && st !== 'completed' && st !== 'cancelled') return true;
     var hasQuote = Boolean(r.quoteCode || r.quote_code || (r.bridge && (r.bridge.quote_code || r.bridge.quoteCode)));
-    var isDone = (st === 'done' || st === 'completed' || st === 'cancelled' || ((st === 'quoted' || st === 'processed' || hasQuote) && sub !== 'pending_edit' && sub !== 'pending-edit' && st !== 'processing' && st !== 'pending'));
-    var hasEditTime = Boolean(r.editingRequestedAt || r.editing_requested_at);
-    if (hasEditTime && (sub === 'pending_edit' || sub === 'pending-edit' || !isDone)) return true;
+    var isDone = (st === 'done' || st === 'completed' || st === 'cancelled' || ((st === 'quoted' || st === 'processed' || hasQuote) && !isPendingEdit && st !== 'processing' && st !== 'pending'));
     if (!isDone) return true;
     return false;
   }
@@ -1149,7 +1169,7 @@
       countDrift = (typeof meta.totalActive === 'number') ? Math.abs(comparableLen - meta.totalActive) : 0;
     }
 
-    var needFullHeal = (diffIds.length > 150) || (_store.length === 0);
+    var needFullHeal = (diffIds.length > 150) || (_store.length === 0) || (countDrift > 3 && (!_lastFullReconcileAt || (Date.now() - _lastFullReconcileAt) > 60000));
     if (needFullHeal && (!_lastFullReconcileAt || (Date.now() - _lastFullReconcileAt) > 120000)) {
       _lastFullReconcileAt = Date.now();
       try {
