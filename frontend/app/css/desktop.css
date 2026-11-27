@@ -1380,92 +1380,74 @@
   .qcag-old-images img { width: 120px; height: auto; border-radius: 8px; display: block; cursor: zoom-in; }
   .qcag-content-extra { padding: 6px; }
 
-  /* Callout nổi bật cho Yêu Cầu Thêm từ Sale (oldExtra) */
-  .qcag-supplement-box {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.35);
-    border-left: 4px solid #f59e0b;
-    box-shadow: 0 0 12px rgba(245, 158, 11, 0.12);
-    transition: all 0.2s ease;
+  /* Hiển thị Yêu Cầu Thêm từ Sale (oldExtra) - Chữ nổi bật 2 Theme, không dùng badge/box cồng kềnh */
+  .qcag-supplement {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(148, 163, 184, 0.25);
   }
-  .qcag-supplement-box:hover {
-    border-color: rgba(245, 158, 11, 0.55);
-    box-shadow: 0 0 16px rgba(245, 158, 11, 0.2);
-  }
-  .qcag-supplement-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 6px;
-    flex-wrap: wrap;
-  }
-  .qcag-supplement-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+  .qcag-supplement-label {
     font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #fbbf24;
-  }
-  .qcag-supplement-badge svg {
-    flex-shrink: 0;
+    font-weight: 700;
     color: #f59e0b;
+    margin-bottom: 2px;
+    letter-spacing: 0.02em;
   }
-  .qcag-supplement-sub {
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(251, 191, 36, 0.85);
-    background: rgba(245, 158, 11, 0.15);
-    padding: 2px 7px;
-    border-radius: 4px;
-  }
-  .qcag-supplement-body {
+  .qcag-supplement-text {
     font-size: 13px;
     font-weight: 600;
     line-height: 1.5;
-    color: #fef3c7;
+    color: #fbbf24;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+  :root:not(.dark) .qcag-supplement,
+  body:not(.dark) .qcag-supplement,
+  .theme-light .qcag-supplement,
+  [data-theme="light"] .qcag-supplement {
+    border-top-color: #cbd5e1 !important;
+  }
+  :root:not(.dark) .qcag-supplement-label,
+  body:not(.dark) .qcag-supplement-label,
+  .theme-light .qcag-supplement-label,
+  [data-theme="light"] .qcag-supplement-label {
+    color: #b45309 !important;
+  }
+  :root:not(.dark) .qcag-supplement-text,
+  body:not(.dark) .qcag-supplement-text,
+  .theme-light .qcag-supplement-text,
+  [data-theme="light"] .qcag-supplement-text {
+    color: #c2410c !important;
+  }
+
+  /* Fallback triệt tiêu box thù lù nếu còn sót class cũ */
+  .qcag-supplement-box {
+    margin-top: 8px !important;
+    padding: 8px 0 0 0 !important;
+    border: none !important;
+    border-top: 1px dashed rgba(148, 163, 184, 0.25) !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .qcag-supplement-box .qcag-supplement-header { display: none !important; }
+  .qcag-supplement-box .qcag-supplement-body {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 1.5 !important;
+    color: #fbbf24 !important;
   }
   :root:not(.dark) .qcag-supplement-box,
   body:not(.dark) .qcag-supplement-box,
   .theme-light .qcag-supplement-box,
   [data-theme="light"] .qcag-supplement-box {
-    background: #fffbeb !important;
-    border: 1px solid #fcd34d !important;
-    border-left: 4px solid #d97706 !important;
-    box-shadow: 0 1px 3px rgba(217, 119, 6, 0.1) !important;
+    border-top-color: #cbd5e1 !important;
   }
-  :root:not(.dark) .qcag-supplement-badge,
-  body:not(.dark) .qcag-supplement-badge,
-  .theme-light .qcag-supplement-badge,
-  [data-theme="light"] .qcag-supplement-badge {
-    color: #b45309 !important;
-  }
-  :root:not(.dark) .qcag-supplement-badge svg,
-  body:not(.dark) .qcag-supplement-badge svg,
-  .theme-light .qcag-supplement-badge svg,
-  [data-theme="light"] .qcag-supplement-badge svg {
-    color: #d97706 !important;
-  }
-  :root:not(.dark) .qcag-supplement-sub,
-  body:not(.dark) .qcag-supplement-sub,
-  .theme-light .qcag-supplement-sub,
-  [data-theme="light"] .qcag-supplement-sub {
-    color: #92400e !important;
-    background: #fef3c7 !important;
-  }
-  :root:not(.dark) .qcag-supplement-body,
-  body:not(.dark) .qcag-supplement-body,
-  .theme-light .qcag-supplement-body,
-  [data-theme="light"] .qcag-supplement-body {
-    color: #78350f !important;
+  :root:not(.dark) .qcag-supplement-box .qcag-supplement-body,
+  body:not(.dark) .qcag-supplement-box .qcag-supplement-body,
+  .theme-light .qcag-supplement-box .qcag-supplement-body,
+  [data-theme="light"] .qcag-supplement-box .qcag-supplement-body {
+    color: #c2410c !important;
   }
 
   /* Representative image with +N badge and gallery overlay */

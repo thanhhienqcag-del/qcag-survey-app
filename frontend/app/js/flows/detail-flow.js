@@ -721,18 +721,9 @@ async function showRequestDetail(id) {
                     </div>`;
               if (scInfo.oldExtra) {
                 inner += `
-                  <div class="qcag-supplement-box mb-2">
-                    <div class="qcag-supplement-header">
-                      <div class="qcag-supplement-badge">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                          <line x1="12" y1="9" x2="12" y2="13"/>
-                          <line x1="12" y1="17" x2="12.01" y2="17"/>
-                        </svg>
-                        <span>Yêu cầu thêm từ Sale</span>
-                      </div>
-                    </div>
-                    <div class="qcag-supplement-body text-xs">${escapeHtml(scInfo.oldExtra)}</div>
+                  <div class="qcag-supplement mb-2">
+                    <div class="qcag-supplement-label">Yêu cầu thêm:</div>
+                    <div class="qcag-supplement-text">${escapeHtml(scInfo.oldExtra)}</div>
                   </div>`;
               }
               if (scInfo.rawContent) {
@@ -980,18 +971,9 @@ async function showRequestDetail(id) {
                     </div>`;
             if (scInfo.oldExtra) {
               inner += `
-                <div class="qcag-supplement-box mb-2">
-                  <div class="qcag-supplement-header">
-                    <div class="qcag-supplement-badge">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                      <span>Yêu cầu thêm từ Sale</span>
-                    </div>
-                  </div>
-                  <div class="qcag-supplement-body text-xs">${escapeHtml(scInfo.oldExtra)}</div>
+                <div class="qcag-supplement mb-2">
+                  <div class="qcag-supplement-label">Yêu cầu thêm:</div>
+                  <div class="qcag-supplement-text">${escapeHtml(scInfo.oldExtra)}</div>
                 </div>`;
             }
             if (scInfo.rawContent) {

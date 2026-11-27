@@ -5789,22 +5789,12 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
               }
             }
 
-            // Hiển thị yêu cầu thêm nếu có (Callout Card nổi bật 2 Theme, chống bỏ sót khi thiết kế / báo giá)
+            // Hiển thị yêu cầu thêm nếu có (chữ nổi bật tương phản 2 theme, tinh gọn không dùng badge cồng kềnh)
             if (oldExtra) {
               html += `
-                <div class="qcag-supplement-box">
-                  <div class="qcag-supplement-header">
-                    <div class="qcag-supplement-badge">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                      <span>Yêu cầu thêm từ Sale</span>
-                    </div>
-                    <span class="qcag-supplement-sub">Cần chú ý khi thiết kế / báo giá</span>
-                  </div>
-                  <div class="qcag-supplement-body">${escapeHtml(oldExtra)}</div>
+                <div class="qcag-supplement">
+                  <div class="qcag-supplement-label">Yêu cầu thêm:</div>
+                  <div class="qcag-supplement-text">${escapeHtml(oldExtra)}</div>
                 </div>`;
             }
 
@@ -5813,19 +5803,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
             contentHtml = `<div class="qcag-content-pre font-medium text-gray-800 dark:text-gray-100">${escapeHtml(signContentToDisplay)}</div>`;
             if (oldExtra) {
               contentHtml += `
-                <div class="qcag-supplement-box">
-                  <div class="qcag-supplement-header">
-                    <div class="qcag-supplement-badge">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                      <span>Yêu cầu thêm từ Sale</span>
-                    </div>
-                    <span class="qcag-supplement-sub">Cần chú ý khi thiết kế / báo giá</span>
-                  </div>
-                  <div class="qcag-supplement-body">${escapeHtml(oldExtra)}</div>
+                <div class="qcag-supplement">
+                  <div class="qcag-supplement-label">Yêu cầu thêm:</div>
+                  <div class="qcag-supplement-text">${escapeHtml(oldExtra)}</div>
                 </div>`;
             }
           } else {
