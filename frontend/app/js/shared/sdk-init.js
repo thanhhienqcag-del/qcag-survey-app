@@ -202,6 +202,14 @@ window.__ksOnInvalidate = function (payload) {
         var reqObj = allRequests[foundIdx];
         reqObj.quoteCode = qMatch || reqObj.quoteCode;
         if (totalAmt > 0) reqObj.totalAmount = totalAmt;
+        reqObj.status = 'quoted';
+        reqObj.subStatus = null;
+        reqObj.sub_status = null;
+        reqObj.editingRequestedAt = null;
+        reqObj.editing_requested_at = null;
+        reqObj.hasEditRequest = false;
+        reqObj.isEditPending = false;
+        reqObj._isExplicitStatusConfirm = true;
         reqObj.bridge = Object.assign({}, reqObj.bridge || {}, {
           quote_code: qMatch || (reqObj.bridge && reqObj.bridge.quote_code),
           quoteCode: qMatch || (reqObj.bridge && reqObj.bridge.quoteCode),
@@ -209,6 +217,47 @@ window.__ksOnInvalidate = function (payload) {
           totalAmount: totalAmt || (reqObj.bridge && reqObj.bridge.totalAmount) || 0,
           status: 'confirmed'
         });
+        if (typeof _qcagDesktopFullRequestCache !== 'undefined' && reqObj.__backendId && _qcagDesktopFullRequestCache[reqObj.__backendId]) {
+          Object.assign(_qcagDesktopFullRequestCache[reqObj.__backendId], {
+            status: 'quoted',
+            subStatus: null,
+            sub_status: null,
+            editingRequestedAt: null,
+            editing_requested_at: null,
+            hasEditRequest: false,
+            isEditPending: false,
+            quoteCode: reqObj.quoteCode,
+            totalAmount: reqObj.totalAmount
+          });
+        }
+        if (typeof currentDetailRequest !== 'undefined' && currentDetailRequest &&
+            (currentDetailRequest.__backendId === reqObj.__backendId || (tkMatch && currentDetailRequest.tkCode === tkMatch))) {
+          Object.assign(currentDetailRequest, {
+            status: 'quoted',
+            subStatus: null,
+            sub_status: null,
+            editingRequestedAt: null,
+            editing_requested_at: null,
+            hasEditRequest: false,
+            isEditPending: false,
+            quoteCode: reqObj.quoteCode,
+            totalAmount: reqObj.totalAmount
+          });
+        }
+        if (typeof _qcagDesktopOpenRequestSnapshot !== 'undefined' && _qcagDesktopOpenRequestSnapshot &&
+            (_qcagDesktopOpenRequestSnapshot.__backendId === reqObj.__backendId || (tkMatch && _qcagDesktopOpenRequestSnapshot.tkCode === tkMatch))) {
+          Object.assign(_qcagDesktopOpenRequestSnapshot, {
+            status: 'quoted',
+            subStatus: null,
+            sub_status: null,
+            editingRequestedAt: null,
+            editing_requested_at: null,
+            hasEditRequest: false,
+            isEditPending: false,
+            quoteCode: reqObj.quoteCode,
+            totalAmount: reqObj.totalAmount
+          });
+        }
         if (typeof saveAllRequestsToStorage === 'function') saveAllRequestsToStorage();
 
         // In-Place DOM Update ngay lập tức (không cần chờ fetch mạng)
@@ -412,7 +461,17 @@ window.__ksOnInvalidate = function (payload) {
         for (var k in data) {
           if (data[k] != null && data[k] !== '' && data[k] !== '[]' && data[k] !== '["..."]') {
             allRequests[exIdx][k] = data[k];
+          } else if (data[k] === null && (k === 'editingRequestedAt' || k === 'editing_requested_at' || k === 'subStatus' || k === 'sub_status')) {
+            allRequests[exIdx][k] = null;
           }
+        }
+        if (data.status === 'quoted' || data.status === 'done') {
+          allRequests[exIdx].subStatus = null;
+          allRequests[exIdx].sub_status = null;
+          allRequests[exIdx].editingRequestedAt = null;
+          allRequests[exIdx].editing_requested_at = null;
+          allRequests[exIdx].hasEditRequest = false;
+          allRequests[exIdx].isEditPending = false;
         }
         if (typeof _qcagDesktopFullRequestCache !== 'undefined') {
           _qcagDesktopFullRequestCache[bid] = Object.assign({}, _qcagDesktopFullRequestCache[bid] || {}, allRequests[exIdx]);
@@ -427,7 +486,17 @@ window.__ksOnInvalidate = function (payload) {
       for (var f in data) {
         if (data[f] != null && data[f] !== '' && data[f] !== '[]' && data[f] !== '["..."]') {
           currentDetailRequest[f] = data[f];
+        } else if (data[f] === null && (f === 'editingRequestedAt' || f === 'editing_requested_at' || f === 'subStatus' || f === 'sub_status')) {
+          currentDetailRequest[f] = null;
         }
+      }
+      if (data.status === 'quoted' || data.status === 'done') {
+        currentDetailRequest.subStatus = null;
+        currentDetailRequest.sub_status = null;
+        currentDetailRequest.editingRequestedAt = null;
+        currentDetailRequest.editing_requested_at = null;
+        currentDetailRequest.hasEditRequest = false;
+        currentDetailRequest.isEditPending = false;
       }
       if (typeof _qcagDesktopInPlaceRefresh === 'function') {
         _qcagDesktopInPlaceRefresh(currentDetailRequest);

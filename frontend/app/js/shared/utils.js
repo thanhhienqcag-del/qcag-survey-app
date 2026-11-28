@@ -660,9 +660,7 @@ window.qcagCalculateWaitDays = qcagCalculateWaitDays;
 function qcagGetWaitBadgeInfo(req) {
   if (!req) return null;
   const status = String(req.status || '').toLowerCase().trim();
-  if (status === 'done' || status === 'processed' || status === 'completed') {
-    return null;
-  }
+  const hasQuote = Boolean(req.quoteCode || req.quote_code || (req.bridge && (req.bridge.quote_code || req.bridge.quoteCode)));
 
   // Nhận diện trạng thái Chờ chỉnh sửa
   const isPendingEdit = (typeof qcagDesktopIsPendingEditRequest === 'function')
@@ -676,6 +674,11 @@ function qcagGetWaitBadgeInfo(req) {
         if (req.editingRequestedAt || req.editing_requested_at) return true;
         return false;
       })();
+
+  // Đơn đã hoàn tất hoặc đã có báo giá và không có yêu cầu chỉnh sửa đang chờ: không hiển thị badge chờ
+  if ((status === 'done' || status === 'processed' || status === 'completed' || status === 'quoted' || hasQuote) && !isPendingEdit) {
+    return null;
+  }
 
   let dateRef = req.createdAt || req.created_at;
   let hasHadDesign = false;

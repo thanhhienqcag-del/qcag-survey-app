@@ -6541,7 +6541,9 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             }
         }
 
-        if (b.status === 'done' || isConfirmingEdit || b.quotePendingRevision === true) {
+        const isReqWarranty = String(currentReq.type || b.type || '').toLowerCase() === 'warranty';
+
+        if (!isReqWarranty && (b.status === 'done' || isConfirmingEdit || b.quotePendingRevision === true)) {
             try {
                 const desId = resolveDesignerIdHelper(b.designCreatedBy || b.designLastEditedBy || b.designerId, currentReq.outlet_area, currentReq.sale_region);
                 await pool.query(`
@@ -6597,7 +6599,7 @@ app.patch('/api/ks/requests/:id', async (req, res) => {
             const isEditConfirm = becomingDone && ('designLastEditedBy' in b);
             const isFirstMQ = becomingDone && ('designCreatedBy' in b) && !isEditConfirm;
 
-            if (isEditConfirm || isFirstMQ || (becomingDone && 'designImages' in b)) {
+            if (!isReqWarranty && (isEditConfirm || isFirstMQ || (becomingDone && 'designImages' in b))) {
                 const requesterPhone = currentReq.requester_phone || null;
                 const outletLabel = currentReq.outlet_name || currentReq.outlet_code || 'Outlet';
 

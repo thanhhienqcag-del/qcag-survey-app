@@ -311,7 +311,18 @@ function qcagDesktopMergePreserveImageFields(nextReq, prevReq) {
     || prevReq.isEditPending === true
     || Boolean(prevReq.editingRequestedAt || prevReq.editing_requested_at);
 
-  if (prevWasPending && nextReq._isExplicitStatusConfirm !== true && String(nextReq.status || '').toLowerCase() !== 'done') {
+  const nextStatus = String(nextReq.status || '').toLowerCase().trim();
+  const isNextFinished = ['quoted', 'done', 'completed', 'processed'].includes(nextStatus);
+
+  if (isNextFinished || nextReq._isExplicitStatusConfirm === true || nextReq.hasEditRequest === false || nextReq.isEditPending === false) {
+    // Record đã hoàn tất thiết kế / báo giá hoặc được xác nhận hết pending edit: Dọn sạch các cờ chỉnh sửa
+    merged.subStatus = null;
+    merged.sub_status = null;
+    merged.hasEditRequest = false;
+    merged.isEditPending = false;
+    merged.editingRequestedAt = null;
+    merged.editing_requested_at = null;
+  } else if (prevWasPending) {
     merged.subStatus = 'pending_edit';
     merged.sub_status = 'pending_edit';
     merged.hasEditRequest = true;
@@ -898,6 +909,10 @@ function qcagDesktopIsPendingEditRequest(req) {
   }
   // 3. Có mốc thời gian hoặc cờ yêu cầu sửa từ server
   if (req.editingRequestedAt || req.editing_requested_at) {
+    // Nếu đơn đã có báo giá hoặc status là quoted/done, kiểm tra xem có bình luận edit chưa được resolve không
+    if (s === 'quoted' || hasQuote || isExplicitDone) {
+      return Boolean(qcagDesktopHasHeinekenEditRequest(req));
+    }
     return true;
   }
   if (req.hasEditRequest || req.isEditPending) {
@@ -3803,8 +3818,9 @@ async function qcagDesktopPersistRequest(updated, successMsg, skipRerender) {
   currentDetailRequest = localUpdated;
   qcagDesktopCacheRequest(localUpdated);
   if (_qcagDesktopOpenRequestSnapshot && _qcagDesktopOpenRequestSnapshot.__backendId === localUpdated.__backendId) {
-    const frozenStatus = _qcagDesktopOpenRequestSnapshot.status;
-    const frozenEditing = _qcagDesktopOpenRequestSnapshot.editingRequestedAt;
+    const isFinishedOrQuoted = ['quoted', 'done', 'completed', 'processed'].includes(String(localUpdated.status || '').toLowerCase());
+    const frozenStatus = isFinishedOrQuoted ? localUpdated.status : _qcagDesktopOpenRequestSnapshot.status;
+    const frozenEditing = isFinishedOrQuoted ? null : _qcagDesktopOpenRequestSnapshot.editingRequestedAt;
     _qcagDesktopOpenRequestSnapshot = Object.assign({}, _qcagDesktopOpenRequestSnapshot, localUpdated, {
       status: frozenStatus,
       editingRequestedAt: frozenEditing
@@ -6108,8 +6124,9 @@ async function openQCAGDesktopRequest(id, keepPendingComment, forceRerender) {
       if (!full || _qcagDesktopCurrentId !== id) return;
       currentDetailRequest = full;
       if (_qcagDesktopOpenRequestSnapshot && (_qcagDesktopOpenRequestSnapshot.__backendId === id || _qcagDesktopOpenRequestSnapshot.id === id || _qcagDesktopOpenRequestSnapshot.tkCode === id)) {
-        const frozenStatus = _qcagDesktopOpenRequestSnapshot.status;
-        const frozenEditing = _qcagDesktopOpenRequestSnapshot.editingRequestedAt;
+        const isFinishedOrQuoted = ['quoted', 'done', 'completed', 'processed'].includes(String(full.status || '').toLowerCase());
+        const frozenStatus = isFinishedOrQuoted ? full.status : _qcagDesktopOpenRequestSnapshot.status;
+        const frozenEditing = isFinishedOrQuoted ? null : (full.editingRequestedAt ? _qcagDesktopOpenRequestSnapshot.editingRequestedAt : null);
         _qcagDesktopOpenRequestSnapshot = Object.assign({}, full, {
           status: frozenStatus,
           editingRequestedAt: frozenEditing
